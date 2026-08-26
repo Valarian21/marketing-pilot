@@ -99,7 +99,9 @@ async function draftFor(ctx: StudioContext, base: Base, req: s.ContentRequest, p
       const out = await chatJson(ctx.llm, modelFor("content"), z.object({ title: z.string().default(""), caption: z.string().default(""), slides: z.array(z.object({ kind: z.enum(["text", "screenshot"]).default("text"), headline: z.string(), body: z.string().default(""), screenshotId: z.string().default("") })).min(3).max(10) }),
         carouselPrompt({ ...common, screenshots: chosen.map((x) => ({ id: x.id, label: x.label })), slides: 7 }), usage, { maxTokens: 3000, temperature: 0.6 });
       const slidesText = out.slides.map((sl, i) => `${i + 1}. ${sl.headline}${sl.body ? ` - ${sl.body}` : ""}`).join("\n");
-      const rev = await reviseWithCritic(ctx, usage, { body: `${out.caption}\n\n${slidesText}`, language: base.language, voiceProfile: base.voice, format: "carousel", maxRounds: 1 });
+      // Critic on the caption only: slides are structured (headline/body) and would break when rewritten as prose.
+      const rev = await reviseWithCritic(ctx, usage, { body: out.caption || slidesText, language: base.language, voiceProfile: base.voice, format: "carousel", platform: req.platform ?? "instagram", maxRounds: 2 });
+      const caption = out.caption ? rev.body : out.caption;
       const jobs: RenderJob[] = []; const files: { file: string; size: string; index: number }[] = [];
       for (const size of SIZES) {
         out.slides.forEach((sl, i) => {
@@ -112,8 +114,8 @@ async function draftFor(ctx: StudioContext, base: Base, req: s.ContentRequest, p
       }
       await renderer(jobs);
       const assets = files.map((f) => addAsset(ctx.db, ctx.dataDir, base.project.id, pieceId, "render", f.file, { size: f.size, slide: f.index + 1, template }));
-      return { title: out.title || `Carousel: ${req.topic || out.slides[0]?.headline}`.slice(0, 120), body: rev.body, format: "carousel", channel: req.platform ?? "instagram",
-        meta: { template, slides: out.slides, caption: out.caption, sizes: SIZES.map((x) => x.tag), request: req }, assets, score: rev.score, notes: rev.notes };
+      return { title: out.title || `Carousel: ${req.topic || out.slides[0]?.headline}`.slice(0, 120), body: `${caption}\n\n${slidesText}`, format: "carousel", channel: req.platform ?? "instagram",
+        meta: { template, slides: out.slides, caption, sizes: SIZES.map((x) => x.tag), request: req }, assets, score: rev.score, notes: rev.notes };
     }
     case "pin": {
       const out = await chatJson(ctx.llm, modelFor("content"), z.object({ title: z.string().max(140), description: z.string(), overlay: z.string(), altText: z.string().default("") }), pinPrompt(common), usage, { maxTokens: 1200, temperature: 0.6 });

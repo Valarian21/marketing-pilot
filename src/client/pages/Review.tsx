@@ -100,7 +100,7 @@ function Preview({ piece, text }: { piece: ContentPiece; text: string }) {
     const sizes = piece.format === "carousel" ? ["1080x1080"] : null;
     return (
       <div className="mp-preview">
-        <div className="mp-shots">{piece.assets.map((a) => <figure key={a} className="mp-shot"><img src={`/api/mp/assets/${a}/file`} alt="" loading="lazy" /></figure>)}</div>
+        <div className="mp-shots">{(piece.format === "carousel" ? piece.assets.slice(0, Math.ceil(piece.assets.length / 2)) : piece.assets).map((a) => <figure key={a} className="mp-shot"><img src={`/api/mp/assets/${a}/file`} alt="" loading="lazy" /></figure>)}</div>
         {sizes && <p className="mp-small mp-muted">Beide Größen (1080×1080, 1080×1350) liegen im Publish-Paket.</p>}
         {piece.format === "carousel" && <div className="mp-post"><p>{String(piece.meta["caption"] ?? "")}</p></div>}
       </div>

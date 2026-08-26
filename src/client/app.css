@@ -213,7 +213,7 @@ button, input { font: inherit; color: inherit; }
 .mp-piece-body { width: 100%; font-family: var(--mp-font-mono); font-size: var(--mp-text-sm); padding: 10px 12px; border: var(--mp-border); border-radius: var(--mp-radius-sm); background: var(--mp-bg); color: var(--mp-ink); line-height: 1.5; margin: 8px 0 10px; resize: vertical; }
 
 /* Studio */
-.mp-swatches { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 12px; }
+.mp-swatches { display: flex; flex-wrap: wrap; gap: 22px 8px; margin: 6px 0 12px; }
 .mp-swatch { width: 64px; height: 44px; border-radius: var(--mp-radius-sm); border: 2px solid var(--mp-line); cursor: pointer; position: relative; padding: 0; }
 .mp-swatch.is-primary { border-color: var(--mp-ink); box-shadow: 0 0 0 2px var(--mp-surface) inset; }
 .mp-swatch span { position: absolute; left: 0; right: 0; bottom: -18px; font-family: var(--mp-font-mono); font-size: 10px; color: var(--mp-ink-2); text-align: center; }

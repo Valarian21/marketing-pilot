@@ -49,6 +49,17 @@ export function normalizeUrl(raw: string, base?: string): string | null {
   } catch { return null; }
 }
 
+/** Click away cookie/consent banners so product screenshots stay clean (reject-type buttons first). */
+export async function dismissConsent(page: { getByRole: (role: "button", opts: { name: RegExp }) => { first: () => { click: (o: { timeout: number }) => Promise<void>; isVisible: () => Promise<boolean> } }; waitForTimeout: (ms: number) => Promise<void> }): Promise<void> {
+  const patterns = [/^(ablehnen|alle ablehnen|nur notwendige|nur erforderliche|reject all|reject|decline|nicht einverstanden)/i, /^(einverstanden|alle akzeptieren|akzeptieren|accept all|accept|zustimmen|ok|verstanden|got it)/i];
+  for (const re of patterns) {
+    try {
+      const btn = page.getByRole("button", { name: re }).first();
+      if (await btn.isVisible()) { await btn.click({ timeout: 2000 }); await page.waitForTimeout(400); return; }
+    } catch { /* no such button */ }
+  }
+}
+
 export const playwrightCrawler: Crawler = async (startUrl, opts) => {
   const { chromium } = await import("playwright");
   const start = normalizeUrl(startUrl);
@@ -110,6 +121,7 @@ export const playwrightCrawler: Crawler = async (startUrl, opts) => {
         if (status >= 400 || text.length < 40) { warnings.push(`${item.url}: Status ${status}, ${text.length} Zeichen`); if (pages.length > 0) continue; }
         pages.push({ url: item.url, title: data.title, kind, status, text });
         if (screenshots.length < opts.maxScreenshots) {
+          await dismissConsent(page);
           const file = path.join(opts.screenshotDir, `${String(screenshots.length + 1).padStart(2, "0")}-${kind}.png`);
           await page.screenshot({ path: file, fullPage: false });
           screenshots.push({ url: item.url, kind, file });

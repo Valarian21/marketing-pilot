@@ -15,7 +15,7 @@ WRITING RULES (mandatory):
 - No invented facts, testimonials or numbers. If a claim needs a number you do not have, leave a [PLATZHALTER: …] the human fills in.
 VOICE PROFILE OF THE AUTHOR (match it - this is how the founder actually writes):
 Use du.
-Return JSON: {"title": "internal label", "body": "the post", "altText": "alt text for an attached screenshot or empty"}",
+Return JSON: {"title": "<short internal label, max 60 chars, e.g. 'LinkedIn: Sonntagabend'>", "body": "<the post>", "altText": "<alt text for an attached screenshot, or empty>"}",
     "role": "system",
   },
   {

@@ -29,8 +29,8 @@ body{font-family:var(--f-body);color:var(--b-ink);background:var(--b-bg);-webkit
 h1{font-family:var(--f-display);font-weight:700;font-size:${Math.round(w * 0.075)}px;line-height:1.08;letter-spacing:-.01em;text-wrap:balance}
 p{font-size:${Math.round(w * 0.036)}px;line-height:1.4;margin-top:${Math.round(w * 0.03)}px;max-width:90%}
 .meta{font-family:var(--f-mono);font-size:${Math.round(w * 0.022)}px;letter-spacing:.08em;text-transform:uppercase;opacity:.75;display:flex;justify-content:space-between}
-.img{width:100%;flex:1;margin:${Math.round(w * 0.03)}px 0;border-radius:${Math.round(w * 0.02)}px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.18);background:#fff}
-.img img{width:100%;height:100%;object-fit:cover;object-position:top}
+.img{width:100%;flex:1;margin:${Math.round(w * 0.03)}px 0;border-radius:${Math.round(w * 0.02)}px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.18);background:var(--b-soft)}
+.img img{width:100%;height:100%;object-fit:contain;object-position:top}
 .pill{display:inline-block;padding:.35em .9em;border-radius:999px;background:var(--b-primary);color:var(--b-on-primary);font-family:var(--f-mono);font-size:${Math.round(w * 0.024)}px;letter-spacing:.06em;text-transform:uppercase}
 ${extraCss}</style></head><body>${body}</body></html>`;
 

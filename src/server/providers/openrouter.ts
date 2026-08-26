@@ -45,7 +45,7 @@ export class OpenRouterProvider implements LlmProvider {
             "X-Title": this.opts.title ?? "Marketing Pilot",
           },
           body: JSON.stringify(body),
-          signal: AbortSignal.timeout(this.opts.timeoutMs ?? 180_000),
+          signal: AbortSignal.timeout(this.opts.timeoutMs ?? 600_000),
         });
       } catch (e) {
         lastError = e instanceof Error ? e : new Error(String(e));
