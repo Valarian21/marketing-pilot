@@ -60,9 +60,14 @@ export interface ScenePlan { id: string; keep: Interval[]; videoMs: number; padM
  * shortened to `keepMs`; the scene is then padded with its last frame to the
  * voiceover length. Click timestamps are remapped to the cut timeline.
  */
+/** Playwright's screencast is a fixed 25 fps - rendering at 30 would duplicate every fifth frame (visible judder on scrolls). */
+export const OUTPUT_FPS = 25;
+
 export function planScene(scene: RecordedScene, freezes: Freeze[], audioMs: number, opts: { keepMs?: number; minCutMs?: number; recWidth: number; recHeight: number; viewportWidth: number; viewportHeight: number }): ScenePlan {
   const keepMs = opts.keepMs ?? 900, minCut = opts.minCutMs ?? 1800;
-  const cuts: Interval[] = freezes
+  // detected freezes + explicit idle spans (waitFor: the app was working, maybe with a spinner - not a freeze, but dead time)
+  const cuts: Interval[] = [...freezes, ...(scene.idle ?? [])]
+    .sort((a, b) => a.startMs - b.startMs)
     .map((f) => ({ startMs: Math.max(f.startMs, scene.startMs), endMs: Math.min(f.endMs, scene.endMs) }))
     .filter((f) => f.endMs - f.startMs > minCut)
     .map((f) => ({ startMs: f.startMs + keepMs, endMs: f.endMs }));
@@ -91,7 +96,7 @@ export function planScene(scene: RecordedScene, freezes: Freeze[], audioMs: numb
 const s3 = (ms: number) => (ms / 1000).toFixed(3);
 
 /** Pass 1: one small H.264 segment per scene at the inner (frame) size. */
-export function buildSceneArgs(rec: Recording, p: ScenePlan, layout: Layout, out: string, fps = 30): string[] {
+export function buildSceneArgs(rec: Recording, p: ScenePlan, layout: Layout, out: string, fps = OUTPUT_FPS): string[] {
   const { inner } = layout;
   const inputs: string[] = [];
   p.keep.forEach((k) => inputs.push("-ss", s3(k.startMs), "-to", s3(k.endMs), "-i", rec.file));
@@ -120,7 +125,7 @@ export interface ComposeInput {
   captions: CaptionCue[]; music: string | null; out: string; fps?: number;
 }
 export function buildComposeArgs(i: ComposeInput): { args: string[]; totalMs: number } {
-  const fps = i.fps ?? 30;
+  const fps = i.fps ?? OUTPUT_FPS;
   const totalMs = i.hookMs + i.bodyMs + i.endMs;
   const inputs: string[] = [];
   let n = 0;

@@ -22,6 +22,7 @@ import { sceneCheckPrompt } from "../prompts/revise.js";
 import { dataUrlFor } from "../studio/render.js";
 import { getProject } from "../../repo/projects.js";
 import { playwrightRecorder, type Recorder, type Recording } from "./record.js";
+import { saveUiMap } from "./uimap.js";
 import { estimateDurationMs, estimateWords, type WordTiming } from "./voice.js";
 import { assemble, detectFreezes, pickMusic, planScene, runFfmpeg, type FfmpegRunner, type ScenePlan } from "./assemble.js";
 import { backgroundHtml, captionJobs, deviceFrameHtml, endCardHtml, hookCardHtml, layoutFor, type CaptionCue } from "./overlays.js";
@@ -35,6 +36,12 @@ export interface VideoContext {
 }
 
 export const HOOK_MS = 1500, END_MS = 2500;
+/** Variant count / landscape flag of an earlier render (for re-renders); defaults for never-rendered pieces. */
+export function renderOptionsFromMeta(meta: Record<string, unknown>): { variants: number; landscape: boolean } {
+  const vs = Array.isArray(meta["variants"]) ? (meta["variants"] as { variant: string }[]) : [];
+  return { variants: Math.max(1, vs.filter((v) => String(v.variant).startsWith("reel")).length), landscape: vs.some((v) => v.variant === "landscape") };
+}
+
 export const VIDEO_STEPS = ["record", "check", "voice", "overlays", "reels", "landscape", "assets"];
 export interface SceneNote { id: string; device: string; match: boolean; seen: string; issue: string }
 
@@ -92,6 +99,10 @@ export const renderVideoJob: JobHandler<VideoContext> = async (ctx, job, progres
       out[device] = rec;
       progress("record", { detail: `${Object.keys(out).join(" + ")}: ${Math.round(rec.durationMs / 1000)} s, ${rec.scenes.filter((x) => x.error).length} Szenen mit Fehlern` });
     }
+    // UI map: real labels seen on tape feed the next script/revise prompt
+    const labels = new Set<string>();
+    for (const r of Object.values(out)) for (const l of r?.uiLabels ?? []) labels.add(l);
+    if (labels.size) saveUiMap(ctx.db, piece.projectId, [...labels]);
     return out;
   });
 
@@ -134,10 +145,11 @@ export const renderVideoJob: JobHandler<VideoContext> = async (ctx, job, progres
   // 2. voiceover per scene (or estimated timing without a TTS key)
   const audio = await step("voice", async () => {
     const out: SceneAudio[] = [];
-    for (const sc of script.scenes) {
+    for (const [i, sc] of script.scenes.entries()) {
       if (ctx.voice && sc.voiceover.trim()) {
         const t0 = Date.now();
-        const r = await ctx.voice.synthesize({ text: sc.voiceover }, path.join(outDir, "voice"));
+        const prev = script.scenes[i - 1]?.voiceover.trim(), next = script.scenes[i + 1]?.voiceover.trim();
+        const r = await ctx.voice.synthesize({ text: sc.voiceover, ...(/^[a-z]{2}$/i.test(script.language) ? { language: script.language.toLowerCase() } : {}), ...(prev ? { previousText: prev } : {}), ...(next ? { nextText: next } : {}) }, path.join(outDir, "voice"));
         bookRun(ctx.db, { task: `video.voice:${sc.id}`, model: `elevenlabs/${ctx.env.ELEVENLABS_VOICE_ID ?? "voice"}`, provider: "elevenlabs", projectId: piece.projectId, pieceId, costUsd: (sc.voiceover.length / 1000) * ctx.env.ELEVENLABS_USD_PER_1K_CHARS, tokensIn: sc.voiceover.length, durationMs: Date.now() - t0 });
         out.push({ file: r.path, durationMs: r.durationMs, words: r.alignment?.map((w) => ({ word: w.word, startMs: w.startMs, endMs: w.endMs })) ?? estimateWords(sc.voiceover, r.durationMs) });
       } else {

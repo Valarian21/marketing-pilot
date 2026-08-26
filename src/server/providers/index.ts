@@ -19,7 +19,7 @@ export interface ImageProvider {
   generate(req: ImageRequest, outDir: string): Promise<ImageResult>;
 }
 
-export interface VoiceRequest { text: string; voiceId?: string; speed?: number }
+export interface VoiceRequest { text: string; voiceId?: string; speed?: number; /** ISO 639-1, enforced on models that support it */ language?: string; /** neighbouring sentences: keeps prosody and language consistent across scenes */ previousText?: string; nextText?: string }
 export interface VoiceResult { path: string; durationMs: number; alignment?: { word: string; startMs: number; endMs: number }[] }
 export interface VoiceProvider {
   synthesize(req: VoiceRequest, outDir: string): Promise<VoiceResult>;

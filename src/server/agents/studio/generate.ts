@@ -23,6 +23,8 @@ import { buildUtmUrl, deepLinkFor, PLATFORM_LIMITS, platformFromChannel, slugify
 import { markdownToHtml } from "../../util/markdown.js";
 import { pngSize } from "../../util/png.js";
 import { pieceCosts, writeAudit } from "../../audit.js";
+import { enqueueJob, hasActiveJob, workerAlive } from "../../jobs.js";
+import { renderOptionsFromMeta, VIDEO_STEPS } from "../video/pipeline.js";
 import type { HostUser } from "../../../host-adapter.js";
 
 export interface StudioContext extends AgentContext {
@@ -228,6 +230,14 @@ export async function regenerateContent(ctx: StudioContext, pieceId: string, hin
   const existing = getPiece(ctx.db, pieceId);
   if (!existing) throw err("Stück nicht gefunden.", 404);
   if (existing.status === "published") throw err("Veröffentlichte Stücke werden nicht neu generiert.");
+  if (existing.format === "video") {
+    // videos are re-rendered by the worker (new recording + voice) - the studio path would only delete the files
+    if (!workerAlive(ctx.db)) throw err("Render-Worker läuft nicht - Video kann gerade nicht neu erzeugt werden.", 503);
+    if (hasActiveJob(ctx.db, existing.projectId, "video.render")) throw err("Für dieses Projekt läuft bereits ein Render.", 409);
+    const job = enqueueJob(ctx.db, { projectId: existing.projectId, kind: "video.render", payload: { pieceId, ...renderOptionsFromMeta(existing.meta), reuseRecording: false }, steps: VIDEO_STEPS });
+    writeAudit(ctx.db, { user, action: "content.regenerate", entityType: "content_piece", entityId: pieceId, projectId: existing.projectId, content: { hint, job: job.id, video: true } });
+    return existing;
+  }
   const reqParsed = s.ContentRequest.safeParse(existing.meta["request"]);
   const req: s.ContentRequest = reqParsed.success ? reqParsed.data : { format: existing.format, topic: existing.title, hint: "" };
   const merged = { ...req, hint: [req.hint, hint].filter(Boolean).join(" | ") };

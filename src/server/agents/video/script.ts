@@ -13,6 +13,7 @@ import { voiceBlock } from "../studio/voice.js";
 import { writeAudit } from "../../audit.js";
 import type { HostUser } from "../../../host-adapter.js";
 import { pieceOf } from "../studio/generate.js";
+import { loadUiMap } from "./uimap.js";
 
 export function scriptToBody(script: s.VideoScript): string {
   return [
@@ -36,7 +37,7 @@ export async function generateVideoScript(ctx: AgentContext, projectId: string, 
   const { result: script } = await withRun(ctx.db, { task: "video.script", model, projectId }, (usage) =>
     chatJson(ctx.llm, model, s.VideoScript, videoScriptPrompt({
       brief: brief.data, ...(personas[0] ? { persona: personas[0] } : {}), topic: req.topic, hint: req.hint, voiceProfile: voiceBlock(loadBrandKit(ctx.db, projectId)),
-      demoBaseUrl, pages, hasLogin, targetSeconds: 30,
+      demoBaseUrl, pages, hasLogin, targetSeconds: 30, uiLabels: loadUiMap(ctx.db, projectId),
     }), usage, { maxTokens: 5000, temperature: 0.5 }));
   if (req.devices?.length) script.devices = req.devices;
   const ts = nowIso();

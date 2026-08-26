@@ -19,16 +19,16 @@ Return JSON: {"body": "<the full revised text>", "changed": "<one sentence in ${
 export interface SceneTiming { id: string; startMs: number; endMs: number }
 
 /** Map an instruction (possibly with seconds like "12-20 s") onto script edits. */
-export function reviseScriptPrompt(input: { brief: Brief; script: VideoScript; timeline: SceneTiming[]; hookMs: number; instruction: string; sceneNotes: { id: string; seen?: string; issue?: string }[] }): LlmMessage[] {
+export function reviseScriptPrompt(input: { brief: Brief; script: VideoScript; timeline: SceneTiming[]; hookMs: number; instruction: string; sceneNotes: { id: string; seen?: string; issue?: string }[]; uiLabels?: string[] }): LlmMessage[] {
   const tl = input.timeline.map((t) => `${t.id}: ${((t.startMs + input.hookMs) / 1000).toFixed(1)}-${((t.endMs + input.hookMs) / 1000).toFixed(1)} s`).join(", ");
   return [
     { role: "system", content: `[task:revise-script]
 You revise a screen-recording script for "${input.brief.productName}" following ONE instruction from the founder. Timecodes in the instruction refer to the rendered video (hook card ${input.hookMs / 1000} s, then scenes: ${tl || "unknown"}). Map them to scene ids.
-Rules: change only the scenes the instruction concerns; keep ids of unchanged scenes; keep voiceover to max 2 short sentences; "Untertitel/Captions" means the voiceover text (captions are generated from it); actions use the same types as before (goto/click/type/scroll/hover/wait/press; target = the visible button text or the label/placeholder of a field, exactly as it appears on the page - never an invented CSS selector or field name; when the instruction names a field like „Thema / Auftrag“, use that label as target).
+Rules: change only the scenes the instruction concerns; keep ids of unchanged scenes; keep voiceover to max 2 short sentences; "Untertitel/Captions" means the voiceover text (captions are generated from it); actions use the same types as before (goto/click/type/scroll/hover/wait/press/waitFor {target, ms = max wait, idle time is cut automatically}; target = the visible button text or the label/placeholder of a field, exactly as it appears on the page - never an invented CSS selector or field name; when the instruction names a field like „Thema / Auftrag“, use that label as target). Scroll only when something must be revealed, max one per scene. Confirmation dialogs (credits/costs) are confirmed by clicking their button text. A scene must show what its voiceover claims - bring the result on screen (waitFor) before the voiceover talks about it.
 Set "needsRecording": true only if any scene's actions, durations, order or device list changed; false if only voiceover/captions/hooks/CTA changed.
 ${writingRules({ language: input.brief.language })}
 Return JSON: {"script": {<full VideoScript with the same schema>}, "needsRecording": true|false, "changed": "<one sentence in ${lang(input.brief.language)}>"}` },
-    { role: "user", content: `INSTRUCTION: ${input.instruction}\n\nWHAT THE SCENES ACTUALLY SHOWED (scene check):\n${input.sceneNotes.map((n) => `- ${n.id}: ${n.seen ?? "?"}${n.issue ? ` | issue: ${n.issue}` : ""}`).join("\n") || "(no check yet)"}\n\nCURRENT SCRIPT:\n${JSON.stringify(input.script)}` },
+    { role: "user", content: `INSTRUCTION: ${input.instruction}\n\nWHAT THE SCENES ACTUALLY SHOWED (scene check):\n${input.sceneNotes.map((n) => `- ${n.id}: ${n.seen ?? "?"}${n.issue ? ` | issue: ${n.issue}` : ""}`).join("\n") || "(no check yet)"}\n\nCURRENT SCRIPT:\n${JSON.stringify(input.script)}${input.uiLabels?.length ? `\n\nKNOWN UI LABELS (seen on tape - use these exact texts as targets)\n${input.uiLabels.join(" | ")}` : ""}` },
   ];
 }
 

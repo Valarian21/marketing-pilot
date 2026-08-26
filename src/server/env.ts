@@ -43,6 +43,12 @@ const EnvSchema = z.object({
   ELEVENLABS_API_KEY: optional,
   ELEVENLABS_VOICE_ID: optional,
   ELEVENLABS_USD_PER_1K_CHARS: z.coerce.number().min(0).default(0.22),
+  /** eleven_multilingual_v2 | eleven_turbo_v2_5 | eleven_flash_v2_5 | eleven_v3 - v2.5/v3 accept a fixed language, multilingual_v2 guesses per sentence */
+  ELEVENLABS_MODEL: z.string().default("eleven_turbo_v2_5"),
+  ELEVENLABS_STABILITY: z.coerce.number().min(0).max(1).default(0.5),
+  ELEVENLABS_SIMILARITY: z.coerce.number().min(0).max(1).default(0.75),
+  ELEVENLABS_STYLE: z.coerce.number().min(0).max(1).default(0),
+  ELEVENLABS_SPEAKER_BOOST: z.enum(["true", "false"]).default("false"),
   MP_PUBLISH_PROVIDER: z.enum(["manual", "postiz"]).default("manual"),
   POSTIZ_API_URL: optional,
   POSTIZ_API_KEY: optional,

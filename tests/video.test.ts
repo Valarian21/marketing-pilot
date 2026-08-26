@@ -102,7 +102,7 @@ describe("pure helpers", () => {
     expect(g1).toContain("concat=n=2:v=1:a=0");
     expect(g1).toContain(`scale=${layout.inner.w}:${layout.inner.h}`);
     expect(g1).toContain("tpad=stop_mode=clone:stop_duration=0.500");
-    expect(g1).toContain("zoompan=z='1+0.28*max(0,1-abs(in-93)/48)'");
+    expect(g1).toContain("zoompan=z='1+0.28*max(0,1-abs(in-79)/40)'");
     expect(seg).toContain("ultrafast");
     const { args, totalMs } = buildComposeArgs({ body: "body.mp4", bodyMs: 4400, layout, audio: [{ file: "a.mp3", durationMs: 4000 }], plans: [{ id: "s1", keep: [], videoMs: 4400, padMs: 0, totalMs: 4400, clickAtMs: null, clickX: null, clickY: null }],
       hookCard: "hook.png", endCard: "end.png", frame: "frame.png", background: "bg.png", hookMs: 1500, endMs: 2500, captions: [{ file: "c1.png", startMs: 100, endMs: 600 }], music: "m.mp3", out: "out.mp4" });
@@ -193,5 +193,26 @@ describe("video API + render job", () => {
     expect(file.statusCode).toBe(206);
     expect(file.headers["content-type"]).toBe("video/mp4");
     expect(file.headers["content-range"]).toBe("bytes 0-1/3");
+  });
+});
+
+describe("quality round", () => {
+  it("planScene cuts explicit idle spans (waitFor) like freezes, keeping the first 0.9 s", () => {
+    const scene = { id: "s1", startMs: 0, endMs: 10000, clicks: [], error: null, idle: [{ startMs: 1000, endMs: 9000 }] };
+    const plan = planScene(scene, [], 2000, { recWidth: 1170, recHeight: 2532, viewportWidth: 390, viewportHeight: 844 });
+    expect(plan.keep).toEqual([{ startMs: 0, endMs: 1900 }, { startMs: 9000, endMs: 10000 }]);
+    expect(plan.videoMs).toBe(2900);
+  });
+  it("ElevenLabs request: language only on models that accept it, context sentences, neutral settings", async () => {
+    const { ElevenLabsVoice } = await import("../src/server/agents/video/voice.js");
+    const turbo = new ElevenLabsVoice("k", "v", { model: "eleven_turbo_v2_5" }).body({ text: "Material erstellen.", language: "de", previousText: "Vorher.", nextText: "Nachher." });
+    expect(turbo).toMatchObject({ model_id: "eleven_turbo_v2_5", language_code: "de", previous_text: "Vorher.", next_text: "Nachher.", voice_settings: { style: 0, use_speaker_boost: false } });
+    const multi = new ElevenLabsVoice("k", "v", { model: "eleven_multilingual_v2", style: 0.2 }).body({ text: "x", language: "de" });
+    expect(multi).not.toHaveProperty("language_code");
+    expect((multi["voice_settings"] as { style: number }).style).toBe(0.2);
+    const v3 = new ElevenLabsVoice("k", "v", { model: "eleven_v3" }).body({ text: "x", language: "de", previousText: "p" });
+    expect(v3).toHaveProperty("language_code", "de");
+    expect(v3).not.toHaveProperty("previous_text");
+    expect(v3["voice_settings"]).not.toHaveProperty("style");
   });
 });

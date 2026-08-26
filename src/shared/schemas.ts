@@ -388,13 +388,14 @@ export const StudioView = z.object({
 
 export const VideoDevice = z.enum(["mobile", "desktop"]);
 export const VideoAction = z.object({
-  type: z.enum(["goto", "click", "type", "scroll", "wait", "hover", "press"]),
+  type: z.enum(["goto", "click", "type", "scroll", "wait", "hover", "press", "waitFor"]),
   url: z.string().optional(),
   /** Visible text, aria name, placeholder/label, or a CSS selector. */
   target: z.string().optional(),
   text: z.string().optional(),
   y: z.number().int().optional(),
-  ms: z.number().int().min(0).max(15000).optional(),
+  /** wait: pause; waitFor: maximum wait for the target to appear (idle time is cut out of the video) */
+  ms: z.number().int().min(0).max(240000).optional(),
 });
 export const VideoScene = z.object({
   id: z.string(),

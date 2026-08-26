@@ -141,6 +141,14 @@ describe("revise by instruction", () => {
     expect(rev2.needsRecording).toBe(true);
     await processNextJob(built.ctx!, { "video.render": renderVideoJob });
     expect(recorderCalls).toBe(1);
+    // "Neu generieren" on a video piece = full re-render job, never the studio path (which deleted the files)
+    while ((await built.app.inject({ url: `/api/mp/projects/${pid}/video`, headers: auth })).json().jobs.some((j: { status: string }) => j.status === "queued" || j.status === "running")) await processNextJob(built.ctx!, { "video.render": renderVideoJob });
+    const regen = await built.app.inject({ method: "POST", url: `/api/mp/content/${piece.id}/regenerate`, headers: auth, payload: { hint: "" } });
+    expect(regen.statusCode).toBe(200);
+    const jobs = (await built.app.inject({ url: `/api/mp/projects/${pid}/video`, headers: auth })).json().jobs.filter((j: { payload: { pieceId: string; reuseRecording?: boolean }; status: string }) => j.payload.pieceId === piece.id && j.status === "queued");
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0].payload.reuseRecording).toBe(false);
+    expect(fs.existsSync(path.join(dir, "reel-1.mp4"))).toBe(true);   // files untouched until the worker replaces them
   });
 });
 

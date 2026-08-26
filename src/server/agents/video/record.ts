@@ -12,8 +12,8 @@ import { USER_AGENT, sleep } from "../../providers/html.js";
 import { dismissConsent } from "../analysis/crawl.js";
 
 export interface RecordedClick { tMs: number; x: number; y: number }
-export interface RecordedScene { id: string; startMs: number; endMs: number; clicks: RecordedClick[]; error: string | null; /** still image after the scene's actions (for the scene check) - extracted from the recording by the pipeline */ shot?: string }
-export interface Recording { file: string; device: VideoDevice; width: number; height: number; viewportWidth: number; viewportHeight: number; scenes: RecordedScene[]; durationMs: number; warnings: string[] }
+export interface RecordedScene { id: string; startMs: number; endMs: number; clicks: RecordedClick[]; error: string | null; /** dead time (waitFor) - cut out in assembly */ idle?: { startMs: number; endMs: number }[]; /** still image after the scene's actions (for the scene check) - extracted from the recording by the pipeline */ shot?: string }
+export interface Recording { file: string; device: VideoDevice; width: number; height: number; viewportWidth: number; viewportHeight: number; scenes: RecordedScene[]; durationMs: number; warnings: string[]; /** visible button/link/field labels seen during the recording (UI map for script authors) */ uiLabels?: string[] }
 export interface RecordOptions {
   device: VideoDevice; outDir: string; baseUrl: string | null;
   login?: { user: string; password: string } | undefined; resetUrl?: string | undefined; loginUrl?: string | undefined;
@@ -92,6 +92,24 @@ async function findTarget(page: Page, target: string, kind: "click" | "type" = "
   return null;
 }
 
+/** Visible interactive labels on the current page - "button: Material erstellen", "field: Thema / Auftrag". */
+export async function collectUiLabels(page: Page): Promise<string[]> {
+  try {
+    return await page.evaluate(() => {
+      const out: string[] = [];
+      const visible = (e: Element) => { const r = e.getBoundingClientRect(); const cs = getComputedStyle(e); return r.width > 0 && r.height > 0 && cs.visibility !== "hidden" && cs.display !== "none"; };
+      document.querySelectorAll('button, a[href], [role="button"], [role="tab"], input, textarea, select, label').forEach((e) => {
+        if (!visible(e)) return;
+        const tag = e.tagName.toLowerCase();
+        const isField = tag === "input" || tag === "textarea" || tag === "select";
+        const text = isField ? ((e as HTMLInputElement).placeholder || e.getAttribute("aria-label") || "") : (e.textContent || "").trim().replace(/\s+/g, " ");
+        if (text && text.length <= 60) out.push(`${isField ? "field" : tag === "a" ? "link" : tag === "label" ? "label" : "button"}: ${text}`);
+      });
+      return Array.from(new Set(out)).slice(0, 80);
+    });
+  } catch { return []; }
+}
+
 /** Field that currently has keyboard focus (after a click on a caption/field) - or null. */
 async function focusedField(page: Page): Promise<Locator | null> {
   const loc = page.locator(":focus").first();
@@ -116,6 +134,7 @@ export const playwrightRecorder: Recorder = async (script, opts) => {
   const { chromium } = await import("playwright");
   const dev = DEVICES[opts.device];
   const warnings: string[] = [];
+  const uiLabels = new Set<string>();
   fs.mkdirSync(opts.outDir, { recursive: true });
   const vars = { DEMO_USER: opts.login?.user, DEMO_PASSWORD: opts.login?.password, BASE_URL: opts.baseUrl ?? "" };
   if (opts.resetUrl) {
@@ -175,7 +194,7 @@ export const playwrightRecorder: Recorder = async (script, opts) => {
     await page.mouse.move(cur.x, cur.y);
     const scenes: RecordedScene[] = [];
     for (const scene of script.scenes) {
-      const rec: RecordedScene = { id: scene.id, startMs: Date.now() - t0, endMs: 0, clicks: [], error: null };
+      const rec: RecordedScene = { id: scene.id, startMs: Date.now() - t0, endMs: 0, clicks: [], error: null, idle: [] };
       opts.log(`record ${opts.device} ${scene.id}`);
       for (const raw of scene.actions) {
         const a: VideoAction = { ...raw, url: raw.url ? substitute(raw.url, vars) : undefined, text: raw.text ? substitute(raw.text, vars) : undefined, target: raw.target ? substitute(raw.target, vars) : undefined } as VideoAction;
@@ -211,13 +230,36 @@ export const playwrightRecorder: Recorder = async (script, opts) => {
               await sleep(400); break;
             }
             case "scroll": {
-              // eased scroll: ~40 small wheel ticks over ~1.1 s so it reads like a thumb, not a jump
-              const total = a.y ?? 600; const steps = 40;
-              let done = 0;
-              for (let i = 1; i <= steps; i++) { const target = Math.round(total * easeInOutCubic(i / steps)); await page.mouse.wheel(0, target - done); done = target; await sleep(28); }
-              await sleep(600); break;
+              // rAF-driven eased scroll of the scrollable container under the cursor (dialogs scroll inside themselves),
+              // on the page's own frame clock - wheel ticks arrived as discrete steps and read as stutter at 25 fps
+              const total = a.y ?? 600;
+              await page.evaluate(({ x, y, dy, ms }) => new Promise<void>((resolve) => {
+                const scrollable = (el: Element) => { const cs = getComputedStyle(el); return /(auto|scroll)/.test(cs.overflowY) && el.scrollHeight > el.clientHeight + 4; };
+                let el: Element | null = document.elementFromPoint(x, y);
+                while (el && el !== document.body && el !== document.documentElement && !scrollable(el)) el = el.parentElement;
+                const target = el && el !== document.body && el !== document.documentElement && scrollable(el) ? el : (document.scrollingElement ?? document.documentElement);
+                const from = target.scrollTop, to = Math.max(0, Math.min(target.scrollHeight - target.clientHeight, from + dy));
+                const t0 = performance.now();
+                const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+                const tick = (now: number) => { const k = Math.min(1, (now - t0) / ms); target.scrollTop = from + (to - from) * ease(k); if (k < 1) requestAnimationFrame(tick); else resolve(); };
+                requestAnimationFrame(tick);
+              }), { x: cur.x, y: cur.y, dy: total, ms: Math.min(1600, Math.max(700, Math.abs(total) * 1.6)) });
+              await sleep(500); break;
             }
             case "wait": await sleep(a.ms ?? 1000); break;
+            case "waitFor": {
+              // the app is working (generate/save): poll for the completion text; the waiting span is dead time and gets cut in assembly
+              const maxMs = a.ms ?? 90_000, started = Date.now() - t0;
+              let found = false;
+              while (Date.now() - t0 - started < maxMs) {
+                if (a.target && await findTarget(page, a.target)) { found = true; break; }
+                await sleep(500);
+              }
+              const waited = Date.now() - t0 - started;
+              if (waited > 1500) (rec.idle ??= []).push({ startMs: started, endMs: Date.now() - t0 });
+              if (!found) throw new Error(`waitFor: „${a.target ?? ""}“ ist nach ${Math.round(waited / 1000)} s nicht erschienen`);
+              await sleep(600); break;
+            }
             case "press": await page.keyboard.press(a.text ?? "Enter"); await sleep(400); break;
           }
         } catch (e) {
@@ -227,6 +269,7 @@ export const playwrightRecorder: Recorder = async (script, opts) => {
           if (!warnings.includes(w)) warnings.push(w);
         }
       }
+      for (const l of await collectUiLabels(page)) uiLabels.add(l);
       const elapsed = Date.now() - t0 - rec.startMs;
       if (elapsed < scene.durationMs) await sleep(scene.durationMs - elapsed);
       // no page.screenshot() here: it resets Chromium's device scale for ~1 s and the screencast shows the page as a thumbnail in the corner.
@@ -242,7 +285,7 @@ export const playwrightRecorder: Recorder = async (script, opts) => {
     if (!tmp) throw new Error("Playwright hat keine Videodatei geliefert.");
     const file = path.join(opts.outDir, `recording-${opts.device}.webm`);
     fs.renameSync(tmp, file);
-    return { file, device: opts.device, width: dev.video.width, height: dev.video.height, viewportWidth: dev.viewport.width, viewportHeight: dev.viewport.height, scenes, durationMs, warnings };
+    return { file, device: opts.device, width: dev.video.width, height: dev.video.height, viewportWidth: dev.viewport.width, viewportHeight: dev.viewport.height, scenes, durationMs, warnings, uiLabels: [...uiLabels] };
   } finally {
     await browser.close();
   }

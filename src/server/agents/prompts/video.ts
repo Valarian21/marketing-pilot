@@ -7,16 +7,18 @@ const lang = (code: string): string => (code.toLowerCase().startsWith("de") ? "G
 
 export function videoScriptPrompt(input: {
   brief: Brief; persona?: Persona; topic: string; hint: string; voiceProfile: string | null;
-  demoBaseUrl: string | null; pages: { url: string; title: string; kind: string }[]; hasLogin: boolean; targetSeconds: number;
+  demoBaseUrl: string | null; pages: { url: string; title: string; kind: string }[]; hasLogin: boolean; targetSeconds: number; uiLabels?: string[];
 }): LlmMessage[] {
   const pages = input.pages.map((p) => `- ${p.url} (${p.kind}${p.title ? `: ${p.title}` : ""})`).join("\n");
+  const uiBlock = input.uiLabels?.length ? `\n\nKNOWN UI LABELS (seen after login in earlier recordings - use these exact texts as targets; fields are "field: <placeholder>", their caption is "label: <text>")\n${input.uiLabels.join(" | ")}` : "";
   return [
     { role: "system", content: `[task:video-script]
 Write a screen-recording DEMO SCRIPT for a ${input.targetSeconds}-second vertical reel (and a landscape cut) of "${input.brief.productName}". Style: clean, templated, like a Screen Studio recording - not cinematic. One idea per scene.
 SCENES (4-7): each has
 - "voiceover": max 2 short sentences, first person, ${lang(input.brief.language)}, spoken in 3-6 seconds.
 - "caption": 2-6 words shown on screen (may be empty).
-- "actions": what the browser does during the scene, in order. Types: goto {url}, click {target}, type {target, text}, scroll {y}, hover {target}, wait {ms}, press {text = key name}. "target" is the visible text of a button/link or the placeholder/label of an input, exactly as shown on the page. Never invent CSS selectors or field names - the recorder resolves targets by visible text only. Keep 1-3 actions per scene.
+- "actions": what the browser does during the scene, in order. Types: goto {url}, click {target}, type {target, text}, scroll {y}, hover {target}, wait {ms}, press {text = key name}, waitFor {target, ms = max wait}. "target" is the visible text of a button/link or the placeholder/label of an input, exactly as shown on the page. Never invent CSS selectors or field names - the recorder resolves targets by visible text only.
+  Rules: scroll ONLY when the next target is off-screen or a result must be revealed, at most one scroll per scene, never for "motion". After an action that starts processing (create, generate, save) use waitFor with the text that appears when it is done (result heading, "Herunterladen", "Fertig"...), ms up to 240000 - waiting time is cut out of the video automatically. Confirmation dialogs (cost/credits, "are you sure") are confirmed by clicking their button text; the demo account may spend its credits. A scene must SHOW what the voiceover says - if the voiceover mentions the finished result, the actions must bring it on screen. Keep 1-3 actions per scene.
 - "durationMs": minimum dwell (2500-6000).
 ${input.hasLogin ? `The recording starts already LOGGED IN at ${input.demoBaseUrl} (a demo account). Do not script the login.` : `There is NO demo instance/login: use only the public pages listed below (start with a goto of the first one). Never script login or signup.`}
 HOOKS: exactly 5 alternative opening lines for the first 2 seconds (max 8 words each, ${lang(input.brief.language)}), each a different angle: pain, number, contrast, question-free statement, outcome. No clickbait.
@@ -24,6 +26,6 @@ CTA: one short sentence + the product URL.
 "devices": ["mobile"] for app-like products, ["desktop"] for wide dashboards, or both.
 ${writingRules({ language: input.brief.language, voiceProfile: input.voiceProfile })}
 Return JSON: {"title","goal","persona","devices":["mobile"|"desktop"],"language","hooks":[5 strings],"scenes":[{"id":"s1","voiceover","caption","actions":[{"type","url","target","text","y","ms"}],"durationMs"}],"cta":{"text","url"}}` },
-    { role: "user", content: `TOPIC / TASK: ${input.topic || "Onboarding-Demo: vom Start bis zum ersten Ergebnis"}\nHINT: ${input.hint || "-"}\nBASE URL: ${input.demoBaseUrl ?? input.brief.sources[0] ?? "-"}\n\nBRIEF\n${JSON.stringify(input.brief)}\n\nPERSONA\n${input.persona ? `${input.persona.name}: ${input.persona.description} | pains: ${input.persona.painPoints.join("; ")}` : "(none)"}\n\nKNOWN PAGES\n${pages || "(none crawled)"}` },
+    { role: "user", content: `TOPIC / TASK: ${input.topic || "Onboarding-Demo: vom Start bis zum ersten Ergebnis"}\nHINT: ${input.hint || "-"}\nBASE URL: ${input.demoBaseUrl ?? input.brief.sources[0] ?? "-"}\n\nBRIEF\n${JSON.stringify(input.brief)}\n\nPERSONA\n${input.persona ? `${input.persona.name}: ${input.persona.description} | pains: ${input.persona.painPoints.join("; ")}` : "(none)"}\n\nKNOWN PAGES\n${pages || "(none crawled)"}${uiBlock}` },
   ];
 }
