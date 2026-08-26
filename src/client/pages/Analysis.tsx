@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router";
 import type { AnalysisStep, AnalysisStepName, AnalysisView, Brief, GeoSnapshot } from "../../shared/schemas.js";
 import { api, ApiError } from "../api.js";
 import { Button, Card, Notice, PageHeader, Pill, Stat, type PillKind } from "../components/ui.js";
+import { ProjectNav } from "../components/ProjectNav.js";
 
 const STEP_LABEL: Record<AnalysisStepName, string> = { crawl: "Website crawlen", brief: "Product Brief", competitors: "Wettbewerber", personas: "Personas", attention: "Attention Map", geo: "GEO-Baseline" };
 const STEP_PILL: Record<AnalysisStep["status"], { kind: PillKind; label: string }> = {
@@ -58,14 +59,15 @@ export function AnalysisPage() {
     return [...rows].sort((a, b) => a.query.localeCompare(b.query) || a.engine.localeCompare(b.engine));
   }, [view, modelFilter]);
 
-  if (error && !view) return <Notice kind="bad">{error} – <Link to="/">zurück</Link></Notice>;
+  if (error && !view) return <><ProjectNav id={id} /><Notice kind="bad">{error} – <Link to="/">zurück</Link></Notice></>;
   if (!view) return null;
   const run = view.run;
   const confirmed = Boolean(view.briefMeta.confirmedAt);
 
   return (
     <>
-      <PageHeader label={<Link to={`/projects/${id}`}>← Projekt</Link>} title="Analyse" actions={
+      <ProjectNav id={id} />
+      <PageHeader label="Stufe 1" title="Analyse" actions={
         <>
           <Button variant="primary" disabled={busy || running} onClick={() => void start()}>{run ? "Analyse neu starten" : "Analyse starten"}</Button>
           <Button variant="primary" disabled={busy || running || !view.brief || confirmed} onClick={() => void confirm()}>{confirmed ? "Brief bestätigt" : "Brief bestätigen"}</Button>

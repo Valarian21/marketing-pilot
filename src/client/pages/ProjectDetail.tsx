@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router";
 import type { AnalysisView, Project } from "../../shared/schemas.js";
 import { api } from "../api.js";
 import { Card, Notice, PageHeader, Pill, Stat } from "../components/ui.js";
+import { ProjectNav } from "../components/ProjectNav.js";
 
 export function ProjectDetailPage() {
   const { id = "" } = useParams();
@@ -20,6 +21,7 @@ export function ProjectDetailPage() {
 
   return (
     <>
+      <ProjectNav id={id} />
       <PageHeader label="Projekt" title={project.name} />
       <div className="mp-stats mp-stats--4 mp-stats--tiles">
         <Stat label="Offene Aufgaben" value={0} />

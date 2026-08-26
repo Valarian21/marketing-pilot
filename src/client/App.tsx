@@ -8,7 +8,12 @@ import { ProjectDetailPage } from "./pages/ProjectDetail.js";
 import { AnalysisPage } from "./pages/Analysis.js";
 import { ActivityPage } from "./pages/Activity.js";
 import { SettingsPage } from "./pages/Settings.js";
-import { CommunityPage, InsightsPage, ReviewPage, StudioPage, TasksPage, TimelinePage } from "./pages/Placeholders.js";
+import { CommunityPage, InsightsPage, StudioPage } from "./pages/Placeholders.js";
+import { StrategyPage } from "./pages/Strategy.js";
+import { TasksPage } from "./pages/Tasks.js";
+import { TimelinePage } from "./pages/Timeline.js";
+import { ReviewPage } from "./pages/Review.js";
+import { ProjectScoped } from "./pages/ProjectScoped.js";
 
 function Gate() {
   const { info, loading, error } = useHost();
@@ -22,10 +27,14 @@ function Gate() {
           <Route index element={<ProjectsPage />} />
           <Route path="projects/:id" element={<ProjectDetailPage />} />
           <Route path="projects/:id/analysis" element={<AnalysisPage />} />
-          <Route path="timeline" element={<TimelinePage />} />
-          <Route path="tasks" element={<TasksPage />} />
+          <Route path="projects/:id/strategy" element={<StrategyPage />} />
+          <Route path="projects/:id/tasks" element={<TasksPage />} />
+          <Route path="projects/:id/timeline" element={<TimelinePage />} />
+          <Route path="projects/:id/review" element={<ReviewPage />} />
+          <Route path="timeline" element={<ProjectScoped page="timeline" title="Timeline" />} />
+          <Route path="tasks" element={<ProjectScoped page="tasks" title="Aufgaben" />} />
           <Route path="studio" element={<StudioPage />} />
-          <Route path="review" element={<ReviewPage />} />
+          <Route path="review" element={<ProjectScoped page="review" title="Freigaben" />} />
           <Route path="community" element={<CommunityPage />} />
           <Route path="insights" element={<InsightsPage />} />
           <Route path="activity" element={<ActivityPage />} />

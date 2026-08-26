@@ -78,8 +78,31 @@ export const Task = z.object({
   type: TaskType, status: TaskStatus,
   dueAt: Iso.nullable(), assignedTo: Assignee, approvalLevel: ApprovalLevel,
   outputRefs: z.array(z.string()), order: z.number().int(),
+  channel: z.string(), week: z.number().int(), planVersion: z.number().int(),
   createdAt: Iso, updatedAt: Iso,
 });
+export const TaskCreate = z.object({
+  title: z.string().trim().min(1).max(200),
+  description: z.string().default(""),
+  type: TaskType,
+  channel: z.string().default(""),
+  dueAt: Iso.nullable().default(null),
+  week: z.number().int().min(1).max(52).default(1),
+  assignedTo: Assignee.default("human"),
+  approvalLevel: ApprovalLevel.default("review"),
+});
+export const TaskPatch = z.object({
+  title: z.string().trim().min(1).max(200).optional(),
+  description: z.string().optional(),
+  status: TaskStatus.optional(),
+  dueAt: Iso.nullable().optional(),
+  week: z.number().int().min(1).max(52).optional(),
+  order: z.number().int().optional(),
+  assignedTo: Assignee.optional(),
+  approvalLevel: ApprovalLevel.optional(),
+  channel: z.string().optional(),
+});
+export const TaskReorder = z.object({ ids: z.array(Id).min(1) });
 
 export const ContentPiece = z.object({
   id: Id, projectId: Id, taskId: Id.nullable(),
@@ -206,6 +229,73 @@ export const AnalysisView = z.object({
   }),
 });
 
+// --- Strategy (Shot 2) -------------------------------------------------------
+
+export const PlanChannel = z.object({
+  platform: z.string(),
+  role: z.enum(["start", "later"]).default("start"),
+  format: z.string().default(""),
+  cadence: z.string().default(""),
+  rationale: z.string().default(""),
+  evidenceRefs: z.array(z.string()).default([]),
+});
+export const PlanGoal = z.object({
+  horizonDays: z.number().int(),
+  metric: z.string().default("signups"),
+  target: z.number(),
+  rationale: z.string().default(""),
+});
+export const PlanBudgetItem = z.object({ item: z.string(), eur: z.number(), rationale: z.string().default("") });
+export const StrategyPlan = z.object({
+  summary: z.string(),
+  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  coreMessage: z.object({ text: z.string(), rationale: z.string().default("") }),
+  channels: z.array(PlanChannel).min(1),
+  goals: z.array(PlanGoal).min(1),
+  budget: z.object({ monthlyEur: z.number(), items: z.array(PlanBudgetItem).default([]), rationale: z.string().default("") }),
+  risks: z.array(z.object({ text: z.string(), mitigation: z.string().default("") })).default([]),
+});
+export const PlanDiffEntry = z.object({ path: z.string(), before: z.unknown(), after: z.unknown() });
+export const StrategyVersion = z.object({
+  id: Id, projectId: Id, version: z.number().int(), plan: StrategyPlan, diff: z.array(PlanDiffEntry),
+  createdBy: z.string(), note: z.string(), createdAt: Iso,
+});
+export const StrategyView = z.object({
+  briefConfirmed: z.boolean(),
+  running: z.boolean(),
+  error: z.string().nullable(),
+  current: StrategyVersion.nullable(),
+  versions: z.array(z.object({ version: z.number().int(), createdBy: z.string(), note: z.string(), createdAt: Iso, changes: z.number().int() })),
+  taskCount: z.number().int(),
+});
+export const StrategyStart = z.object({ note: z.string().default("") });
+
+export const TimelineItem = z.object({
+  kind: z.enum(["task", "piece"]),
+  id: Id, title: z.string(), week: z.number().int(),
+  status: z.string(), planned: z.boolean(), date: Iso.nullable(), assignedTo: z.string().nullable(), type: z.string(),
+});
+export const TimelineView = z.object({
+  startDate: z.string(), weeks: z.number().int(), todayWeek: z.number().int().nullable(),
+  rows: z.array(z.object({ channel: z.string(), items: z.array(TimelineItem) })),
+});
+
+export const ProjectOverview = Project.extend({
+  openTasksThisWeek: z.number().int(),
+  piecesInReview: z.number().int(),
+  signups7d: z.number().int(),
+  geoVisibility: z.number().nullable(),
+  briefConfirmed: z.boolean(),
+  planVersion: z.number().int().nullable(),
+});
+
+export const ContentPatch = z.object({
+  status: ContentStatus.optional(),
+  body: z.string().optional(),
+  title: z.string().optional(),
+  reason: z.string().optional(),
+});
+
 /** Shape of GET /api/mp/host - what the client needs to render the shell. */
 export const HostInfo = z.object({
   mode: z.enum(["dashboard", "standalone"]),
@@ -250,3 +340,14 @@ export type AnalysisStepName = z.infer<typeof AnalysisStepName>;
 export type AnalysisStep = z.infer<typeof AnalysisStep>;
 export type AnalysisRun = z.infer<typeof AnalysisRun>;
 export type AnalysisView = z.infer<typeof AnalysisView>;
+export type TaskCreate = z.infer<typeof TaskCreate>;
+export type TaskPatch = z.infer<typeof TaskPatch>;
+export type PlanChannel = z.infer<typeof PlanChannel>;
+export type StrategyPlan = z.infer<typeof StrategyPlan>;
+export type PlanDiffEntry = z.infer<typeof PlanDiffEntry>;
+export type StrategyVersion = z.infer<typeof StrategyVersion>;
+export type StrategyView = z.infer<typeof StrategyView>;
+export type TimelineItem = z.infer<typeof TimelineItem>;
+export type TimelineView = z.infer<typeof TimelineView>;
+export type ProjectOverview = z.infer<typeof ProjectOverview>;
+export type ContentPatch = z.infer<typeof ContentPatch>;

@@ -14,6 +14,8 @@ import { projectRoutes } from "./routes/projects.js";
 import { domainRoutes } from "./routes/domain.js";
 import { metaRoutes } from "./routes/meta.js";
 import { analysisRoutes } from "./routes/analysis.js";
+import { strategyRoutes } from "./routes/strategy.js";
+import { taskRoutes } from "./routes/tasks.js";
 import { OpenRouterProvider } from "./providers/openrouter.js";
 import { createSearchProvider } from "./providers/search.js";
 import type { LlmProvider, SearchProvider } from "./providers/index.js";
@@ -80,6 +82,8 @@ export async function buildApp(env: Env, opts: { host?: HostAdapter; dbFile?: st
   projectRoutes(app, db);
   domainRoutes(app, db);
   analysisRoutes(app, db, () => ctx);
+  strategyRoutes(app, db, () => ctx);
+  taskRoutes(app, db, () => ctx);
 
   // Client bundle under /mp/ (both host modes share the same URL space).
   const clientDir = path.join(ROOT, "dist/client");

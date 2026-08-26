@@ -62,8 +62,6 @@ export function domainRoutes(app: FastifyInstance, db: Db): void {
 
   // Write paths that later shots implement. Listed explicitly so nothing 404s by accident.
   const pending: [string, number][] = [
-    ["/api/mp/projects/:projectId/strategy/run", 2],
-    ["/api/mp/projects/:projectId/tasks", 2],
     ["/api/mp/projects/:projectId/content", 3],
     ["/api/mp/projects/:projectId/community/scan", 5],
     ["/api/mp/events", 5],

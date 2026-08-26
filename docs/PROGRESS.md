@@ -19,7 +19,9 @@ Offen / zu klären (siehe Zusammenfassung Shot 0):
 - Modell-IDs in `config/models.ts` vor Shot 1 gegen OpenRouter prüfen.
 - ~~`mp.db` in `scripts/backup.sh` aufnehmen~~ → erledigt in Shot 0.
 
-## Shot 1 – Analyse-Agent: **gebaut** (2026-08-26), Live-Test siehe unten
+## Shot 1 – Analyse-Agent: **fertig** (2026-08-26)
+
+Live-Test gegen Platzhalter `https://agi-empire.com/marketing-pilot` (liegt hinter dem Login → nur Login-Seite crawlbar): alle 6 Schritte durchgelaufen, 0,86 $ (GEO 0,51 $ für 25 Fragen × 4 Engines), 10 Wettbewerber mit 45 belegten Beschwerden, 4 Personas, 8 Kanäle, GEO-Sichtbarkeit 0 %. Inhaltlich wertlos (Modelle haben „Marketing-Automation“ aus dem Namen abgeleitet) – Brief-Prompt danach geschärft: bei Login-/Platzhalterseiten wird das gesagt statt geraten. **Für einen echten Lauf braucht es eine öffentliche Produkt-URL von Marcel.**
 
 Erledigt:
 - Pipeline `src/server/agents/analysis/` (crawl → brief → competitors → personas → attention → geo), Orchestrierung in `pipeline.ts` (eine `mp_analysis_runs`-Zeile je Lauf, ein `mp_agent_runs`-Eintrag je Schritt mit Tokens/Kosten aus der OpenRouter-Antwort). Läuft losgelöst vom Request, UI pollt alle 3 s. Läufe, die ein Neustart abbricht, werden beim Start als fehlgeschlagen markiert.
@@ -33,7 +35,17 @@ Erledigt:
 Offen:
 - **Echte Produkt-URL** für einen aussagekräftigen Lauf (Platzhalter `agi-empire.com/marketing-pilot` liegt hinter dem Login).
 - Such-API (Brave/Serper) eintragen, sobald DuckDuckGo-HTML zu dünn ist (`MP_SEARCH_PROVIDER`, `MP_SEARCH_API_KEY`).
-## Shot 2 – Strategie, Aufgaben, Timeline: offen
+## Shot 2 – Strategie, Aufgaben, Timeline: **gebaut** (2026-08-26)
+
+Erledigt:
+- Strategie-Agent `agents/strategy/plan.ts`: liest bestätigten Brief, Personas, Attention Map, Wettbewerber, GEO-Zusammenfassung → `StrategyPlan` (2–3 Startkanäle mit Format/Kadenz/Begründung+Bezug, 30/60/90-Tage-Ziele nur mit Geschäftszahlen, Testbudget ≤ 300 €, Kernbotschaft, Risiken). Versioniert in `mp_strategy_plans`, jede Version mit `diff` zur vorherigen (Kanäle, Ziele, Budget, Summary). „Plan anpassen“ mit Hinweis erzeugt neue Version.
+- Aufgaben-Generator: 4 Wochen, `mp_tasks` mit `week`, `channel`, `planVersion`, `dueAt` = Startdatum + Woche/Tag. Server erzwingt Freigabe-Regeln (`enforceApproval`): publish/ads → Mensch; Reddit/Foren/Discord/Ads → `human_only`. Neu-Erzeugung ersetzt nur unangetastete `todo`-Aufgaben.
+- „Jetzt ausführen“ (`agents/strategy/execute.ts`): Agent-Aufgabe → `ContentPiece` (Format aus Typ/Titel abgeleitet) mit Status `review`, Aufgabe → `review`, `outputRefs`. Schreibregeln zentral in `agents/prompts/voice.ts` (Verbotsliste, Community-Regeln).
+- API: `GET/POST …/strategy`, `…/strategy/versions/:v`, `…/tasks/generate`, Tasks CRUD + `reorder` + `execute`, `GET …/timeline`, `GET /api/mp/overview`, `GET/PATCH /api/mp/content/:id` (Freigabe/Ablehnung/veröffentlicht mit Audit inkl. Inhalt).
+- UI: Projekt-Subnavigation (Übersicht · Analyse · Strategie · Aufgaben · Timeline · Freigaben); `/strategy` (Plan, aufklappbare Begründungen, Versionswahl mit Diff), `/tasks` (nach Woche, runde Checkbox, Drag-Sortierung je Woche, Filter Typ/Zuständig, Fortschritt je Woche, „Jetzt ausführen“, manuelle Aufgabe), `/timeline` (12 Wochen, Kanäle als Zeilen, gefüllt = veröffentlicht, gestrichelt = geplant, Heute-Spalte, Detail-Drawer, scrollt im Container), `/review` (Vorstufe: Text editierbar, Freigeben/Ablehnen/veröffentlicht), Übersicht mit echten Kennzahlen (`/overview`). Globale Nav-Einträge springen zum zuletzt genutzten Projekt.
+- 38 Tests grün.
+
+Offen: Ist-Daten in der Timeline (Insights) kommen mit Shot 5; Live-Test siehe Zusammenfassung.
 ## Shot 3 – Content Studio: offen
 ## Shot 4 – Video-Fabrik: offen
 ## Shot 5 – Community-Radar, Insights, Wochen-Loop: offen

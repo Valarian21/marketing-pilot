@@ -62,6 +62,9 @@ export const mpTasks = sqliteTable("mp_tasks", {
   approvalLevel: text("approval_level").notNull().default("review"),
   outputRefs: text("output_refs").notNull().default("[]"),
   order: integer("order").notNull().default(0),
+  channel: text("channel").notNull().default(""),
+  week: integer("week").notNull().default(1),
+  planVersion: integer("plan_version").notNull().default(0),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 }, (t) => [index("mp_tasks_project").on(t.projectId)]);
@@ -198,3 +201,17 @@ export const mpAnalysisRuns = sqliteTable("mp_analysis_runs", {
   finishedAt: text("finished_at"),
   error: text("error"),
 }, (t) => [index("mp_analysis_project").on(t.projectId)]);
+
+// --- Strategy (Shot 2) -------------------------------------------------------
+
+/** Versioned channel plan. Every change (agent or user) is a new row; `diff` describes it against the previous version. */
+export const mpStrategyPlans = sqliteTable("mp_strategy_plans", {
+  id: id(),
+  projectId: projectRef(),
+  version: integer("version").notNull(),
+  plan: text("plan").notNull().default("{}"),
+  diff: text("diff").notNull().default("[]"),
+  createdBy: text("created_by").notNull().default("agent"),
+  note: text("note").notNull().default(""),
+  createdAt: createdAt(),
+}, (t) => [index("mp_strategy_project").on(t.projectId)]);

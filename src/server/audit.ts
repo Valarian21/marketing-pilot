@@ -1,5 +1,5 @@
 /** Audit log + agent-run bookkeeping (architecture rules 4 and 6). */
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, sql } from "drizzle-orm";
 import type { Db } from "./db/index.js";
 import { newId, nowIso, parseJson, toJson } from "./db/index.js";
 import { mpAgentRuns, mpAuditLog } from "./db/schema.js";
@@ -27,7 +27,7 @@ export function writeAudit(db: Db, input: {
 export function listAudit(db: Db, limit = 100, projectId?: string): AuditEntry[] {
   const q = db.select().from(mpAuditLog);
   const rows = (projectId ? q.where(eq(mpAuditLog.projectId, projectId)) : q)
-    .orderBy(desc(mpAuditLog.createdAt)).limit(limit).all();
+    .orderBy(desc(mpAuditLog.createdAt), desc(sql`rowid`)).limit(limit).all();
   return rows.map((r) => ({ ...r, content: parseJson<Record<string, unknown>>(r.content, {}) }));
 }
 
@@ -62,6 +62,6 @@ export function finishRun(db: Db, id: string, result: {
 export function listRuns(db: Db, limit = 100, projectId?: string): AgentRun[] {
   const q = db.select().from(mpAgentRuns);
   return (projectId ? q.where(eq(mpAgentRuns.projectId, projectId)) : q)
-    .orderBy(desc(mpAgentRuns.startedAt)).limit(limit).all()
+    .orderBy(desc(mpAgentRuns.startedAt), desc(sql`rowid`)).limit(limit).all()
     .map((r) => ({ ...r, status: r.status as AgentRun["status"] }));
 }

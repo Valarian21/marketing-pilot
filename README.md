@@ -87,6 +87,14 @@ ist ein Eintrag in `mp_agent_runs` (Seite „Aktivität“). Brief-Änderungen i
 Websuche: `MP_SEARCH_PROVIDER=brave|serper` + Key, sonst DuckDuckGo-HTML. GEO-Engines:
 `MP_GEO_MODELS` (Komma-Liste von OpenRouter-IDs).
 
+## Strategie, Aufgaben, Timeline (Shot 2)
+
+`POST …/strategy/run` (`{note?}`) erzeugt eine neue Planversion (Diff zur vorherigen) und die
+Aufgaben der ersten 4 Wochen; `POST …/tasks/generate` nur die Aufgaben. Aufgaben: `POST …/tasks`,
+`PATCH/DELETE /api/mp/tasks/:id`, `POST …/tasks/reorder`, `POST /api/mp/tasks/:id/execute`
+(Agent-Aufgabe → ContentPiece in Freigabe). `GET …/timeline` liefert 12 Wochen je Kanal,
+`GET /api/mp/overview` die Projektkarten. Freigabe-Regeln werden serverseitig erzwungen.
+
 ## Freigabe-Stufen und Kennzeichnung
 
 Jede Aktion mit Außenwirkung trägt `auto | review | human_only` (Default `review`;

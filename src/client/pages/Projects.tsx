@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router";
-import type { Project } from "../../shared/schemas.js";
+import type { Project, ProjectOverview } from "../../shared/schemas.js";
 import { api } from "../api.js";
 import { Button, Card, EmptyState, Notice, PageHeader, Pill, type PillKind } from "../components/ui.js";
 import { Icons } from "../components/icons.js";
@@ -13,7 +13,7 @@ const STATUS_LABEL: Record<Project["status"], { label: string; kind: PillKind }>
 };
 
 export function ProjectsPage() {
-  const [projects, setProjects] = useState<Project[] | null>(null);
+  const [projects, setProjects] = useState<ProjectOverview[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState("");
@@ -21,7 +21,7 @@ export function ProjectsPage() {
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
-    try { setProjects(await api<Project[]>("/projects")); setError(null); }
+    try { setProjects(await api<ProjectOverview[]>("/overview")); setError(null); }
     catch (e) { setError(e instanceof Error ? e.message : "Laden fehlgeschlagen."); }
   }, []);
   useEffect(() => { void load(); }, [load]);
@@ -75,13 +75,13 @@ export function ProjectsPage() {
                 </div>
                 <a className="mp-project-url" href={p.url} target="_blank" rel="noreferrer">{p.url}</a>
                 <div className="mp-stats mp-stats--4">
-                  <div className="mp-ministat"><div className="mp-label">Aufgaben</div><div className="mp-num">0</div></div>
-                  <div className="mp-ministat"><div className="mp-label">Freigabe</div><div className="mp-num">0</div></div>
-                  <div className="mp-ministat mp-ministat--hi"><div className="mp-label">Signups 7T</div><div className="mp-num">0</div></div>
-                  <div className="mp-ministat"><div className="mp-label">GEO</div><div className="mp-num">–</div></div>
+                  <div className="mp-ministat" title="Offene Aufgaben diese Woche"><div className="mp-label">Aufgaben</div><div className="mp-num">{p.openTasksThisWeek}</div></div>
+                  <div className="mp-ministat" title="Stücke in Freigabe"><div className="mp-label">Freigabe</div><div className="mp-num">{p.piecesInReview}</div></div>
+                  <div className="mp-ministat mp-ministat--hi" title="Signups letzte 7 Tage"><div className="mp-label">Signups 7T</div><div className="mp-num">{p.signups7d}</div></div>
+                  <div className="mp-ministat" title="GEO-Sichtbarkeit"><div className="mp-label">GEO</div><div className="mp-num">{p.geoVisibility === null ? "–" : `${Math.round(p.geoVisibility * 100)} %`}</div></div>
                 </div>
                 <div className="mp-project-foot">
-                  <span className="mp-label">Angelegt {new Date(p.createdAt).toLocaleDateString("de-DE")}</span>
+                  <span className="mp-label">{p.planVersion ? `Plan v${p.planVersion}` : p.briefConfirmed ? "Brief bestätigt" : `Angelegt ${new Date(p.createdAt).toLocaleDateString("de-DE")}`}</span>
                   <Button variant="danger" onClick={() => void remove(p)}>Löschen</Button>
                 </div>
               </Card>
