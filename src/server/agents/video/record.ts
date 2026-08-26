@@ -22,14 +22,15 @@ export interface RecordOptions {
 export type Recorder = (script: VideoScript, opts: RecordOptions) => Promise<Recording>;
 
 /**
- * Playwright's recorder never upscales: with deviceScaleFactor 3 a 390 px page
- * would sit in the top-left corner of the 1170 px video. So the phone is
- * emulated with a 1170x2532 viewport and CSS zoom 3 - Chromium then lays the
- * page out like a 390 px phone (media queries follow the zoom) at full resolution.
+ * Playwright's recorder captures the window in *device* pixels only when
+ * Chromium itself runs at that scale: with `--force-device-scale-factor=3` a
+ * 390 px phone viewport records as a crisp 1170x2532 video and the page still
+ * sees a 390 px layout (media queries, innerWidth). Plain deviceScaleFactor
+ * emulation would leave the 390 px image in the corner of the frame.
  */
-export const DEVICES: Record<VideoDevice, { viewport: { width: number; height: number }; zoom: number; video: { width: number; height: number }; mobile: boolean }> = {
-  mobile: { viewport: { width: 1170, height: 2532 }, zoom: 3, video: { width: 1170, height: 2532 }, mobile: true },
-  desktop: { viewport: { width: 1440, height: 900 }, zoom: 1, video: { width: 1440, height: 900 }, mobile: false },
+export const DEVICES: Record<VideoDevice, { viewport: { width: number; height: number }; dpr: number; video: { width: number; height: number }; mobile: boolean; cursor: number }> = {
+  mobile: { viewport: { width: 390, height: 844 }, dpr: 3, video: { width: 1170, height: 2532 }, mobile: true, cursor: 0.75 },
+  desktop: { viewport: { width: 1440, height: 900 }, dpr: 1, video: { width: 1440, height: 900 }, mobile: false, cursor: 1 },
 };
 
 export const isSelector = (target: string): boolean => /^[#.[]|^[a-z]+[#.[:]|[>~+]|^\/\//.test(target.trim());
@@ -41,23 +42,20 @@ export function resolveUrl(url: string, base: string | null): string {
   try { return new URL(url, base ?? undefined).toString(); } catch { return url; }
 }
 
-/** Cursor + click ripple injected into every page (headless Chromium draws no pointer). `ZOOM` is replaced per device. */
+/** Cursor + click ripple injected into every page (headless Chromium draws no pointer). `__CURSOR__` = size factor per device. */
 export const CURSOR_SCRIPT = `(() => {
-  const ZOOM = __ZOOM__;
-  const applyZoom = () => { if (ZOOM !== 1 && document.documentElement) document.documentElement.style.zoom = String(ZOOM); };
-  applyZoom();
+  const CURSOR = __CURSOR__;
   const mk = () => {
     if (document.getElementById("mp-cursor")) return;
     const c = document.createElement("div"); c.id = "mp-cursor";
     c.innerHTML = '<svg width="28" height="34" viewBox="0 0 28 34"><path d="M2 2 L2 27 L8.5 21 L13 31 L18 29 L13.5 19.5 L22 19 Z" fill="#111" stroke="#fff" stroke-width="2" stroke-linejoin="round"/></svg>';
-    Object.assign(c.style, { position: "fixed", left: "0px", top: "0px", zIndex: "2147483647", pointerEvents: "none", transform: "translate(-2px,-2px)", filter: "drop-shadow(0 2px 3px rgba(0,0,0,.35))", transition: "none", zoom: String(1 / ZOOM) });
+    Object.assign(c.style, { position: "fixed", left: "0px", top: "0px", zIndex: "2147483647", pointerEvents: "none", transform: "translate(-2px,-2px) scale(" + CURSOR + ")", transformOrigin: "top left", filter: "drop-shadow(0 2px 3px rgba(0,0,0,.35))", transition: "none" });
     (document.body || document.documentElement).appendChild(c);
   };
-  // clientX/Y arrive in zoomed CSS px; the cursor element un-zooms itself, so scale its position back up.
-  const move = (e) => { mk(); const c = document.getElementById("mp-cursor"); if (c) { c.style.left = (e.clientX * ZOOM) + "px"; c.style.top = (e.clientY * ZOOM) + "px"; } };
-  const ripple = (e) => { mk(); const r = document.createElement("div"); Object.assign(r.style, { position: "fixed", left: (e.clientX * ZOOM - 18) + "px", top: (e.clientY * ZOOM - 18) + "px", width: "36px", height: "36px", borderRadius: "50%", border: "3px solid rgba(20,20,20,.55)", zIndex: "2147483646", pointerEvents: "none", animation: "mp-ripple .45s ease-out forwards", zoom: String(1 / ZOOM) }); document.body.appendChild(r); setTimeout(() => r.remove(), 500); };
+  const move = (e) => { mk(); const c = document.getElementById("mp-cursor"); if (c) { c.style.left = e.clientX + "px"; c.style.top = e.clientY + "px"; } };
+  const ripple = (e) => { mk(); const r = document.createElement("div"); const d = Math.round(36 * CURSOR); Object.assign(r.style, { position: "fixed", left: (e.clientX - d / 2) + "px", top: (e.clientY - d / 2) + "px", width: d + "px", height: d + "px", borderRadius: "50%", border: "3px solid rgba(20,20,20,.55)", zIndex: "2147483646", pointerEvents: "none", animation: "mp-ripple .45s ease-out forwards" }); document.body.appendChild(r); setTimeout(() => r.remove(), 500); };
   const style = document.createElement("style"); style.textContent = "@keyframes mp-ripple{from{transform:scale(.4);opacity:.9}to{transform:scale(1.6);opacity:0}}";
-  document.addEventListener("DOMContentLoaded", () => { applyZoom(); document.head.appendChild(style); mk(); });
+  document.addEventListener("DOMContentLoaded", () => { document.head.appendChild(style); mk(); });
   document.addEventListener("mousemove", move, true); document.addEventListener("mousedown", ripple, true);
 })();`;
 
@@ -96,12 +94,12 @@ export const playwrightRecorder: Recorder = async (script, opts) => {
     try { await fetch(opts.resetUrl, { method: "POST", signal: AbortSignal.timeout(20_000) }); opts.log("demo reset ok"); }
     catch (e) { warnings.push(`Reset-Endpoint: ${e instanceof Error ? e.message : String(e)}`); }
   }
-  const browser = await chromium.launch({ headless: true });
+  const browser = await chromium.launch({ headless: true, args: dev.dpr !== 1 ? [`--force-device-scale-factor=${dev.dpr}`] : [] });
   try {
     let storageState: string | undefined;
     if (opts.login && opts.baseUrl) {
       // Log in outside the recorded context so the credentials never appear on video.
-      const lctx = await browser.newContext({ userAgent: USER_AGENT, viewport: dev.viewport, isMobile: dev.mobile, hasTouch: dev.mobile });
+      const lctx = await browser.newContext({ userAgent: USER_AGENT, viewport: dev.viewport, deviceScaleFactor: dev.dpr, isMobile: dev.mobile, hasTouch: dev.mobile });
       const lp = await lctx.newPage();
       let ok = false;
       for (const p of ["", "/login", "/anmelden", "/signin", "/auth/login"]) {
@@ -124,10 +122,10 @@ export const playwrightRecorder: Recorder = async (script, opts) => {
       await lctx.close();
     }
     const context = await browser.newContext({
-      userAgent: USER_AGENT, viewport: dev.viewport, isMobile: dev.mobile, hasTouch: dev.mobile, locale: "de-DE",
+      userAgent: USER_AGENT, viewport: dev.viewport, deviceScaleFactor: dev.dpr, isMobile: dev.mobile, hasTouch: dev.mobile, locale: "de-DE",
       recordVideo: { dir: opts.outDir, size: dev.video }, ...(storageState ? { storageState } : {}),
     });
-    await context.addInitScript(CURSOR_SCRIPT.replace("__ZOOM__", String(dev.zoom)));
+    await context.addInitScript(CURSOR_SCRIPT.replace("__CURSOR__", String(dev.cursor)));
     const page = await context.newPage();
     await sleep(400);
     const t0 = Date.now();
