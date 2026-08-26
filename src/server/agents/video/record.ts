@@ -29,7 +29,8 @@ export type Recorder = (script: VideoScript, opts: RecordOptions) => Promise<Rec
  * emulation would leave the 390 px image in the corner of the frame.
  */
 export const DEVICES: Record<VideoDevice, { viewport: { width: number; height: number }; dpr: number; video: { width: number; height: number }; mobile: boolean; cursor: number }> = {
-  mobile: { viewport: { width: 390, height: 844 }, dpr: 3, video: { width: 1170, height: 2532 }, mobile: true, cursor: 0.75 },
+  // dpr 2 (780x1688) is plenty for the 694x1500 phone screen inside the 1080x1920 reel; dpr 3 doubled the encoder load and slowed every browser action
+  mobile: { viewport: { width: 390, height: 844 }, dpr: 2, video: { width: 780, height: 1688 }, mobile: true, cursor: 0.75 },
   desktop: { viewport: { width: 1440, height: 900 }, dpr: 1, video: { width: 1440, height: 900 }, mobile: false, cursor: 1 },
 };
 

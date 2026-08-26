@@ -122,3 +122,12 @@ Erledigt:
   `waitFor` auf „Drucken / als PDF“, Szene 5 zeigt das fertige Blatt; nur mobile Aufnahme (3 Credits je Render).
 - „Neu generieren“ auf Video-Stück löschte alle Dateien → jetzt Render-Job.
 - UI-Karte je Projekt aus den Aufnahmen; Prompts kennen `waitFor` und Bestätigungsdialoge.
+- Recorder-Stalls: Aktionen dauerten 10–27 s (scrollIntoViewIfNeeded wartet auf „stabile“ Elemente;
+  `networkidle` tritt in Lehreule nie ein). Jetzt JS-scrollIntoView + Deckel 1,5–2,5 s; Zielsuche
+  ≤ 0,6 s (Probe). `waitFor` verlangt ein unverdecktes Ziel (Button hinter Overlay zählte als fertig).
+- Marcel hat **eleven_v3** gewählt → Standard in `.env`; Hörproben unter `/mp/hoerproben/index.html`.
+- Render-Optionen auf der Video-Seite: Reel-Anzahl, Landscape (Desktop-Aufnahme = doppelte Credits),
+  „Aufnahme wiederverwenden“ (nur Stimme/Schnitt neu, keine Credits).
+- Recorder-Tempo: Ursache ist die Kodierlast bei dpr 3 (ffmpeg 230 % CPU auf 6 Kernen), nicht die
+  Zielsuche → mobile Aufnahme auf dpr 2 (780×1688). Messung steht aus, weil Lehreule seit ~20:10
+  mit „OpenRouter-Guthaben aufgebraucht“ (Haupt-Key) nichts mehr generiert – Marcel lädt auf.
