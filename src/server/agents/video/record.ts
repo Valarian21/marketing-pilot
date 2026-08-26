@@ -64,21 +64,42 @@ export const CURSOR_SCRIPT = `(() => {
 const FIELD_XPATH = 'xpath=following::*[self::textarea or self::input[not(@type="hidden")] or @contenteditable="true"][1]';
 
 async function findTarget(page: Page, target: string, kind: "click" | "type" = "click"): Promise<Locator | null> {
-  const candidates: Locator[] = [];
-  if (isSelector(target)) candidates.push(page.locator(target).first());
+  const candidates: { loc: Locator; fieldBelow?: boolean }[] = [];
+  const add = (...locs: Locator[]) => { for (const loc of locs) candidates.push({ loc }); };
+  if (isSelector(target)) add(page.locator(target).first());
   else {
     const re = new RegExp(target.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
     if (kind === "type") {
       // typing must land in a field: label/placeholder first, then the first field that follows the matching text
       // (many forms show the field name as plain text above the textarea, without a <label for>)
-      candidates.push(page.getByLabel(re).first(), page.getByPlaceholder(re).first(), page.locator(`[aria-label*="${target}" i]`).first(), page.getByText(re).first().locator(FIELD_XPATH).first(), page.getByRole("textbox", { name: re }).first());
+      add(page.getByLabel(re).first(), page.getByPlaceholder(re).first(), page.locator(`[aria-label*="${target}" i]`).first(), page.getByText(re).first().locator(FIELD_XPATH).first(), page.getByRole("textbox", { name: re }).first());
     }
-    candidates.push(page.getByRole("button", { name: re }).first(), page.getByRole("link", { name: re }).first(), page.getByPlaceholder(re).first(), page.getByLabel(re).first(), page.getByText(re).first(), page.locator(`[aria-label*="${target}" i], [title*="${target}" i]`).first());
+    add(page.getByRole("button", { name: re }).first(), page.getByRole("link", { name: re }).first(), page.getByPlaceholder(re).first(), page.getByLabel(re).first(), page.locator(`[aria-label*="${target}" i], [title*="${target}" i]`).first());
+    // plain text last - and when that text is a field caption (a field sits right below it), the field is what the author meant
+    candidates.push({ loc: page.getByText(re).first(), fieldBelow: true });
   }
-  for (const c of candidates) {
-    try { if (await c.count() > 0 && await c.isVisible({ timeout: 800 })) return c; } catch { /* next */ }
+  for (const { loc, fieldBelow } of candidates) {
+    try {
+      if (!(await loc.count() > 0 && await loc.isVisible({ timeout: 800 }))) continue;
+      if (fieldBelow) {
+        const field = loc.locator(FIELD_XPATH).first();
+        const [tb, fb] = await Promise.all([loc.boundingBox(), field.count().then((n) => (n ? field.boundingBox() : null))]);
+        if (tb && fb && fb.y >= tb.y - 8 && fb.y - (tb.y + tb.height) < 140) return field;
+      }
+      return loc;
+    } catch { /* next */ }
   }
   return null;
+}
+
+/** Field that currently has keyboard focus (after a click on a caption/field) - or null. */
+async function focusedField(page: Page): Promise<Locator | null> {
+  const loc = page.locator(":focus").first();
+  try {
+    if (!(await loc.count())) return null;
+    const ok = await loc.evaluate((e) => ["TEXTAREA", "INPUT"].includes(e.tagName) || (e as HTMLElement).isContentEditable);
+    return ok ? loc : null;
+  } catch { return null; }
 }
 
 async function glide(page: Page, cur: { x: number; y: number }, to: { x: number; y: number }, ms = 650): Promise<void> {
@@ -169,10 +190,11 @@ export const playwrightRecorder: Recorder = async (script, opts) => {
             }
             case "click": case "hover": case "type": {
               let loc = a.target ? await findTarget(page, a.target, a.type === "type" ? "type" : "click") : null;
+              if (!loc && a.type === "type" && !a.target) loc = await focusedField(page);   // "click caption, then type" - no target on the type step
               if (!loc && a.type === "type") {
                 // the script author guessed a label/selector that does not exist - the first visible empty text field is the best bet
                 const fallback = page.locator('textarea:visible, input[type="text"]:visible, input[type="search"]:visible, input:not([type]):visible, [contenteditable="true"]:visible').first();
-                if (await fallback.count() > 0) { loc = fallback; warnings.push(`Szene ${scene.id}: Ziel „${a.target ?? ""}“ nicht gefunden – erstes sichtbares Textfeld genutzt`); }
+                if (await fallback.count() > 0) { loc = fallback; warnings.push(`Szene ${scene.id}: ${a.target ? `Ziel „${a.target}“ nicht gefunden` : "type ohne Ziel und ohne fokussiertes Feld"} – erstes sichtbares Textfeld genutzt`); }
               }
               if (!loc) throw new Error(`Ziel nicht gefunden: ${a.target ?? "(leer)"}`);
               await loc.scrollIntoViewIfNeeded().catch(() => undefined);
