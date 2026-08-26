@@ -75,7 +75,7 @@ export const renderVideoJob: JobHandler<VideoContext> = async (ctx, job, progres
   const recordings = await step("record", async () => {
     const out: Partial<Record<s.VideoDevice, Recording>> = {};
     for (const device of devices) {
-      const rec = await recorder(script, { device, outDir, baseUrl, login, resetUrl: ctx.env.MP_DEMO_RESET_URL, log: ctx.log });
+      const rec = await recorder(script, { device, outDir, baseUrl, login, resetUrl: ctx.env.MP_DEMO_RESET_URL, loginUrl: ctx.env.MP_DEMO_LOGIN_URL, log: ctx.log });
       warnings.push(...rec.warnings);
       out[device] = rec;
       progress("record", { detail: `${Object.keys(out).join(" + ")}: ${Math.round(rec.durationMs / 1000)} s, ${rec.scenes.filter((x) => x.error).length} Szenen mit Fehlern` });

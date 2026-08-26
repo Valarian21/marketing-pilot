@@ -16,7 +16,7 @@ export interface RecordedScene { id: string; startMs: number; endMs: number; cli
 export interface Recording { file: string; device: VideoDevice; width: number; height: number; viewportWidth: number; viewportHeight: number; scenes: RecordedScene[]; durationMs: number; warnings: string[] }
 export interface RecordOptions {
   device: VideoDevice; outDir: string; baseUrl: string | null;
-  login?: { user: string; password: string } | undefined; resetUrl?: string | undefined;
+  login?: { user: string; password: string } | undefined; resetUrl?: string | undefined; loginUrl?: string | undefined;
   log: (m: string) => void;
 }
 export type Recorder = (script: VideoScript, opts: RecordOptions) => Promise<Recording>;
@@ -102,17 +102,27 @@ export const playwrightRecorder: Recorder = async (script, opts) => {
       const lctx = await browser.newContext({ userAgent: USER_AGENT, viewport: dev.viewport, deviceScaleFactor: dev.dpr, isMobile: dev.mobile, hasTouch: dev.mobile });
       const lp = await lctx.newPage();
       let ok = false;
-      for (const p of ["", "/login", "/anmelden", "/signin", "/auth/login"]) {
+      const paths = [...(opts.loginUrl ? [opts.loginUrl] : []), "/", "/login", "/anmelden", "/start", "/signin", "/auth/login"];
+      for (const p of paths) {
         try {
-          await lp.goto(resolveUrl(p || "/", opts.baseUrl), { waitUntil: "domcontentloaded", timeout: 20_000 });
-          const pw = lp.locator('input[type="password"]').first();
+          await lp.goto(resolveUrl(p, opts.baseUrl), { waitUntil: "domcontentloaded", timeout: 20_000 });
+          await lp.waitForLoadState("networkidle", { timeout: 6_000 }).catch(() => undefined);
+          await dismissConsent(lp);
+          let pw = lp.locator('input[type="password"]:visible').first();
+          if (!(await pw.count())) {
+            // Login form hidden behind a button/link (modal or tab)? Reveal it first.
+            const opener = lp.getByRole("button", { name: /anmelden|einloggen|login|log in|sign in/i }).or(lp.getByRole("link", { name: /anmelden|einloggen|login|log in|sign in/i })).first();
+            if (await opener.count()) { await opener.click({ timeout: 3000 }).catch(() => undefined); await lp.waitForTimeout(600); }
+            pw = lp.locator('input[type="password"]:visible').first();
+          }
           if (!(await pw.count())) continue;
-          const user = lp.locator('input[type="email"], input[name*="mail" i], input[name*="user" i], input[autocomplete="username"]').first();
+          const user = lp.locator('input[type="email"]:visible, input[name*="mail" i]:visible, input[name*="user" i]:visible, input[autocomplete="username"]:visible').first();
           if (await user.count()) await user.fill(opts.login.user);
           await pw.fill(opts.login.password);
           await pw.press("Enter");
           await lp.waitForLoadState("networkidle", { timeout: 15_000 }).catch(() => undefined);
-          ok = !(await lp.locator('input[type="password"]').count());
+          await lp.waitForTimeout(1200);
+          ok = !(await lp.locator('input[type="password"]:visible').count());
           if (ok) break;
         } catch { /* try next path */ }
       }

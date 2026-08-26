@@ -1,0 +1,64 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`pure helpers > prompt snapshots 1`] = `
+[
+  {
+    "content": "[task:score-threads]
+Score community threads 0-100 for how well a helpful reply from the maker of "Beispielwerk" would fit. High: the author has a pain the product solves and is asking for tools/advice/experiences. Medium: related discussion where a genuine tip helps. Low: news, memes, unrelated, or threads where any product mention would be spam. Also flag "askingForTools" (they explicitly ask for recommendations).
+Return JSON: {"scores":[{"id","score","reason","askingForTools"}]} - one entry per thread, reason in German (max 20 words).",
+    "role": "system",
+  },
+  {
+    "content": "PRODUCT: Arbeitsblätter in Minuten.
+CATEGORY: worksheet generator
+
+PERSONA PAINS
+- Grundschullehrerin: Sonntagabend Vorbereitung | phrases: ich sitze jeden Sonntag
+
+THREADS
+[t0] (reddit r/x) T
+E",
+    "role": "user",
+  },
+]
+`;
+
+exports[`pure helpers > prompt snapshots 2`] = `
+[
+  {
+    "content": "[task:weekly-report]
+You are the growth lead writing the Sunday-evening report for the founder of "Beispielwerk". Plain text, German, 150-300 words, three parts with these exact headings: "Was lief", "Was nicht", "Nächste Woche anders". Numbers first, no fluff, no praise. If data is thin, say so and what to measure next.
+Then propose an UPDATED PLAN as JSON with the same schema as the current plan (only change what the facts justify - keep channels/goals that work, drop or adjust what did not, keep startDate; goals are cumulative targets, do not lower them without a reason stated in the report).
+Return JSON: {"report": "<text>", "plan": {<full StrategyPlan>}, "nextWeekFocus": ["<3-5 bullet points>"]}",
+    "role": "system",
+  },
+  {
+    "content": "CURRENT PLAN
+{"summary":"Plan","startDate":"2026-08-24","coreMessage":{"text":"Sonntag frei.","rationale":""},"channels":[{"platform":"Reddit r/lehrerzimmer","role":"start","format":"Antworten","cadence":"3×/Woche","rationale":"","evidenceRefs":[]}],"goals":[{"horizonDays":30,"metric":"signups","target":20,"rationale":""},{"horizonDays":60,"metric":"signups","target":60,"rationale":""},{"horizonDays":90,"metric":"signups","target":120,"rationale":""}],"budget":{"monthlyEur":50,"items":[],"rationale":""},"risks":[]}
+
+FACTS FOR WEEK OF 2026-08-24
+{
+ "weekStart": "2026-08-24",
+ "signups": 3,
+ "activated": 1,
+ "paid": 0,
+ "signupsPrevWeek": 1,
+ "byChannel": [
+  {
+   "source": "reddit",
+   "signups": 3
+  }
+ ],
+ "published": [],
+ "tasksDone": 4,
+ "tasksOpen": 2,
+ "tasksSkipped": 0,
+ "leadsAnswered": 2,
+ "geoVisibility": 0,
+ "geoVisibilityPrev": null,
+ "goals": []
+}",
+    "role": "user",
+  },
+]
+`;

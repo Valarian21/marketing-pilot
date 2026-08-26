@@ -133,7 +133,7 @@ export const GeoSnapshot = z.object({
 export const CommunityLead = z.object({
   id: Id, projectId: Id, platform: z.string(), url: z.string(), title: z.string(),
   excerpt: z.string(), score: z.number().int().min(0).max(100),
-  draftReply: z.string(), status: LeadStatus, createdAt: Iso,
+  draftReply: z.string(), status: LeadStatus, meta: Json, createdAt: Iso,
 });
 
 export const AgentRun = z.object({
@@ -288,6 +288,7 @@ export const ProjectOverview = Project.extend({
   geoVisibility: z.number().nullable(),
   briefConfirmed: z.boolean(),
   planVersion: z.number().int().nullable(),
+  latestReport: z.object({ id: Id, weekStart: z.string(), status: z.string(), excerpt: z.string() }).nullable().default(null),
 });
 
 export const ContentPatch = z.object({
@@ -430,6 +431,42 @@ export const VideoView = z.object({
   musicTracks: z.number().int(),
 });
 
+// --- Community radar, insights, weekly loop (Shot 5) -------------------------
+
+export const CommunitySourceType = z.enum(["reddit", "hn", "rss"]);
+export const CommunitySource = z.object({ type: CommunitySourceType, value: z.string().default(""), label: z.string().default(""), enabled: z.boolean().default(true) });
+export const CommunityLeadPatch = z.object({ draftReply: z.string().optional(), status: LeadStatus.optional(), externalUrl: z.string().optional() });
+export const CommunityView = z.object({
+  leads: z.array(CommunityLead),
+  sources: z.array(CommunitySource),
+  lastScanAt: Iso.nullable(),
+  scanning: z.boolean(),
+  redditAuth: z.boolean(),
+});
+
+export const EventName = z.enum(["signup", "activated", "paid"]);
+export const InboundEvent = z.object({
+  event: EventName,
+  utm: z.object({ source: z.string().default(""), medium: z.string().default(""), campaign: z.string().default(""), content: z.string().default("") }).default({ source: "", medium: "", campaign: "", content: "" }),
+  userRef: z.string().default(""),
+  occurredAt: Iso.optional(),
+  meta: Json.optional(),
+});
+export const InsightsView = z.object({
+  weeks: z.array(z.object({ weekStart: z.string(), signups: z.number().int(), activated: z.number().int(), paid: z.number().int() })),
+  byChannel: z.array(z.object({ source: z.string(), signups: z.number().int(), activated: z.number().int(), paid: z.number().int() })),
+  pieces: z.array(z.object({ pieceId: z.string(), title: z.string(), channel: z.string(), format: z.string(), signups: z.number().int(), publishedAt: Iso.nullable() })),
+  geoHistory: z.array(z.object({ batch: z.string(), takenAt: Iso, visibility: z.number(), asked: z.number().int() })),
+  totalEvents: z.number().int(),
+  webhookConfigured: z.boolean(),
+});
+
+export const WeeklyReport = z.object({
+  id: Id, projectId: Id, weekStart: z.string(), report: z.string(),
+  proposedPlan: StrategyPlan.nullable(), diff: z.array(PlanDiffEntry),
+  status: z.enum(["proposed", "adopted", "dismissed"]), createdAt: Iso, decidedAt: Iso.nullable(),
+});
+
 /** Shape of GET /api/mp/host - what the client needs to render the shell. */
 export const HostInfo = z.object({
   mode: z.enum(["dashboard", "standalone"]),
@@ -504,3 +541,9 @@ export type VideoScriptRequest = z.infer<typeof VideoScriptRequest>;
 export type Job = z.infer<typeof Job>;
 export type JobStep = z.infer<typeof JobStep>;
 export type VideoView = z.infer<typeof VideoView>;
+export type CommunitySource = z.infer<typeof CommunitySource>;
+export type CommunityLeadPatch = z.infer<typeof CommunityLeadPatch>;
+export type CommunityView = z.infer<typeof CommunityView>;
+export type InboundEvent = z.infer<typeof InboundEvent>;
+export type InsightsView = z.infer<typeof InsightsView>;
+export type WeeklyReport = z.infer<typeof WeeklyReport>;

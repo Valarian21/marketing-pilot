@@ -80,6 +80,9 @@ export function ProjectsPage() {
                   <div className="mp-ministat mp-ministat--hi" title="Signups letzte 7 Tage"><div className="mp-label">Signups 7T</div><div className="mp-num">{p.signups7d}</div></div>
                   <div className="mp-ministat" title="GEO-Sichtbarkeit"><div className="mp-label">GEO</div><div className="mp-num">{p.geoVisibility === null ? "–" : `${Math.round(p.geoVisibility * 100)} %`}</div></div>
                 </div>
+                {p.latestReport && p.latestReport.status === "proposed" && (
+                  <Link to={`/projects/${p.id}/insights`} className="mp-report-card"><span className="mp-label">Wochen-Report {p.latestReport.weekStart} · Vorschlag</span><span className="mp-small">{p.latestReport.excerpt}…</span></Link>
+                )}
                 <div className="mp-project-foot">
                   <span className="mp-label">{p.planVersion ? `Plan v${p.planVersion}` : p.briefConfirmed ? "Brief bestätigt" : `Angelegt ${new Date(p.createdAt).toLocaleDateString("de-DE")}`}</span>
                   <Button variant="danger" onClick={() => void remove(p)}>Löschen</Button>

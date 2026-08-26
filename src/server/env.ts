@@ -52,7 +52,12 @@ const EnvSchema = z.object({
   MP_DEMO_USER: optional,
   MP_DEMO_PASSWORD: optional,
   MP_DEMO_RESET_URL: optional,
+  MP_DEMO_LOGIN_URL: optional,
   MP_EVENTS_TOKEN: optional,
+  REDDIT_CLIENT_ID: optional,
+  REDDIT_CLIENT_SECRET: optional,
+  REDDIT_USER_AGENT: optional,
+  MP_SCHEDULER: bool.default(true),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

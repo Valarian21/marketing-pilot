@@ -136,6 +136,7 @@ export const mpCommunityLeads = sqliteTable("mp_community_leads", {
   score: integer("score").notNull().default(0),
   draftReply: text("draft_reply").notNull().default(""),
   status: text("status").notNull().default("new"),
+  meta: text("meta").notNull().default("{}"),
   createdAt: createdAt(),
 }, (t) => [index("mp_leads_project").on(t.projectId)]);
 
@@ -237,3 +238,33 @@ export const mpJobs = sqliteTable("mp_jobs", {
   startedAt: text("started_at"),
   finishedAt: text("finished_at"),
 }, (t) => [index("mp_jobs_status").on(t.status), index("mp_jobs_project").on(t.projectId)]);
+
+// --- Community, Insights, Weekly loop (Shot 5) ---------------------------------
+
+/** Raw inbound events from the product (signup/activated/paid) with their UTM fields. */
+export const mpEvents = sqliteTable("mp_events", {
+  id: id(),
+  projectId: projectRef(),
+  event: text("event").notNull(),
+  utmSource: text("utm_source").notNull().default(""),
+  utmMedium: text("utm_medium").notNull().default(""),
+  utmCampaign: text("utm_campaign").notNull().default(""),
+  utmContent: text("utm_content").notNull().default(""),
+  userRef: text("user_ref").notNull().default(""),
+  meta: text("meta").notNull().default("{}"),
+  occurredAt: text("occurred_at").notNull(),
+  receivedAt: text("received_at").notNull(),
+}, (t) => [index("mp_events_project").on(t.projectId), index("mp_events_occurred").on(t.occurredAt)]);
+
+/** Weekly reports with a proposed plan version the human can adopt. */
+export const mpReports = sqliteTable("mp_reports", {
+  id: id(),
+  projectId: projectRef(),
+  weekStart: text("week_start").notNull(),
+  report: text("report").notNull().default(""),
+  proposedPlan: text("proposed_plan").notNull().default("{}"),
+  diff: text("diff").notNull().default("[]"),
+  status: text("status").notNull().default("proposed"),
+  createdAt: createdAt(),
+  decidedAt: text("decided_at"),
+}, (t) => [index("mp_reports_project").on(t.projectId)]);

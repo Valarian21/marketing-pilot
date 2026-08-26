@@ -115,6 +115,34 @@ Overlays und ffmpeg-Schnitt. Konfiguration: `MP_DEMO_BASE_URL`, `MP_DEMO_USER`, 
 API: `POST …/video/script`, `PUT /content/:id/script`, `POST /content/:id/video/render`
 (`{variants, landscape}`), `GET /jobs/:id`. UI: `/mp/projects/:id/studio/video`.
 
+## Community, Insights, Wochen-Loop (Shot 5)
+
+`GET/PUT …/community/sources`, `POST …/community/scan` (Job), `PATCH /api/mp/community/:id`;
+`POST /api/mp/events` (öffentlich, Bearer `MP_EVENTS_TOKEN`), `GET …/insights`, `GET …/insights/snippet`;
+`GET …/reports`, `POST …/reports/run`, `POST /api/mp/reports/:id/adopt|dismiss`. Der Worker plant
+Radar (täglich), GEO-Messung (wöchentlich) und Report (sonntags) selbst (`MP_SCHEDULER=false` schaltet ab).
+
+## Extraktion auf eigene Domain
+
+Das Paket ist heute ein eigener Prozess; „extrahieren“ heißt nur: anders erreichbar machen.
+
+1. **Repo trennen** (optional): `git subtree split -P marketing-pilot -b marketing-pilot` und in ein
+   neues Repo pushen; `pnpm install && pnpm build` dort. Nichts im Code verweist auf das Dashboard-Repo
+   außer dem Standardpfad zum JWT-Secret (nur im Dashboard-Modus benutzt).
+2. **Standalone-Modus** in `.env`: `MP_STANDALONE=true`, `MP_STANDALONE_USER`, `MP_STANDALONE_PASSWORD`,
+   `MP_PUBLIC_BASE=https://marketing.example.com`, `MP_DATA_DIR` auf ein persistentes Verzeichnis.
+   `MP_HOST_*`-Variablen entfallen.
+3. **Daten mitnehmen**: `data/` (mp.db, assets, session_secret.txt) kopieren – SQLite-Datei plus
+   Ordner, keine Migration nötig (läuft beim Start).
+4. **Dienste**: beide Units (`deploy/*.service`) mit neuem `WorkingDirectory` installieren; Worker
+   braucht Playwright-Browser (`pnpm exec playwright install chromium`) und ffmpeg.
+5. **nginx**: ein Server-Block für die neue Domain, `location / { proxy_pass http://127.0.0.1:8105; }`
+   (der Dienst leitet `/` auf `/mp/`). Certbot für TLS. Alte Locations `/mp/` und `/api/mp/` im
+   Dashboard-Block entfernen, Sidebar-Link im Dashboard auf die neue URL zeigen lassen.
+6. **Webhook-URL** in deinem Produkt und im Landingpage-Snippet auf `https://marketing.example.com/api/mp/events`
+   umstellen (das Snippet aus `/insights` neu kopieren – es enthält die URL).
+7. Prüfen: `/api/mp/health` → `mode: standalone`; Login mit dem Standalone-Konto; ein Test-Render.
+
 ## Freigabe-Stufen und Kennzeichnung
 
 Jede Aktion mit Außenwirkung trägt `auto | review | human_only` (Default `review`;

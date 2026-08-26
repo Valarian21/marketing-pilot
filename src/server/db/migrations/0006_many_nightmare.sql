@@ -1,0 +1,1 @@
+ALTER TABLE `mp_community_leads` ADD `meta` text DEFAULT '{}' NOT NULL;

@@ -12,6 +12,7 @@ import type { AgentContext } from "../agents/runner.js";
 import { executeTask, rowToTask } from "../agents/strategy/execute.js";
 import { currentVersion, dueAtFor, enforceApproval, geoSummary, isoDate } from "../agents/strategy/plan.js";
 import { briefConfirmed } from "./strategy.js";
+import { latestReport } from "../agents/loop/weekly.js";
 
 import { pieceOf } from "../agents/studio/generate.js";
 
@@ -54,7 +55,9 @@ export function overview(db: Db): s.ProjectOverview[] {
     const piecesInReview = db.select({ id: t.mpContentPieces.id }).from(t.mpContentPieces).where(and(eq(t.mpContentPieces.projectId, p.id), eq(t.mpContentPieces.status, "review"))).all().length;
     const since = new Date(Date.now() - 7 * 86_400_000).toISOString();
     const signups7d = db.select().from(t.mpInsights).where(eq(t.mpInsights.projectId, p.id)).all().filter((i) => i.createdAt >= since).reduce((n, i) => n + i.signups, 0);
-    return { ...p, openTasksThisWeek, piecesInReview, signups7d, geoVisibility: geoSummary(db, p.id).visibility, briefConfirmed: briefConfirmed(db, p.id), planVersion: plan?.version ?? null };
+    const rep = latestReport(db, p.id);
+    return { ...p, openTasksThisWeek, piecesInReview, signups7d, geoVisibility: geoSummary(db, p.id).visibility, briefConfirmed: briefConfirmed(db, p.id), planVersion: plan?.version ?? null,
+      latestReport: rep ? { id: rep.id, weekStart: rep.weekStart, status: rep.status, excerpt: rep.report.slice(0, 220) } : null };
   });
 }
 

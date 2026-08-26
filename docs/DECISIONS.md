@@ -64,3 +64,11 @@ Format: Datum · Entscheidung · Grund · Alternative, die verworfen wurde.
 - **Ohne ElevenLabs-Key trotzdem rendern**: Captions aus geschätztem Timing (≈ 2,6 Wörter/s), Hinweis am Stück. Sobald `ELEVENLABS_API_KEY`/`VOICE_ID` gesetzt sind, wird automatisch gesprochen.
 - **Provenance im MP4** nur als Container-Metadaten (`comment=AI-generated: true`) – c2pa gilt wie bei den Bildern als offen (nativer Build).
 - **Klick-Zoom pro Szene nur auf den ersten Klick**: mehrere Zooms pro 3–5-Sekunden-Szene wirken nervös.
+
+## 2026-08-26 (Shot 5)
+
+- **Reddit ohne OAuth-App trotzdem lauffähig**: die öffentlichen `.json`-Endpunkte funktionieren read-only mit User-Agent und langsamer Kadenz; mit `REDDIT_CLIENT_ID/SECRET` (Script-App) wechselt der Radar automatisch auf `oauth.reddit.com`. Nur lesen – es gibt keinen Code-Pfad, der postet.
+- **Browser-Beacons ohne Token nur für `signup`**: das Landingpage-Snippet kann kein Geheimnis tragen; `activated`/`paid` müssen vom Produkt-Backend mit `MP_EVENTS_TOKEN` kommen. Herkunft (`via: browser|server`) steht am Event.
+- **Wochen-Report ist ein Vorschlag, kein Auto-Update**: der Plan ändert sich erst, wenn Marcel „Übernehmen“ klickt; dann entstehen Planversion und Aufgaben der Folgewoche in einem Schritt.
+- **Scheduler im Worker, nicht in der API**: der API-Prozess bleibt zustandslos; ein Neustart des Workers holt fällige Jobs sofort nach, Zeitstempel in `mp_settings` verhindern Doppelläufe.
+- **Stücke ↔ Signups über `utm_content` = Stück-ID**: kein zusätzliches Tracking nötig, jeder UTM-Link aus dem Publish-Paket trägt die ID.

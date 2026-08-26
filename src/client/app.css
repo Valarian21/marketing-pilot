@@ -266,3 +266,16 @@ button, input { font: inherit; color: inherit; }
 .mp-video--wide video { aspect-ratio: 16 / 9; }
 .mp-video figcaption { display: flex; justify-content: space-between; gap: 6px; align-items: center; margin-top: 4px; }
 @media (max-width: 1100px) { .mp-video-layout { grid-template-columns: 1fr; } }
+
+/* Community + Insights */
+.mp-wrap { flex-wrap: wrap; }
+.mp-lead { margin-bottom: 10px; }
+.mp-lead-title { display: flex; gap: 12px; align-items: center; text-align: left; }
+.mp-quote { margin: 6px 0 10px; padding: 8px 12px; border-left: 3px solid var(--mp-line); color: var(--mp-ink-2); white-space: pre-wrap; font-size: var(--mp-text-sm); }
+.mp-bars { list-style: none; margin: 0; padding: 0; }
+.mp-bars li { display: grid; grid-template-columns: 96px 1fr 150px; gap: 10px; align-items: center; height: var(--mp-row-h); border-bottom: 1px solid var(--mp-grid-line); }
+.mp-bar-track { height: 10px; background: var(--mp-track); border-radius: var(--mp-radius-pill); overflow: hidden; }
+.mp-bar-fill { display: block; height: 100%; background: var(--mp-accent); border-radius: var(--mp-radius-pill); }
+.mp-report { margin-bottom: 10px; }
+.mp-report-card { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border-radius: var(--mp-radius-sm); background: var(--mp-warn-soft); color: var(--mp-ink); text-decoration: none; }
+.mp-report-card:hover { color: var(--mp-ink); background: var(--mp-tile-hi); }

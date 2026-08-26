@@ -18,6 +18,7 @@ import { strategyRoutes } from "./routes/strategy.js";
 import { taskRoutes } from "./routes/tasks.js";
 import { studioRoutes } from "./routes/studio.js";
 import { videoRoutes } from "./routes/video.js";
+import { loopRoutes, EVENTS_PUBLIC_PATH } from "./routes/loop.js";
 import { buildContext, type FullContext, type ServiceOverrides } from "./services.js";
 import { markStaleRuns } from "./agents/analysis/pipeline.js";
 
@@ -25,7 +26,7 @@ declare module "fastify" {
   interface FastifyRequest { user: HostUser }
 }
 
-const PUBLIC_API = ["/api/mp/health", "/api/mp/host"];
+const PUBLIC_API = ["/api/mp/health", "/api/mp/host", EVENTS_PUBLIC_PATH];
 
 export interface BuiltApp { app: FastifyInstance; db: Db; host: HostAdapter; ctx: FullContext | null; close: () => Promise<void> }
 export type { ServiceOverrides };
@@ -77,6 +78,7 @@ export async function buildApp(env: Env, opts: { host?: HostAdapter; dbFile?: st
   taskRoutes(app, db, () => ctx);
   studioRoutes(app, db, () => ctx);
   videoRoutes(app, db, () => ctx);
+  loopRoutes(app, db, env, () => ctx);
 
   // Client bundle under /mp/ (both host modes share the same URL space).
   const clientDir = path.join(ROOT, "dist/client");

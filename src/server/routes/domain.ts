@@ -42,17 +42,9 @@ export function domainRoutes(app: FastifyInstance, db: Db): void {
       .map((x) => ({ ...x, format: x.format as s.ContentPiece["format"], status: x.status as s.ContentPiece["status"],
         assets: arr(x.assets), utm: obj(x.utm), meta: obj(x.meta) })));
 
-  r.get("/api/mp/projects/:projectId/insights", { schema: { params: P, response: { 200: z.array(s.Insight) } } },
-    async (req) => db.select().from(t.mpInsights).where(eq(t.mpInsights.projectId, req.params.projectId))
-      .orderBy(desc(t.mpInsights.period)).all().map((x) => ({ ...x, metrics: obj(x.metrics) })));
-
   r.get("/api/mp/projects/:projectId/geo", { schema: { params: P, response: { 200: z.array(s.GeoSnapshot) } } },
     async (req) => db.select().from(t.mpGeoSnapshots).where(eq(t.mpGeoSnapshots.projectId, req.params.projectId))
       .orderBy(desc(t.mpGeoSnapshots.takenAt)).all().map((x) => ({ ...x, competitorsMentioned: arr(x.competitorsMentioned) })));
-
-  r.get("/api/mp/projects/:projectId/community", { schema: { params: P, response: { 200: z.array(s.CommunityLead) } } },
-    async (req) => db.select().from(t.mpCommunityLeads).where(eq(t.mpCommunityLeads.projectId, req.params.projectId))
-      .orderBy(desc(t.mpCommunityLeads.score)).all().map((x) => ({ ...x, status: x.status as s.CommunityLead["status"] })));
 
   r.get("/api/mp/runs", { schema: { querystring: s.ListQuery.extend({ projectId: z.string().optional() }), response: { 200: z.array(s.AgentRun) } } },
     async (req) => listRuns(db, req.query.limit, req.query.projectId));
@@ -62,8 +54,6 @@ export function domainRoutes(app: FastifyInstance, db: Db): void {
 
   // Write paths that later shots implement. Listed explicitly so nothing 404s by accident.
   const pending: [string, number][] = [
-    ["/api/mp/projects/:projectId/community/scan", 5],
-    ["/api/mp/events", 5],
   ];
   for (const [url, shot] of pending) {
     app.post(url, async (_req, reply) => reply.code(501).send({ detail: `Kommt in Shot ${shot}.`, shot }));

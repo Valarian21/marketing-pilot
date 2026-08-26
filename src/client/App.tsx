@@ -8,7 +8,8 @@ import { ProjectDetailPage } from "./pages/ProjectDetail.js";
 import { AnalysisPage } from "./pages/Analysis.js";
 import { ActivityPage } from "./pages/Activity.js";
 import { SettingsPage } from "./pages/Settings.js";
-import { CommunityPage, InsightsPage } from "./pages/Placeholders.js";
+import { CommunityPage } from "./pages/Community.js";
+import { InsightsPage } from "./pages/Insights.js";
 import { StudioPage } from "./pages/Studio.js";
 import { PublishPage } from "./pages/Publish.js";
 import { VideoPage } from "./pages/Video.js";
@@ -41,8 +42,10 @@ function Gate() {
           <Route path="tasks" element={<ProjectScoped page="tasks" title="Aufgaben" />} />
           <Route path="studio" element={<ProjectScoped page="studio" title="Content Studio" />} />
           <Route path="review" element={<ProjectScoped page="review" title="Freigaben" />} />
-          <Route path="community" element={<CommunityPage />} />
-          <Route path="insights" element={<InsightsPage />} />
+          <Route path="projects/:id/community" element={<CommunityPage />} />
+          <Route path="projects/:id/insights" element={<InsightsPage />} />
+          <Route path="community" element={<ProjectScoped page="community" title="Community" />} />
+          <Route path="insights" element={<ProjectScoped page="insights" title="Insights" />} />
           <Route path="activity" element={<ActivityPage />} />
           <Route path="settings" element={<SettingsPage />} />
           <Route path="*" element={<Notice kind="info">Seite nicht gefunden.</Notice>} />

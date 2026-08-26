@@ -39,7 +39,7 @@ describe("projects API", () => {
     const list = await t.app.inject({ url: "/api/mp/projects", headers: t.auth });
     expect(list.json()).toHaveLength(1);
 
-    for (const sub of ["personas", "channels", "tasks", "content", "insights", "geo", "community"]) {
+    for (const sub of ["personas", "channels", "tasks", "content", "geo"]) {
       const r = await t.app.inject({ url: `/api/mp/projects/${p.id}/${sub}`, headers: t.auth });
       expect(r.statusCode, sub).toBe(200);
       expect(r.json()).toEqual([]);
