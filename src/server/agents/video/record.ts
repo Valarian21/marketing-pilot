@@ -63,7 +63,7 @@ export const CURSOR_SCRIPT = `(() => {
 
 const FIELD_XPATH = 'xpath=following::*[self::textarea or self::input[not(@type="hidden")] or @contenteditable="true"][1]';
 
-async function findTarget(page: Page, target: string, kind: "click" | "type" = "click"): Promise<Locator | null> {
+export async function findTarget(page: Page, target: string, kind: "click" | "type" = "click"): Promise<Locator | null> {
   const candidates: { loc: Locator; fieldBelow?: boolean }[] = [];
   const add = (...locs: Locator[]) => { for (const loc of locs) candidates.push({ loc }); };
   if (isSelector(target)) add(page.locator(target).first());
@@ -74,7 +74,8 @@ async function findTarget(page: Page, target: string, kind: "click" | "type" = "
       // (many forms show the field name as plain text above the textarea, without a <label for>)
       add(page.getByLabel(re).first(), page.getByPlaceholder(re).first(), page.locator(`[aria-label*="${target}" i]`).first(), page.getByText(re).first().locator(FIELD_XPATH).first(), page.getByRole("textbox", { name: re }).first());
     }
-    add(page.getByRole("button", { name: re }).first(), page.getByRole("link", { name: re }).first(), page.getByPlaceholder(re).first(), page.getByLabel(re).first(), page.locator(`[aria-label*="${target}" i], [title*="${target}" i]`).first());
+    // cheap CSS+text filters first (role queries walk the whole accessibility tree - seconds on big pages)
+    add(page.locator('button, [role="button"], a[href], [role="tab"], input[type="submit"], summary').filter({ hasText: re }).first(), page.getByPlaceholder(re).first(), page.getByLabel(re).first(), page.locator(`[aria-label*="${target}" i], [title*="${target}" i]`).first(), page.getByRole("button", { name: re }).first(), page.getByRole("link", { name: re }).first());
     // plain text last - and when that text is a field caption (a field sits right below it), the field is what the author meant
     candidates.push({ loc: page.getByText(re).first(), fieldBelow: true });
   }
@@ -108,6 +109,19 @@ export async function collectUiLabels(page: Page): Promise<string[]> {
       return Array.from(new Set(out)).slice(0, 80);
     });
   } catch { return []; }
+}
+
+/** Is the element actually on top at its centre (not behind a modal/overlay)? */
+async function isOnTop(loc: Locator): Promise<boolean> {
+  try {
+    return await loc.evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      if (r.width === 0 || r.height === 0) return false;
+      const x = Math.min(Math.max(r.left + r.width / 2, 0), innerWidth - 1), y = Math.min(Math.max(r.top + r.height / 2, 0), innerHeight - 1);
+      const top = document.elementFromPoint(x, y);
+      return Boolean(top && (top === el || el.contains(top) || top.contains(el)));
+    });
+  } catch { return false; }
 }
 
 /** Field that currently has keyboard focus (after a click on a caption/field) - or null. */
@@ -167,7 +181,7 @@ export const playwrightRecorder: Recorder = async (script, opts) => {
           if (await user.count()) await user.fill(opts.login.user);
           await pw.fill(opts.login.password);
           await pw.press("Enter");
-          await lp.waitForLoadState("networkidle", { timeout: 15_000 }).catch(() => undefined);
+          await lp.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => undefined);
           await lp.waitForTimeout(1200);
           ok = !(await lp.locator('input[type="password"]:visible').count());
           if (ok) break;
@@ -203,7 +217,7 @@ export const playwrightRecorder: Recorder = async (script, opts) => {
           switch (a.type) {
             case "goto": {
               await page.goto(resolveUrl(a.url ?? "/", opts.baseUrl), { waitUntil: "domcontentloaded", timeout: 25_000 });
-              await page.waitForLoadState("networkidle", { timeout: 4_000 }).catch(() => undefined);
+              await page.waitForLoadState("networkidle", { timeout: 2_500 }).catch(() => undefined);   // apps that poll never go idle - cap it, the freeze cut removes static tail
               await sleep(600);
               await dismissConsent(page);
               await sleep(300); break;
@@ -217,7 +231,9 @@ export const playwrightRecorder: Recorder = async (script, opts) => {
                 if (await fallback.count() > 0) { loc = fallback; warnings.push(`Szene ${scene.id}: ${a.target ? `Ziel „${a.target}“ nicht gefunden` : "type ohne Ziel und ohne fokussiertes Feld"} – erstes sichtbares Textfeld genutzt`); }
               }
               if (!loc) throw new Error(`Ziel nicht gefunden: ${a.target ?? "(leer)"}`);
-              await loc.scrollIntoViewIfNeeded().catch(() => undefined);
+              // not scrollIntoViewIfNeeded(): that waits for the element to be "stable", and animated buttons/dialogs never are (10-30 s stalls)
+              await loc.evaluate((el) => { const r = el.getBoundingClientRect(); if (r.top < 0 || r.bottom > innerHeight) el.scrollIntoView({ block: "center", behavior: "instant" as ScrollBehavior }); }).catch(() => undefined);
+              await sleep(120);
               const box = await loc.boundingBox();
               if (!box) throw new Error(`Ziel unsichtbar: ${a.target}`);
               const to = { x: box.x + box.width / 2, y: box.y + Math.min(box.height / 2, 24) };
@@ -227,7 +243,7 @@ export const playwrightRecorder: Recorder = async (script, opts) => {
               rec.clicks.push({ tMs: Date.now() - t0, x: to.x, y: to.y });
               await page.mouse.down(); await sleep(70); await page.mouse.up();
               if (a.type === "type") { await sleep(250); await page.keyboard.type(a.text ?? "", { delay: 55 }); }
-              await page.waitForLoadState("networkidle", { timeout: 3_000 }).catch(() => undefined);
+              await page.waitForLoadState("networkidle", { timeout: 1_500 }).catch(() => undefined);
               await sleep(400); break;
             }
             case "scroll": {
@@ -253,7 +269,9 @@ export const playwrightRecorder: Recorder = async (script, opts) => {
               const maxMs = a.ms ?? 90_000, started = Date.now() - t0;
               let found = false;
               while (Date.now() - t0 - started < maxMs) {
-                if (a.target && await findTarget(page, a.target)) { found = true; break; }
+                // visible AND on top: a result button that already exists behind a "working…" overlay does not count
+                const hit = a.target ? await findTarget(page, a.target) : null;
+                if (hit && await isOnTop(hit)) { found = true; break; }
                 await sleep(500);
               }
               const waited = Date.now() - t0 - started;
