@@ -148,3 +148,6 @@ Erledigt:
   Zielsuche nur sichtbare Treffer + exakt vor lose (Probe: Fach → select#g-subject, Klasse → input#g-grade).
 - Demo-Skript setzt Fach Mathematik / Klasse 3 / Thema „Einmaleins üben“ → Lehreule liefert ein 2-seitiges
   Mathe-Blatt (vorher: Mathe-Thema im Deutsch-Blatt, ⅓ Seite).
+- 27.08. 00:30 – Render mit Fach Mathematik/Klasse 3: 2-seitiges Einmaleins-Blatt (98 % Füllung), Tipp-Overlay
+  geschlossen, Szenen-Check 5/5, 0 Fehler. Lehren: `type` ohne Ziel nach Klick auf ein `<select>` (Fokus-Fallback
+  kannte kein select); Tipp-Schließer muss versteckte „Tipp:“-Knoten ignorieren (33 im Lehreule-DOM).
