@@ -114,7 +114,7 @@ describe("revise by instruction", () => {
     let pc = (await built.app.inject({ url: `/api/mp/content/${piece.id}`, headers: auth })).json();
     expect(pc.meta.sceneNotes.map((n: { id: string; match: boolean }) => [n.id, n.match])).toEqual([["s1", false], ["s2", true]]);
     expect(pc.aiTellNotes).toContain("Szene s1: Bild passt nicht zum Voiceover");
-    expect(pc.meta.timeline).toEqual([{ id: "s1", startMs: 0, endMs: 4000 }, { id: "s2", startMs: 4000, endMs: 8000 }]);
+    expect(pc.meta.timeline).toEqual([{ id: "s1", startMs: 0, endMs: 3500 }, { id: "s2", startMs: 3500, endMs: 7000 }]);
     expect(pc.meta.recordings.mobile.file).toContain("recording-mobile.webm");
     expect(pc.costUsd).toBeGreaterThan(0);   // scene check + voice booked on the piece
     const voiceRuns = (await built.app.inject({ url: `/api/mp/runs?projectId=${pid}`, headers: auth })).json().filter((r: { provider: string; pieceId: string }) => r.provider === "elevenlabs" && r.pieceId === piece.id);

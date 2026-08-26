@@ -63,8 +63,8 @@ export interface ScenePlan { id: string; keep: Interval[]; videoMs: number; padM
 /** Playwright's screencast is a fixed 25 fps - rendering at 30 would duplicate every fifth frame (visible judder on scrolls). */
 export const OUTPUT_FPS = 25;
 
-export function planScene(scene: RecordedScene, freezes: Freeze[], audioMs: number, opts: { keepMs?: number; minCutMs?: number; recWidth: number; recHeight: number; viewportWidth: number; viewportHeight: number }): ScenePlan {
-  const keepMs = opts.keepMs ?? 900, minCut = opts.minCutMs ?? 1800;
+export function planScene(scene: RecordedScene, freezes: Freeze[], audioMs: number, opts: { keepMs?: number; minCutMs?: number; /** how much longer than the voice a scene may run before its tail is cut (silence on screen) */ maxOverMs?: number; recWidth: number; recHeight: number; viewportWidth: number; viewportHeight: number }): ScenePlan {
+  const keepMs = opts.keepMs ?? 900, minCut = opts.minCutMs ?? 1800, maxOver = opts.maxOverMs ?? 1500;
   // detected freezes + explicit idle spans (waitFor: the app was working, maybe with a spinner - not a freeze, but dead time)
   const cuts: Interval[] = [...freezes, ...(scene.idle ?? [])]
     .sort((a, b) => a.startMs - b.startMs)
@@ -76,7 +76,20 @@ export function planScene(scene: RecordedScene, freezes: Freeze[], audioMs: numb
   for (const c of cuts) { if (c.startMs > cursor) keep.push({ startMs: cursor, endMs: c.startMs }); cursor = Math.max(cursor, c.endMs); }
   if (scene.endMs > cursor) keep.push({ startMs: cursor, endMs: scene.endMs });
   if (!keep.length) keep.push({ startMs: scene.startMs, endMs: Math.max(scene.endMs, scene.startMs + 500) });
-  const videoMs = keep.reduce((n, k) => n + (k.endMs - k.startMs), 0);
+  let videoMs = keep.reduce((n, k) => n + (k.endMs - k.startMs), 0);
+  // long silent tails after the voice ended: cut them, but keep the result of the last click on screen for a moment
+  if (audioMs > 0 && videoMs > audioMs + maxOver) {
+    const keptAt = (t: number) => { let acc = 0; for (const k of keep) { if (t <= k.endMs) return acc + Math.max(0, t - k.startMs); acc += k.endMs - k.startMs; } return acc; };
+    const lastClick = scene.clicks[scene.clicks.length - 1];
+    const target = Math.max(audioMs + maxOver, lastClick ? keptAt(lastClick.tMs) + 800 : 0);
+    let acc = 0;
+    for (let n = 0; n < keep.length; n++) {
+      const k = keep[n]!, len = k.endMs - k.startMs;
+      if (acc + len >= target) { keep[n] = { startMs: k.startMs, endMs: k.startMs + Math.max(200, target - acc) }; keep.length = n + 1; break; }
+      acc += len;
+    }
+    videoMs = keep.reduce((n, k) => n + (k.endMs - k.startMs), 0);
+  }
   const totalMs = Math.max(videoMs, audioMs + 300, 1000);
   let clickAtMs: number | null = null, clickX: number | null = null, clickY: number | null = null;
   const first = scene.clicks[0];
@@ -160,7 +173,8 @@ export function buildComposeArgs(i: ComposeInput): { args: string[]; totalMs: nu
   });
   f.push(`anullsrc=r=44100:cl=stereo,atrim=duration=${s3(i.hookMs)}[sahook]`, `anullsrc=r=44100:cl=stereo,atrim=duration=${s3(i.endMs)}[saend]`);
   f.push(`[sahook]${i.plans.map((_, k) => `[sa${k}]`).join("")}[saend]concat=n=${i.plans.length + 2}:v=0:a=1[voice]`);
-  if (MUSIC >= 0) f.push(`[${MUSIC}:a]aresample=44100,aformat=channel_layouts=stereo,volume=0.12,atrim=duration=${s3(totalMs)},afade=t=out:st=${s3(Math.max(0, totalMs - 2500))}:d=2.5[music]`, `[voice][music]amix=inputs=2:duration=first:normalize=0[aout]`);
+  // music bed with ducking: the voice drives a sidechain compressor on the music, so it sits low under speech and fills the pauses
+  if (MUSIC >= 0) f.push(`[voice]asplit=2[voice_a][voice_sc]`, `[${MUSIC}:a]aresample=44100,aformat=channel_layouts=stereo,volume=0.30,atrim=duration=${s3(totalMs)},afade=t=in:st=0:d=1,afade=t=out:st=${s3(Math.max(0, totalMs - 2500))}:d=2.5[musicraw]`, `[musicraw][voice_sc]sidechaincompress=threshold=0.012:ratio=10:attack=40:release=700:level_sc=1.5[musicd]`, `[voice_a][musicd]amix=inputs=2:duration=first:normalize=0[aout]`);
   else f.push(`[voice]acopy[aout]`);
 
   const args = [...inputs, "-filter_complex", f.join(";"), "-map", "[vout]", "-map", "[aout]", "-r", String(fps), "-t", s3(totalMs),

@@ -4,3 +4,7 @@ data/
 .env
 !.env.example
 *.log
+
+# Musikbetten sind lokale Dateien (Lizenz!), nur die README wandert ins Repo
+assets/music/*
+!assets/music/README.md

@@ -21,8 +21,12 @@ export interface ImageProvider {
 
 export interface VoiceRequest { text: string; voiceId?: string; speed?: number; /** ISO 639-1, enforced on models that support it */ language?: string; /** neighbouring sentences: keeps prosody and language consistent across scenes */ previousText?: string; nextText?: string }
 export interface VoiceResult { path: string; durationMs: number; alignment?: { word: string; startMs: number; endMs: number }[] }
+export interface VoicePart { id: string; text: string }
+export interface VoiceScriptResult { file: string; durationMs: number; parts: { id: string; startMs: number; endMs: number; words: { word: string; startMs: number; endMs: number }[] }[] }
 export interface VoiceProvider {
   synthesize(req: VoiceRequest, outDir: string): Promise<VoiceResult>;
+  /** Whole script in ONE request (continuous prosody, pauses between parts), timestamps split per part. Optional. */
+  synthesizeScript?(parts: VoicePart[], req: Omit<VoiceRequest, "text">, outDir: string): Promise<VoiceScriptResult>;
 }
 
 export interface PublishRequest {

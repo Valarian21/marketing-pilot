@@ -196,6 +196,37 @@ describe("video API + render job", () => {
   });
 });
 
+describe("voice at once + ducking + silent tails", () => {
+  it("joins parts with a separator and splits the alignment back per part, dropping tags", async () => {
+    const { joinParts, splitAlignment, partSeparator, isSpokenWord } = await import("../src/server/agents/video/voice.js");
+    const { text, ranges } = joinParts([{ id: "s1", text: "Hallo Welt." }, { id: "s2", text: "[excited] Fertig!" }], partSeparator("eleven_v3"));
+    expect(text).toBe("Hallo Welt.\n\n[pause]\n\n[excited] Fertig!");
+    const chars = text.split(""); const starts = chars.map((_, i) => i * 0.1); const ends = chars.map((_, i) => i * 0.1 + 0.09);
+    const parts = splitAlignment(ranges, chars, starts, ends);
+    expect(parts.map((p) => p.id)).toEqual(["s1", "s2"]);
+    expect(parts[0]!.words.map((w) => w.word)).toEqual(["Hallo", "Welt."]);
+    expect(parts[1]!.words.map((w) => w.word)).toEqual(["Fertig!"]);   // [excited] is a tag, not a word
+    expect(parts[1]!.startMs).toBeGreaterThan(parts[0]!.endMs);
+    expect(isSpokenWord("…")).toBe(false); expect(isSpokenWord("[pause]")).toBe(false); expect(isSpokenWord("Eule")).toBe(true);
+  });
+  it("cuts a silent tail after the voice but keeps the last click's result on screen", () => {
+    const base = { recWidth: 1, recHeight: 1, viewportWidth: 1, viewportHeight: 1 };
+    const long = planScene({ id: "s1", startMs: 0, endMs: 12000, clicks: [{ tMs: 1000, x: 1, y: 1 }], error: null }, [], 3000, base);
+    expect(long.videoMs).toBe(4500);   // 3000 voice + 1500 grace
+    const late = planScene({ id: "s2", startMs: 0, endMs: 12000, clicks: [{ tMs: 9000, x: 1, y: 1 }], error: null }, [], 3000, base);
+    expect(late.videoMs).toBe(9800);   // last click at 9 s must stay visible
+    const short = planScene({ id: "s3", startMs: 0, endMs: 3500, clicks: [], error: null }, [], 3000, base);
+    expect(short.videoMs).toBe(3500);
+  });
+  it("compose graph ducks the music under the voice", () => {
+    const layout = layoutFor("mobile", false, { width: 780, height: 1688 });
+    const { args } = buildComposeArgs({ body: "body.mp4", bodyMs: 4000, layout, audio: [{ file: "a.mp3", durationMs: 3000 }], plans: [{ id: "s1", keep: [], videoMs: 4000, padMs: 0, totalMs: 4000, clickAtMs: null, clickX: null, clickY: null }], hookCard: "hook.png", endCard: "end.png", frame: "frame.png", background: "bg.png", hookMs: 1500, endMs: 2500, captions: [], music: "bed.mp3", out: "reel.mp4" });
+    const graph = args[args.indexOf("-filter_complex") + 1]!;
+    expect(graph).toContain("sidechaincompress");
+    expect(graph).toContain("asplit=2[voice_a][voice_sc]");
+  });
+});
+
 describe("quality round", () => {
   it("planScene cuts explicit idle spans (waitFor) like freezes, keeping the first 0.9 s", () => {
     const scene = { id: "s1", startMs: 0, endMs: 10000, clicks: [], error: null, idle: [{ startMs: 1000, endMs: 9000 }] };

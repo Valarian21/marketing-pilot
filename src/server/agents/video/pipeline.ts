@@ -23,7 +23,7 @@ import { dataUrlFor } from "../studio/render.js";
 import { getProject } from "../../repo/projects.js";
 import { playwrightRecorder, type Recorder, type Recording } from "./record.js";
 import { saveUiMap } from "./uimap.js";
-import { estimateDurationMs, estimateWords, type WordTiming } from "./voice.js";
+import { estimateDurationMs, estimateWords, isSpokenWord, type WordTiming } from "./voice.js";
 import { assemble, detectFreezes, pickMusic, planScene, runFfmpeg, type FfmpegRunner, type ScenePlan } from "./assemble.js";
 import { backgroundHtml, captionJobs, deviceFrameHtml, endCardHtml, hookCardHtml, layoutFor, screenMaskHtml, type CaptionCue } from "./overlays.js";
 
@@ -37,9 +37,10 @@ export interface VideoContext {
 
 export const HOOK_MS = 1500, END_MS = 2500;
 /** Variant count / landscape flag of an earlier render (for re-renders); defaults for never-rendered pieces. */
-export function renderOptionsFromMeta(meta: Record<string, unknown>): { variants: number; landscape: boolean } {
+export function renderOptionsFromMeta(meta: Record<string, unknown>): { variants: number; landscape: boolean; music: "none" | "landscape" | "all" } {
   const vs = Array.isArray(meta["variants"]) ? (meta["variants"] as { variant: string }[]) : [];
-  return { variants: Math.max(1, vs.filter((v) => String(v.variant).startsWith("reel")).length), landscape: vs.some((v) => v.variant === "landscape") };
+  const music = meta["musicMode"] === "none" || meta["musicMode"] === "all" ? (meta["musicMode"] as "none" | "all") : "landscape";
+  return { variants: Math.max(1, vs.filter((v) => String(v.variant).startsWith("reel")).length), landscape: vs.some((v) => v.variant === "landscape"), music };
 }
 
 export const VIDEO_STEPS = ["record", "check", "voice", "overlays", "reels", "landscape", "assets"];
@@ -134,7 +135,7 @@ export const renderVideoJob: JobHandler<VideoContext> = async (ctx, job, progres
           if (v.success) out.push({ id: sc.id, device: rec.device, ...v.data });
         } catch (e) { ctx.log(`scene-check ${sc.id}: ${e instanceof Error ? e.message : String(e)}`); }
       }
-      finishRun(ctx.db, runId, { costUsd: cost, tokensIn: tin, tokensOut: tout, resultRef: `video:${pieceId}` });
+      finishRun(ctx.db, runId, { costUsd: cost, tokensIn: tin, tokensOut: tout });
     } catch (e) { finishRun(ctx.db, runId, { costUsd: cost, error: e instanceof Error ? e.message : String(e) }); }
     const bad = out.filter((n) => !n.match);
     for (const n of bad) warnings.push(`Szene ${n.id}: Bild passt nicht zum Voiceover - ${n.issue || n.seen}`);
@@ -145,15 +146,38 @@ export const renderVideoJob: JobHandler<VideoContext> = async (ctx, job, progres
   // 2. voiceover per scene (or estimated timing without a TTS key)
   const audio = await step("voice", async () => {
     const out: SceneAudio[] = [];
+    const lang = /^[a-z]{2}$/i.test(script.language) ? { language: script.language.toLowerCase() } : {};
+    const voiceDir = path.join(outDir, "voice");
+    const spoken = script.scenes.filter((sc) => sc.voiceover.trim());
+    if (ctx.voice?.synthesizeScript && spoken.length) {
+      // one request for the whole script: continuous prosody, real pauses between scenes; then cut per scene from the master
+      const t0 = Date.now();
+      const r = await ctx.voice.synthesizeScript(spoken.map((sc) => ({ id: sc.id, text: sc.voiceover.trim() })), lang, voiceDir);
+      const chars = spoken.reduce((n, sc) => n + sc.voiceover.trim().length, 0);
+      bookRun(ctx.db, { task: "video.voice", model: `elevenlabs/${ctx.env.ELEVENLABS_VOICE_ID ?? "voice"}`, provider: "elevenlabs", projectId: piece.projectId, pieceId, costUsd: (chars / 1000) * ctx.env.ELEVENLABS_USD_PER_1K_CHARS, durationMs: Date.now() - t0 });
+      for (const [i, sc] of script.scenes.entries()) {
+        const part = r.parts.find((x) => x.id === sc.id);
+        if (!part || part.endMs <= part.startMs) { out.push({ file: null, durationMs: sc.voiceover.trim() ? estimateDurationMs(sc.voiceover) : 800, words: [] }); continue; }
+        // a little lead-in/out, but never into the neighbour's words
+        const prevEnd = [...r.parts].filter((x) => x.endMs <= part.startMs).map((x) => x.endMs).sort((a, b) => b - a)[0] ?? 0;
+        const nextStart = [...r.parts].filter((x) => x.startMs >= part.endMs).map((x) => x.startMs).sort((a, b) => a - b)[0] ?? r.durationMs;
+        const from = Math.max(prevEnd, part.startMs - 120), to = Math.min(nextStart, part.endMs + 180);
+        const file = path.join(voiceDir, `scene-${i + 1}-${sc.id}.mp3`);
+        await ffmpeg(["-y", "-ss", (from / 1000).toFixed(3), "-to", (to / 1000).toFixed(3), "-i", r.file, "-c:a", "libmp3lame", "-q:a", "2", file]);
+        out.push({ file, durationMs: to - from, words: part.words.map((w) => ({ word: w.word, startMs: w.startMs - from, endMs: w.endMs - from })) });
+      }
+      progress("voice", { detail: `${spoken.length} Szenen am Stück, ${Math.round(r.durationMs / 1000)} s Sprache` });
+      return out;
+    }
     for (const [i, sc] of script.scenes.entries()) {
       if (ctx.voice && sc.voiceover.trim()) {
         const t0 = Date.now();
         const prev = script.scenes[i - 1]?.voiceover.trim(), next = script.scenes[i + 1]?.voiceover.trim();
-        const r = await ctx.voice.synthesize({ text: sc.voiceover, ...(/^[a-z]{2}$/i.test(script.language) ? { language: script.language.toLowerCase() } : {}), ...(prev ? { previousText: prev } : {}), ...(next ? { nextText: next } : {}) }, path.join(outDir, "voice"));
-        bookRun(ctx.db, { task: `video.voice:${sc.id}`, model: `elevenlabs/${ctx.env.ELEVENLABS_VOICE_ID ?? "voice"}`, provider: "elevenlabs", projectId: piece.projectId, pieceId, costUsd: (sc.voiceover.length / 1000) * ctx.env.ELEVENLABS_USD_PER_1K_CHARS, tokensIn: sc.voiceover.length, durationMs: Date.now() - t0 });
-        out.push({ file: r.path, durationMs: r.durationMs, words: r.alignment?.map((w) => ({ word: w.word, startMs: w.startMs, endMs: w.endMs })) ?? estimateWords(sc.voiceover, r.durationMs) });
+        const r = await ctx.voice.synthesize({ text: sc.voiceover, ...lang, ...(prev ? { previousText: prev } : {}), ...(next ? { nextText: next } : {}) }, voiceDir);
+        bookRun(ctx.db, { task: `video.voice:${sc.id}`, model: `elevenlabs/${ctx.env.ELEVENLABS_VOICE_ID ?? "voice"}`, provider: "elevenlabs", projectId: piece.projectId, pieceId, costUsd: (sc.voiceover.length / 1000) * ctx.env.ELEVENLABS_USD_PER_1K_CHARS, durationMs: Date.now() - t0 });
+        out.push({ file: r.path, durationMs: r.durationMs, words: (r.alignment?.map((w) => ({ word: w.word, startMs: w.startMs, endMs: w.endMs })) ?? estimateWords(sc.voiceover, r.durationMs)).filter((w) => isSpokenWord(w.word)) });
       } else {
-        out.push({ file: null, durationMs: estimateDurationMs(sc.voiceover), words: estimateWords(sc.voiceover, estimateDurationMs(sc.voiceover) - 300) });
+        out.push({ file: null, durationMs: estimateDurationMs(sc.voiceover), words: estimateWords(sc.voiceover, estimateDurationMs(sc.voiceover) - 300).filter((w) => isSpokenWord(w.word)) });
       }
     }
     if (!ctx.voice) { warnings.push("Ohne Voiceover gerendert (ELEVENLABS_API_KEY/VOICE_ID fehlen) - Captions aus dem Skript-Timing."); progress("voice", { detail: "ohne Voiceover (kein ElevenLabs-Key)" }); }
@@ -189,7 +213,9 @@ export const renderVideoJob: JobHandler<VideoContext> = async (ctx, job, progres
     return out;
   });
 
-  const music = pickMusic(path.join(ctx.env.MP_DATA_DIR, "..", "assets", "music"));
+  const musicMode: "none" | "landscape" | "all" = job.payload["music"] === "none" || job.payload["music"] === "all" ? job.payload["music"] : "landscape";
+  const track = pickMusic(path.join(ctx.env.MP_DATA_DIR, "..", "assets", "music"));
+  const musicFor = (landscape: boolean) => (track && (musicMode === "all" || (musicMode === "landscape" && landscape)) ? track : null);
   const segmentCache = new Map<string, string>();
   const outputs: { file: string; variant: string; hook: string; device: s.VideoDevice; landscape: boolean; durationMs: number; thumb: string }[] = [];
 
@@ -199,7 +225,7 @@ export const renderVideoJob: JobHandler<VideoContext> = async (ctx, job, progres
       const p = prepared.mobile!;
       for (let n = 0; n < p.hooks.length; n++) {
         const out = path.join(outDir, `reel-${n + 1}.mp4`);
-        const r = await assemble({ recording: p.rec, plans: p.plans, audio: audio.map((a) => ({ file: a.file, durationMs: a.durationMs })), layout: p.layout, hookCard: p.hooks[n]!, endCard: p.end, frame: p.frame, mask: p.mask, background: p.bg, hookMs: HOOK_MS, endMs: END_MS, captions: p.captions, music, out, segmentCache }, ffmpeg);
+        const r = await assemble({ recording: p.rec, plans: p.plans, audio: audio.map((a) => ({ file: a.file, durationMs: a.durationMs })), layout: p.layout, hookCard: p.hooks[n]!, endCard: p.end, frame: p.frame, mask: p.mask, background: p.bg, hookMs: HOOK_MS, endMs: END_MS, captions: p.captions, music: musicFor(false), out, segmentCache }, ffmpeg);
         outputs.push({ file: out, variant: `reel-${n + 1}`, hook: script.hooks[n] ?? "", device: "mobile", landscape: false, durationMs: r.durationMs, thumb: p.hooks[n]! });
         progress("reels", { detail: `${n + 1}/${p.hooks.length} gerendert` });
       }
@@ -211,7 +237,7 @@ export const renderVideoJob: JobHandler<VideoContext> = async (ctx, job, progres
     await step("landscape", async () => {
       const p = prepared.desktop!;
       const out = path.join(outDir, "landscape.mp4");
-      const r = await assemble({ recording: p.rec, plans: p.plans, audio: audio.map((a) => ({ file: a.file, durationMs: a.durationMs })), layout: p.layout, hookCard: p.hooks[0]!, endCard: p.end, frame: p.frame, mask: p.mask, background: p.bg, hookMs: HOOK_MS, endMs: END_MS, captions: p.captions, music, out, segmentCache }, ffmpeg);
+      const r = await assemble({ recording: p.rec, plans: p.plans, audio: audio.map((a) => ({ file: a.file, durationMs: a.durationMs })), layout: p.layout, hookCard: p.hooks[0]!, endCard: p.end, frame: p.frame, mask: p.mask, background: p.bg, hookMs: HOOK_MS, endMs: END_MS, captions: p.captions, music: musicFor(true), out, segmentCache }, ffmpeg);
       outputs.push({ file: out, variant: "landscape", hook: script.hooks[0] ?? "", device: "desktop", landscape: true, durationMs: r.durationMs, thumb: p.hooks[0]! });
     });
   } else progress("landscape", { status: "skipped", detail: "nicht angefordert" });
@@ -251,7 +277,7 @@ export const renderVideoJob: JobHandler<VideoContext> = async (ctx, job, progres
     const timeline = prepared.mobile ? timelineOf(prepared.mobile.plans) : prepared.desktop ? timelineOf(prepared.desktop.plans) : [];
     ctx.db.update(t.mpContentPieces).set({
       assets: toJson([...keepIds, ...ids]), status: "review", updatedAt: nowIso(),
-      meta: toJson({ ...meta, renderedAt: nowIso(), warnings, variants: outputs.map((o) => ({ variant: o.variant, hook: o.hook, durationMs: o.durationMs })), recordings, timeline, hookMs: HOOK_MS, sceneNotes }),
+      meta: toJson({ ...meta, renderedAt: nowIso(), warnings, variants: outputs.map((o) => ({ variant: o.variant, hook: o.hook, durationMs: o.durationMs })), recordings, timeline, hookMs: HOOK_MS, sceneNotes, musicMode }),
       aiTellNotes: warnings.length ? `Render-Hinweise:\n${warnings.join("\n")}` : "",
     }).where(eq(t.mpContentPieces.id, pieceId)).run();
     return ids;

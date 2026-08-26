@@ -20,7 +20,7 @@ export function VideoPage() {
   const [topic, setTopic] = useState("Onboarding-Demo");
   const [script, setScript] = useState<VideoScript | null>(null);
   const [dirty, setDirty] = useState(false);
-  const [opts, setOpts] = useState({ variants: 2, landscape: true, reuseRecording: false });
+  const [opts, setOpts] = useState<{ variants: number; landscape: boolean; reuseRecording: boolean; music: "none" | "landscape" | "all" }>({ variants: 2, landscape: true, reuseRecording: false, music: "landscape" });
   const timer = useRef<number | null>(null);
 
   const load = useCallback(async () => { try { setView(await api<VideoView>(`/projects/${id}/video`)); setError(null); } catch (e) { setError(e instanceof Error ? e.message : "Fehler"); } }, [id]);
@@ -77,6 +77,7 @@ export function VideoPage() {
               <div><div className="mp-label">Skript · {script.devices.join(" + ")} · {script.scenes.length} Szenen</div><h2>{script.title}</h2>{piece && <div className="mp-small mp-muted">Erstellt {fmtDateTime(piece.createdAt)} · Zuletzt bearbeitet {fmtDateTime(piece.updatedAt)}{typeof piece.meta["renderedAt"] === "string" && <> · Zuletzt gerendert {fmtDateTime(piece.meta["renderedAt"] as string)}</>}</div>}</div>
               <div className="mp-inline">{dirty && <Pill kind="review">ungespeichert</Pill>}<Button disabled={busy || !dirty} onClick={() => void saveScript()}>Speichern</Button><label className="mp-small mp-inline" title="Zahl der Reel-Varianten (je ein Hook)">Reels <select value={opts.variants} onChange={(e) => setOpts({ ...opts, variants: Number(e.target.value) })}>{[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n}</option>)}</select></label>
                 <label className="mp-small mp-inline" title="Landscape braucht eine zweite (Desktop-)Aufnahme - bei Demo-Konten mit Credits kostet das doppelt"><input type="checkbox" checked={opts.landscape} onChange={(e) => setOpts({ ...opts, landscape: e.target.checked })} /> Landscape</label>
+                <label className="mp-small mp-inline" title="Musikbett aus marketing-pilot/assets/music/ - Reels bekommen ihren Sound besser beim Posten aus der Plattform-Bibliothek">Musik <select value={opts.music} onChange={(e) => setOpts({ ...opts, music: e.target.value as typeof opts.music })}><option value="none">keine</option><option value="landscape">nur Landscape</option><option value="all">alle</option></select></label>
                 <label className="mp-small mp-inline" title="Nur Stimme, Untertitel und Schnitt neu - ohne Browser-Aufnahme"><input type="checkbox" disabled={!piece?.meta["recordings"]} checked={opts.reuseRecording} onChange={(e) => setOpts({ ...opts, reuseRecording: e.target.checked })} /> Aufnahme wiederverwenden</label>
                 <Button variant="primary" disabled={busy || Boolean(activeJob) || !view.workerAlive} onClick={() => void render()}>{activeJob ? "läuft …" : "Aufnehmen und rendern"}</Button></div>
             </div>
