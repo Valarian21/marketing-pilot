@@ -131,3 +131,10 @@ Erledigt:
 - Recorder-Tempo: Ursache ist die Kodierlast bei dpr 3 (ffmpeg 230 % CPU auf 6 Kernen), nicht die
   Zielsuche → mobile Aufnahme auf dpr 2 (780×1688). Messung steht aus, weil Lehreule seit ~20:10
   mit „OpenRouter-Guthaben aufgebraucht“ (Haupt-Key) nichts mehr generiert – Marcel lädt auf.
+- **26.08., 21:46 – erster durchgängig stimmiger App-Demo-Render:** Credit-Dialog bestätigt, 78 s auf das
+  fertige Blatt gewartet (herausgeschnitten), Szenen-Check 5/5, keine Warnungen, Reel 31 s, 25 fps. Aktionen
+  mit dpr 2 halb so lang wie vorher (Hover 4 s, Klicks 5–10 s). Stück-Kosten kumuliert 0,82 $ (9 Renders).
+- Medien-Übersicht (`/mp/media`), Zeitstempel (erstellt/bearbeitet/gerendert) und gruppierte Navigation.
+- Offen/Ideen: Demo-Skript setzt Fach/Klasse nicht (Blatt wird „Deutsch Klasse 5“ statt Mathe 3); Lehreule-Tipp-
+  Overlay im Editor („Alles auf dem Blatt lässt sich anpassen“) könnte per dismiss-Regel weg; Landscape
+  kostet doppelte Credits (Schalter vorhanden).
