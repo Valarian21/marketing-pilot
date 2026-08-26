@@ -1,0 +1,49 @@
+/**
+ * Provider interfaces. Implementations arrive with the shots that need them;
+ * the contracts are fixed now so no later shot couples business logic to a
+ * vendor. Every provider call that costs money must be wrapped in an AgentRun
+ * (see ../runs.ts) - a silent failure is a bug.
+ */
+
+export interface LlmMessage { role: "system" | "user" | "assistant"; content: string }
+export interface LlmUsage { tokensIn: number; tokensOut: number; costUsd: number }
+export interface LlmResult { text: string; model: string; usage: LlmUsage }
+export interface LlmProvider {
+  /** Chat completion through OpenRouter. `model` is a full OpenRouter id. */
+  chat(model: string, messages: LlmMessage[], opts?: { temperature?: number; json?: boolean }): Promise<LlmResult>;
+}
+
+export interface ImageRequest { prompt: string; width: number; height: number; negative?: string }
+export interface ImageResult { path: string; model: string; usage: LlmUsage }
+export interface ImageProvider {
+  generate(req: ImageRequest, outDir: string): Promise<ImageResult>;
+}
+
+export interface VoiceRequest { text: string; voiceId?: string; speed?: number }
+export interface VoiceResult { path: string; durationMs: number; alignment?: { word: string; startMs: number; endMs: number }[] }
+export interface VoiceProvider {
+  synthesize(req: VoiceRequest, outDir: string): Promise<VoiceResult>;
+}
+
+export interface PublishRequest {
+  contentPieceId: string;
+  platform: string;
+  body: string;
+  assetPaths: string[];
+  scheduledAt?: string;
+}
+export interface PublishResult {
+  /** `manual` never publishes - it returns the package the human posts from. */
+  mode: "manual" | "postiz";
+  externalUrl?: string;
+  scheduledAt?: string;
+}
+export interface PublishProvider {
+  readonly name: "manual" | "postiz";
+  prepare(req: PublishRequest): Promise<PublishResult>;
+}
+
+export interface SearchHit { title: string; url: string; snippet: string }
+export interface SearchProvider {
+  search(query: string, opts?: { limit?: number }): Promise<SearchHit[]>;
+}

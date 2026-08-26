@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2022"],
+    "types": ["node"],
+    "rootDir": ".",
+    "outDir": "dist/server",
+    "sourceMap": true
+  },
+  "include": ["src/server/**/*.ts", "src/shared/**/*.ts", "src/host-adapter*.ts", "config/**/*.ts"]
+}

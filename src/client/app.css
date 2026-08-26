@@ -1,0 +1,106 @@
+/* Layout and components. Every colour, radius, font and spacing is a token from tokens.css. */
+*, *::before, *::after { box-sizing: border-box; }
+html, body, #root { margin: 0; min-height: 100%; }
+body { background: var(--mp-bg); }
+.mp-root { min-height: 100vh; }
+.mp-root * { font-family: inherit; }
+button, input { font: inherit; color: inherit; }
+
+.mp-shell { display: grid; grid-template-columns: var(--mp-sidebar-w) minmax(0, 1fr); min-height: 100vh; }
+.mp-sidebar { background: var(--mp-sidebar); border-right: var(--mp-border); padding: 22px 14px; display: flex; flex-direction: column; gap: 22px; position: sticky; top: 0; height: 100vh; }
+.mp-brand { display: flex; align-items: center; gap: 10px; padding: 0 8px; }
+.mp-brand-icon { color: var(--mp-accent); display: inline-flex; }
+.mp-brand-name { font-weight: 700; font-size: var(--mp-text-h2); }
+.mp-nav { display: flex; flex-direction: column; gap: 2px; }
+.mp-nav-item { display: flex; align-items: center; gap: 10px; height: 34px; padding: 0 10px; border-radius: var(--mp-radius-sm); color: var(--mp-ink); text-decoration: none; font-weight: 500; transition: background .12s; }
+.mp-nav-item:hover { background: color-mix(in srgb, var(--mp-nav-active) 55%, transparent); color: var(--mp-ink); }
+.mp-nav-item.is-active { background: var(--mp-nav-active); box-shadow: var(--mp-shadow); }
+.mp-nav-item.is-active .mp-nav-icon { color: var(--mp-accent); }
+.mp-nav-icon { display: inline-flex; color: var(--mp-ink-2); }
+.mp-sidebar-foot { margin-top: auto; display: flex; flex-direction: column; gap: 12px; }
+.mp-nav-item--ext { color: var(--mp-ink-2); }
+.mp-user { padding: 10px; border-top: var(--mp-border); display: flex; flex-direction: column; gap: 6px; }
+.mp-user-name { font-weight: 600; }
+
+.mp-main { padding: var(--mp-pad-main); min-width: 0; }
+.mp-page-header { display: flex; justify-content: space-between; align-items: flex-end; gap: var(--mp-gap); margin-bottom: 22px; }
+.mp-h1 { font-size: var(--mp-text-h1); font-weight: 700; margin: 2px 0 0; line-height: 1.1; }
+.mp-root h2 { font-size: var(--mp-text-h2); font-weight: 600; margin: 0 0 10px; }
+.mp-page-actions { display: flex; gap: var(--mp-gap-sm); }
+
+.mp-card { background: var(--mp-surface); border: var(--mp-border); border-radius: var(--mp-radius); padding: var(--mp-pad-card); box-shadow: var(--mp-shadow); }
+.mp-card--hi { background: var(--mp-tile-hi); }
+.mp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: var(--mp-gap); }
+.mp-two-col { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: var(--mp-gap); }
+.mp-empty { text-align: center; padding: 40px 20px; }
+.mp-empty p { color: var(--mp-ink-2); max-width: 52ch; margin: 6px auto 12px; }
+.mp-muted { color: var(--mp-ink-2); }
+.mp-center { display: grid; place-items: center; min-height: 100vh; }
+
+.mp-btn { display: inline-flex; align-items: center; gap: 6px; height: var(--mp-control-h); padding: 0 16px; border-radius: var(--mp-radius-pill); border: var(--mp-border); background: var(--mp-surface); color: var(--mp-ink); font-weight: 600; cursor: pointer; text-decoration: none; transition: background .12s, border-color .12s; }
+.mp-btn:hover { border-color: var(--mp-ink-2); }
+.mp-btn:disabled { opacity: .55; cursor: default; }
+.mp-btn--primary { background: var(--mp-accent); border-color: var(--mp-accent); color: var(--mp-on-accent); }
+.mp-btn--primary:hover { background: var(--mp-accent-hover); border-color: var(--mp-accent-hover); }
+.mp-btn--danger { color: var(--mp-bad); }
+.mp-btn--danger:hover { background: var(--mp-bad-soft); border-color: var(--mp-bad); }
+
+.mp-pill { display: inline-flex; align-items: center; height: 22px; padding: 0 9px; border-radius: var(--mp-radius-pill); font-family: var(--mp-font-mono); font-size: var(--mp-text-xs); letter-spacing: .04em; text-transform: uppercase; white-space: nowrap; }
+.mp-pill--done { background: var(--mp-pill-done-bg); color: var(--mp-pill-done-fg); }
+.mp-pill--review { background: var(--mp-pill-review-bg); color: var(--mp-pill-review-fg); }
+.mp-pill--todo { background: var(--mp-pill-todo-bg); color: var(--mp-pill-todo-fg); }
+.mp-pill--progress { background: var(--mp-pill-progress-bg); color: var(--mp-pill-progress-fg); }
+.mp-pill--kind { background: var(--mp-pill-kind-bg); color: var(--mp-pill-kind-fg); }
+
+.mp-notice { border-radius: var(--mp-radius-sm); padding: 10px 12px; margin-bottom: var(--mp-gap); border: 1px solid transparent; }
+.mp-notice--warn { background: var(--mp-warn-soft); color: var(--mp-warn); }
+.mp-notice--bad { background: var(--mp-bad-soft); color: var(--mp-bad); }
+.mp-notice--info { background: var(--mp-info-soft); color: var(--mp-info); }
+
+.mp-form { display: flex; flex-direction: column; gap: 12px; }
+.mp-form--row { flex-direction: row; align-items: flex-end; flex-wrap: wrap; }
+.mp-form-card { margin-bottom: var(--mp-gap); }
+.mp-field { display: flex; flex-direction: column; gap: 4px; flex: 1 1 220px; }
+.mp-field > span { font-family: var(--mp-font-mono); font-size: var(--mp-text-xs); letter-spacing: var(--mp-tracking-label); text-transform: uppercase; color: var(--mp-ink-2); }
+.mp-field input { height: var(--mp-control-h); padding: 0 12px; border: var(--mp-border); border-radius: var(--mp-radius-sm); background: var(--mp-surface); color: var(--mp-ink); }
+.mp-field input:focus { border-color: var(--mp-accent); outline: none; box-shadow: 0 0 0 3px var(--mp-accent-soft); }
+.mp-form-actions { display: flex; gap: var(--mp-gap-sm); }
+
+.mp-login-wrap { min-height: 100vh; display: grid; place-items: center; padding: 24px; }
+.mp-login { width: min(420px, 100%); padding: 28px; }
+.mp-login p { color: var(--mp-ink-2); }
+
+.mp-project-card { display: flex; flex-direction: column; gap: 10px; }
+.mp-project-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.mp-project-title { font-family: var(--mp-font-display); font-size: var(--mp-text-h2); font-weight: 700; color: var(--mp-ink); text-decoration: none; }
+.mp-project-title:hover { color: var(--mp-accent); }
+.mp-project-url { font-size: var(--mp-text-sm); word-break: break-all; }
+.mp-project-foot { display: flex; justify-content: space-between; align-items: center; margin-top: 4px; }
+
+.mp-stats { display: grid; gap: var(--mp-gap-sm); }
+.mp-stats--4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.mp-stats--tiles { gap: var(--mp-gap); margin-bottom: var(--mp-gap); }
+.mp-ministat { background: var(--mp-bg); border-radius: var(--mp-radius-sm); padding: 8px 10px; }
+.mp-ministat .mp-num { font-size: var(--mp-text-h2); }
+.mp-ministat--hi { background: var(--mp-tile-hi); }
+.mp-stat { background: var(--mp-surface); border: var(--mp-border); border-radius: var(--mp-radius); padding: var(--mp-pad-tile); box-shadow: var(--mp-shadow); }
+.mp-stat--hi { background: var(--mp-tile-hi); }
+.mp-stat-value { font-size: var(--mp-text-num); line-height: 1.1; margin-top: 4px; }
+
+.mp-table-wrap { overflow-x: auto; }
+.mp-table { width: 100%; border-collapse: collapse; font-size: var(--mp-text-sm); }
+.mp-table th { text-align: left; font-family: var(--mp-font-mono); font-size: var(--mp-text-xs); letter-spacing: var(--mp-tracking-label); text-transform: uppercase; color: var(--mp-ink-2); font-weight: 500; padding: 6px 8px; border-bottom: var(--mp-border); }
+.mp-table td { padding: 6px 8px; border-bottom: 1px solid var(--mp-grid-line); height: var(--mp-row-h); vertical-align: middle; }
+.mp-num-cell { font-family: var(--mp-font-mono); font-variant-numeric: tabular-nums; }
+.mp-code { font-family: var(--mp-font-mono); font-size: var(--mp-text-sm); background: var(--mp-bg); padding: 1px 6px; border-radius: 4px; }
+.mp-code--list { display: inline-block; margin: 0 6px 4px 0; }
+.mp-dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0 0 14px; }
+.mp-dl dt { color: var(--mp-ink-2); }
+.mp-dl dd { margin: 0; }
+
+@media (max-width: 900px) {
+  .mp-shell { grid-template-columns: 1fr; }
+  .mp-sidebar { position: static; height: auto; }
+  .mp-main { padding: 18px; }
+  .mp-stats--4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
