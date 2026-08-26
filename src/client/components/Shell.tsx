@@ -4,18 +4,20 @@ import { useHost } from "../host.js";
 import { Icons, type IconName } from "./icons.js";
 import { Button } from "./ui.js";
 
-const NAV: { to: string; label: string; icon: IconName; end?: boolean }[] = [
-  { to: "/", label: "Projekte", icon: "projects", end: true },
-  { to: "/timeline", label: "Timeline", icon: "timeline" },
-  { to: "/tasks", label: "Aufgaben", icon: "tasks" },
-  { to: "/studio", label: "Content Studio", icon: "studio" },
-  { to: "/review", label: "Freigaben", icon: "review" },
-  { to: "/community", label: "Community", icon: "community" },
-  { to: "/insights", label: "Insights", icon: "insights" },
-  { to: "/activity", label: "Aktivität", icon: "activity" },
-  { to: "/storage", label: "Speicher", icon: "storage" },
-  { to: "/settings", label: "Einstellungen", icon: "settings" },
+const NAV: { group: string; to: string; label: string; icon: IconName; end?: boolean }[] = [
+  { group: "Planung", to: "/", label: "Projekte", icon: "projects", end: true },
+  { group: "Planung", to: "/timeline", label: "Timeline", icon: "timeline" },
+  { group: "Planung", to: "/tasks", label: "Aufgaben", icon: "tasks" },
+  { group: "Inhalte", to: "/studio", label: "Content Studio", icon: "studio" },
+  { group: "Inhalte", to: "/media", label: "Medien", icon: "media" },
+  { group: "Inhalte", to: "/review", label: "Freigaben", icon: "review" },
+  { group: "Wachstum", to: "/community", label: "Community", icon: "community" },
+  { group: "Wachstum", to: "/insights", label: "Insights", icon: "insights" },
+  { group: "Betrieb", to: "/activity", label: "Aktivität", icon: "activity" },
+  { group: "Betrieb", to: "/storage", label: "Speicher", icon: "storage" },
+  { group: "Betrieb", to: "/settings", label: "Einstellungen", icon: "settings" },
 ];
+const GROUPS = Array.from(new Set(NAV.map((n) => n.group)));
 
 export function Shell() {
   const { info, logout } = useHost();
@@ -27,14 +29,19 @@ export function Shell() {
           <span className="mp-brand-name mp-display">Marketing Pilot</span>
         </div>
         <nav className="mp-nav" aria-label="Hauptnavigation">
-          {NAV.map((n) => {
-            const Icon = Icons[n.icon];
-            return (
-              <NavLink key={n.to} to={n.to} end={n.end ?? false} className={({ isActive }) => `mp-nav-item${isActive ? " is-active" : ""}`}>
-                <span className="mp-nav-icon"><Icon /></span>{n.label}
-              </NavLink>
-            );
-          })}
+          {GROUPS.map((g) => (
+            <div key={g} className="mp-nav-group">
+              <div className="mp-nav-group-label">{g}</div>
+              {NAV.filter((n) => n.group === g).map((n) => {
+                const Icon = Icons[n.icon];
+                return (
+                  <NavLink key={n.to} to={n.to} end={n.end ?? false} className={({ isActive }) => `mp-nav-item${isActive ? " is-active" : ""}`}>
+                    <span className="mp-nav-icon"><Icon /></span>{n.label}
+                  </NavLink>
+                );
+              })}
+            </div>
+          ))}
         </nav>
         <div className="mp-sidebar-foot">
           {info?.backLink && (

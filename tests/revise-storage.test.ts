@@ -176,3 +176,19 @@ describe("storage", () => {
     void storageView;
   });
 });
+
+describe("media library", () => {
+  it("lists pieces across projects with thumbnail, size and filters", async () => {
+    const all = (await built.app.inject({ url: "/api/mp/media", headers: auth })).json();
+    expect(all.length).toBeGreaterThanOrEqual(2);
+    const vid = all.find((m: { format: string }) => m.format === "video");
+    expect(vid.projectName).toBe("Beispielwerk");
+    expect(vid.thumbUrl === null || /^\/api\/mp\/assets\/.+\/file$/.test(vid.thumbUrl)).toBe(true);   // storage test above wiped the files
+    expect(vid.bytes).toBeGreaterThanOrEqual(0);
+    expect(typeof vid.renderedAt).toBe("string");
+    const onlyText = (await built.app.inject({ url: "/api/mp/media?format=text", headers: auth })).json();
+    expect(onlyText.every((m: { format: string }) => m.format === "text")).toBe(true);
+    const none = (await built.app.inject({ url: `/api/mp/media?since=${encodeURIComponent(new Date(Date.now() + 864e5).toISOString())}`, headers: auth })).json();
+    expect(none).toHaveLength(0);
+  });
+});

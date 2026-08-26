@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 import type { BrandKit, ContentPiece, DirectoryStatus, StudioView } from "../../shared/schemas.js";
 import { api } from "../api.js";
-import { Button, Card, Notice, PageHeader, Pill, type PillKind } from "../components/ui.js";
+import { Button, Card, Notice, PageHeader, Pill, fmtDateTime, type PillKind } from "../components/ui.js";
 import { ProjectNav } from "../components/ProjectNav.js";
 import { fmtUsd } from "../components/Revise.js";
 
@@ -94,12 +94,13 @@ export function PieceList({ id, pieces }: { id: string; pieces: ContentPiece[] }
     <Card>
       <h2>Zuletzt erzeugt</h2>
       <div className="mp-table-wrap"><table className="mp-table">
-        <thead><tr><th>Stück</th><th>Format</th><th>Kanal</th><th>AI-Tell</th><th>Kosten</th><th>Status</th><th></th></tr></thead>
+        <thead><tr><th>Stück</th><th>Format</th><th>Kanal</th><th>Erstellt</th><th>AI-Tell</th><th>Kosten</th><th>Status</th><th></th></tr></thead>
         <tbody>{pieces.map((p) => { const st = STATUS[p.status]; return (
           <tr key={p.id}>
             <td>{p.title || "(ohne Titel)"}</td>
             <td><Pill kind="kind">{FORMAT_LABEL[p.format] ?? p.format}</Pill></td>
             <td className="mp-small">{p.channel}</td>
+            <td className="mp-small" title={`Zuletzt bearbeitet ${fmtDateTime(p.updatedAt)}`}>{fmtDateTime(p.createdAt)}</td>
             <td className="mp-num-cell">{p.aiTellScore === null ? "–" : `${p.aiTellScore}/10`}</td>
             <td className="mp-num-cell">{fmtUsd(p.costUsd)}</td>
             <td><Pill kind={st.kind}>{st.label}</Pill></td>

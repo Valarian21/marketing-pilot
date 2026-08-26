@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 import type { ContentPiece } from "../../shared/schemas.js";
 import { api } from "../api.js";
-import { Button, Card, Notice, PageHeader, Pill, type PillKind } from "../components/ui.js";
+import { Button, Card, Notice, PageHeader, Pill, fmtDateTime, type PillKind } from "../components/ui.js";
 import { ProjectNav } from "../components/ProjectNav.js";
 import { markdownToHtml } from "../../shared/markdown.js";
 import { VideoGallery } from "./Video.js";
@@ -62,6 +62,7 @@ export function ReviewPage() {
               <div>
                 <div className="mp-label">{current.format} · {current.channel || "–"}{current.aiTellScore !== null && <> · AI-Tell {current.aiTellScore}/10</>} · Kosten {fmtUsd(current.costUsd)}</div>
                 <h2>{current.title || "(ohne Titel)"}</h2>
+                <div className="mp-small mp-muted">Erstellt {fmtDateTime(current.createdAt)} · Zuletzt bearbeitet {fmtDateTime(current.updatedAt)}{typeof current.meta["renderedAt"] === "string" && <> · Zuletzt gerendert {fmtDateTime(current.meta["renderedAt"] as string)}</>}</div>
               </div>
               <div className="mp-inline">
                 <Pill kind={STATUS[current.status].kind}>{STATUS[current.status].label}</Pill>

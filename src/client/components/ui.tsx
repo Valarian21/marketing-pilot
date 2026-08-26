@@ -1,6 +1,9 @@
 /** Small token-driven building blocks. No colours here - only classes from app.css. */
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 
+/** "26.08.2026, 19:42" */
+export const fmtDateTime = (iso: string | null | undefined): string => (iso ? new Date(iso).toLocaleString("de-DE", { dateStyle: "short", timeStyle: "short" }) : "–");
+
 export function PageHeader({ label, title, actions }: { label?: ReactNode; title: string; actions?: ReactNode }) {
   return (
     <header className="mp-page-header">

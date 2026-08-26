@@ -20,6 +20,7 @@ import { studioRoutes } from "./routes/studio.js";
 import { videoRoutes } from "./routes/video.js";
 import { loopRoutes, EVENTS_PUBLIC_PATH } from "./routes/loop.js";
 import { storageRoutes } from "./routes/storage.js";
+import { mediaRoutes } from "./routes/media.js";
 import { buildContext, type FullContext, type ServiceOverrides } from "./services.js";
 import { markStaleRuns } from "./agents/analysis/pipeline.js";
 
@@ -81,6 +82,7 @@ export async function buildApp(env: Env, opts: { host?: HostAdapter; dbFile?: st
   videoRoutes(app, db, () => ctx);
   loopRoutes(app, db, env, () => ctx);
   storageRoutes(app, db, () => env.MP_DATA_DIR);
+  mediaRoutes(app, db, () => env.MP_DATA_DIR);
 
   // Client bundle under /mp/ (both host modes share the same URL space).
   const clientDir = path.join(ROOT, "dist/client");

@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 import type { ContentPiece, Job, VideoAction, VideoScript, VideoView } from "../../shared/schemas.js";
 import { api } from "../api.js";
-import { Button, Card, Notice, PageHeader, Pill, type PillKind } from "../components/ui.js";
+import { Button, Card, Notice, PageHeader, Pill, fmtDateTime, type PillKind } from "../components/ui.js";
 import { ProjectNav } from "../components/ProjectNav.js";
 import { ReviseBox, fmtUsd } from "../components/Revise.js";
 
@@ -74,7 +74,7 @@ export function VideoPage() {
         <div className="mp-two-col mp-video-layout">
           <Card>
             <div className="mp-card-head">
-              <div><div className="mp-label">Skript · {script.devices.join(" + ")} · {script.scenes.length} Szenen</div><h2>{script.title}</h2></div>
+              <div><div className="mp-label">Skript · {script.devices.join(" + ")} · {script.scenes.length} Szenen</div><h2>{script.title}</h2>{piece && <div className="mp-small mp-muted">Erstellt {fmtDateTime(piece.createdAt)} · Zuletzt bearbeitet {fmtDateTime(piece.updatedAt)}{typeof piece.meta["renderedAt"] === "string" && <> · Zuletzt gerendert {fmtDateTime(piece.meta["renderedAt"] as string)}</>}</div>}</div>
               <div className="mp-inline">{dirty && <Pill kind="review">ungespeichert</Pill>}<Button disabled={busy || !dirty} onClick={() => void saveScript()}>Speichern</Button><label className="mp-small mp-inline" title="Zahl der Reel-Varianten (je ein Hook)">Reels <select value={opts.variants} onChange={(e) => setOpts({ ...opts, variants: Number(e.target.value) })}>{[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n}</option>)}</select></label>
                 <label className="mp-small mp-inline" title="Landscape braucht eine zweite (Desktop-)Aufnahme - bei Demo-Konten mit Credits kostet das doppelt"><input type="checkbox" checked={opts.landscape} onChange={(e) => setOpts({ ...opts, landscape: e.target.checked })} /> Landscape</label>
                 <label className="mp-small mp-inline" title="Nur Stimme, Untertitel und Schnitt neu - ohne Browser-Aufnahme"><input type="checkbox" disabled={!piece?.meta["recordings"]} checked={opts.reuseRecording} onChange={(e) => setOpts({ ...opts, reuseRecording: e.target.checked })} /> Aufnahme wiederverwenden</label>

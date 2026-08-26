@@ -19,6 +19,7 @@ import { TimelinePage } from "./pages/Timeline.js";
 import { ReviewPage } from "./pages/Review.js";
 import { ProjectScoped } from "./pages/ProjectScoped.js";
 import { StoragePage } from "./pages/Storage.js";
+import { MediaPage } from "./pages/Media.js";
 
 function Gate() {
   const { info, loading, error } = useHost();
@@ -49,6 +50,7 @@ function Gate() {
           <Route path="insights" element={<ProjectScoped page="insights" title="Insights" />} />
           <Route path="activity" element={<ActivityPage />} />
           <Route path="storage" element={<StoragePage />} />
+          <Route path="media" element={<MediaPage />} />
           <Route path="settings" element={<SettingsPage />} />
           <Route path="*" element={<Notice kind="info">Seite nicht gefunden.</Notice>} />
         </Route>
