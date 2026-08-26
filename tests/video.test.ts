@@ -9,7 +9,7 @@ import type { Recorder } from "../src/server/agents/video/record.js";
 import { isSelector, substitute, easeInOutCubic, resolveUrl } from "../src/server/agents/video/record.js";
 import { estimateWords, wordsFromAlignment } from "../src/server/agents/video/voice.js";
 import { chunkWords, layoutFor } from "../src/server/agents/video/overlays.js";
-import { buildFfmpegArgs, parseFreezes, planScene } from "../src/server/agents/video/assemble.js";
+import { buildComposeArgs, buildSceneArgs, parseFreezes, planScene } from "../src/server/agents/video/assemble.js";
 import { claimNextJob, enqueueJob, finishJob, markStaleJobs, processNextJob, workerAlive, writeHeartbeat } from "../src/server/jobs.js";
 import { renderVideoJob } from "../src/server/agents/video/pipeline.js";
 import { videoScriptPrompt } from "../src/server/agents/prompts/video.js";
@@ -93,24 +93,28 @@ describe("pure helpers", () => {
     const land = layoutFor("desktop", true, { width: 1440, height: 900 });
     expect(land.inner.w).toBeLessThanOrEqual(1560); expect(land.inner.x).toBeGreaterThan(0);
   });
-  it("ffmpeg graph contains trims, zoom, overlays and provenance metadata", () => {
-    const { args, totalMs } = buildFfmpegArgs({
-      recording: { file: "rec.webm", device: "mobile", width: 1170, height: 2532, viewportWidth: 390, viewportHeight: 844, scenes: [], durationMs: 8000, warnings: [] },
-      plans: [{ id: "s1", keep: [{ startMs: 0, endMs: 1900 }, { startMs: 4000, endMs: 6000 }], videoMs: 3900, padMs: 500, totalMs: 4400, clickAtMs: 2900, clickX: 585, clickY: 1266 }],
-      audio: [{ file: "a.mp3", durationMs: 4000 }], layout: layoutFor("mobile", false, { width: 1170, height: 2532 }),
-      hookCard: "hook.png", endCard: "end.png", frame: "frame.png", background: "bg.png", hookMs: 1500, endMs: 2500,
-      captions: [{ file: "c1.png", startMs: 100, endMs: 600 }], music: "m.mp3", out: "out.mp4",
-    });
-    expect(totalMs).toBe(1500 + 4400 + 2500);
-    const graph = args[args.indexOf("-filter_complex") + 1]!;
-    expect(graph).toContain("trim=start=0.000:end=1.900");
-    expect(graph).toContain("concat=n=2:v=1:a=0");
-    expect(graph).toContain("tpad=stop_mode=clone:stop_duration=0.500");
-    expect(graph).toContain("zoompan=z='1+0.28*max(0,1-abs(in-93)/48)'");
-    expect(graph).toContain("overlay=0:1590:enable='between(t,1.600,2.100)'");
-    expect(graph).toContain("amix=inputs=2");
+  it("ffmpeg passes: seeked scene segment with zoom, then compose with windowed captions and provenance", () => {
+    const rec = { file: "rec.webm", device: "mobile" as const, width: 1170, height: 2532, viewportWidth: 390, viewportHeight: 844, scenes: [], durationMs: 8000, warnings: [] };
+    const layout = layoutFor("mobile", false, { width: 1170, height: 2532 });
+    const seg = buildSceneArgs(rec, { id: "s1", keep: [{ startMs: 0, endMs: 1900 }, { startMs: 4000, endMs: 6000 }], videoMs: 3900, padMs: 500, totalMs: 4400, clickAtMs: 2900, clickX: 585, clickY: 1266 }, layout, "seg.mp4");
+    expect(seg.slice(0, 5)).toEqual(["-ss", "0.000", "-to", "1.900", "-i"]);
+    const g1 = seg[seg.indexOf("-filter_complex") + 1]!;
+    expect(g1).toContain("concat=n=2:v=1:a=0");
+    expect(g1).toContain(`scale=${layout.inner.w}:${layout.inner.h}`);
+    expect(g1).toContain("tpad=stop_mode=clone:stop_duration=0.500");
+    expect(g1).toContain("zoompan=z='1+0.28*max(0,1-abs(in-93)/48)'");
+    expect(seg).toContain("ultrafast");
+    const { args, totalMs } = buildComposeArgs({ body: "body.mp4", bodyMs: 4400, layout, audio: [{ file: "a.mp3", durationMs: 4000 }], plans: [{ id: "s1", keep: [], videoMs: 4400, padMs: 0, totalMs: 4400, clickAtMs: null, clickX: null, clickY: null }],
+      hookCard: "hook.png", endCard: "end.png", frame: "frame.png", background: "bg.png", hookMs: 1500, endMs: 2500, captions: [{ file: "c1.png", startMs: 100, endMs: 600 }], music: "m.mp3", out: "out.mp4" });
+    expect(totalMs).toBe(8400);
+    const joined = args.join(" ");
+    expect(joined).toContain("-t 0.500 -itsoffset 1.600 -i c1.png");
+    const g2 = args[args.indexOf("-filter_complex") + 1]!;
+    expect(g2).toContain("overlay=0:1590:eof_action=pass:enable='between(t,1.600,2.100)'");
+    expect(g2).toContain("amix=inputs=2");
+    expect(g2).toContain("concat=n=3:v=0:a=1[voice]");
     expect(args).toContain("libx264");
-    expect(args.join(" ")).toContain("AI-generated: true");
+    expect(joined).toContain("AI-generated: true");
     expect(args[args.length - 1]).toBe("out.mp4");
   });
   it("script prompt snapshot and readable body", () => {
@@ -171,8 +175,10 @@ describe("video API + render job", () => {
     expect(done.status).toBe("done");
     expect(done.steps.every((st: { status: string }) => st.status === "done")).toBe(true);
     expect(done.result.variants).toEqual(["reel-1", "reel-2", "landscape"]);
-    // 3 outputs rendered, each with a full graph; overlays include hook cards, frames, captions
-    expect(ffmpegCalls.filter((a) => a[a.length - 1]!.endsWith(".mp4"))).toHaveLength(3);
+    // final outputs: 2 reels + landscape; scene segments are cut once per device and reused across reels
+    const finals = ffmpegCalls.map((a) => path.basename(a[a.length - 1]!)).filter((f) => /^(reel-\d+|landscape)\.mp4$/.test(f));
+    expect(finals).toEqual(["reel-1.mp4", "reel-2.mp4", "landscape.mp4"]);
+    expect(ffmpegCalls.filter((a) => /seg-recording-mobile-\d\.mp4$/.test(a[a.length - 1]!))).toHaveLength(2);
     expect(renderedJobs.some((h) => h.includes("Sonntag gehört wieder dir"))).toBe(true);
     expect(renderedJobs.some((h) => h.includes("<mask"))).toBe(true);
 

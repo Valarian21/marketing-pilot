@@ -127,6 +127,7 @@ export const renderVideoJob: JobHandler<VideoContext> = async (ctx, job, progres
   });
 
   const music = pickMusic(path.join(ctx.env.MP_DATA_DIR, "..", "assets", "music"));
+  const segmentCache = new Map<string, string>();
   const outputs: { file: string; variant: string; hook: string; device: s.VideoDevice; landscape: boolean; durationMs: number; thumb: string }[] = [];
 
   // 4. reels: one per hook
@@ -135,7 +136,7 @@ export const renderVideoJob: JobHandler<VideoContext> = async (ctx, job, progres
       const p = prepared.mobile!;
       for (let n = 0; n < p.hooks.length; n++) {
         const out = path.join(outDir, `reel-${n + 1}.mp4`);
-        const r = await assemble({ recording: p.rec, plans: p.plans, audio: audio.map((a) => ({ file: a.file, durationMs: a.durationMs })), layout: p.layout, hookCard: p.hooks[n]!, endCard: p.end, frame: p.frame, background: p.bg, hookMs: HOOK_MS, endMs: END_MS, captions: p.captions, music, out }, ffmpeg);
+        const r = await assemble({ recording: p.rec, plans: p.plans, audio: audio.map((a) => ({ file: a.file, durationMs: a.durationMs })), layout: p.layout, hookCard: p.hooks[n]!, endCard: p.end, frame: p.frame, background: p.bg, hookMs: HOOK_MS, endMs: END_MS, captions: p.captions, music, out, segmentCache }, ffmpeg);
         outputs.push({ file: out, variant: `reel-${n + 1}`, hook: script.hooks[n] ?? "", device: "mobile", landscape: false, durationMs: r.durationMs, thumb: p.hooks[n]! });
         progress("reels", { detail: `${n + 1}/${p.hooks.length} gerendert` });
       }
@@ -147,7 +148,7 @@ export const renderVideoJob: JobHandler<VideoContext> = async (ctx, job, progres
     await step("landscape", async () => {
       const p = prepared.desktop!;
       const out = path.join(outDir, "landscape.mp4");
-      const r = await assemble({ recording: p.rec, plans: p.plans, audio: audio.map((a) => ({ file: a.file, durationMs: a.durationMs })), layout: p.layout, hookCard: p.hooks[0]!, endCard: p.end, frame: p.frame, background: p.bg, hookMs: HOOK_MS, endMs: END_MS, captions: p.captions, music, out }, ffmpeg);
+      const r = await assemble({ recording: p.rec, plans: p.plans, audio: audio.map((a) => ({ file: a.file, durationMs: a.durationMs })), layout: p.layout, hookCard: p.hooks[0]!, endCard: p.end, frame: p.frame, background: p.bg, hookMs: HOOK_MS, endMs: END_MS, captions: p.captions, music, out, segmentCache }, ffmpeg);
       outputs.push({ file: out, variant: "landscape", hook: script.hooks[0] ?? "", device: "desktop", landscape: true, durationMs: r.durationMs, thumb: p.hooks[0]! });
     });
   } else progress("landscape", { status: "skipped", detail: "nicht angefordert" });
