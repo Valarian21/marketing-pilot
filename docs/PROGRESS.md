@@ -151,3 +151,6 @@ Erledigt:
 - 27.08. 00:30 – Render mit Fach Mathematik/Klasse 3: 2-seitiges Einmaleins-Blatt (98 % Füllung), Tipp-Overlay
   geschlossen, Szenen-Check 5/5, 0 Fehler. Lehren: `type` ohne Ziel nach Klick auf ein `<select>` (Fokus-Fallback
   kannte kein select); Tipp-Schließer muss versteckte „Tipp:“-Knoten ignorieren (33 im Lehreule-DOM).
+- Smartphone-Mockup: Mitschnitt bekommt eine Rundeck-Alphamaske (alphamerge) und sitzt kleiner im Rahmen
+  (880×1400 statt 940×1500), Rahmen 20 px statt 12 px – eckige Videoecken ragten an den runden Rahmenecken heraus.
+  Geht per „Aufnahme wiederverwenden“ ohne Neuaufnahme.

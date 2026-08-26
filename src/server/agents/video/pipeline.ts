@@ -25,7 +25,7 @@ import { playwrightRecorder, type Recorder, type Recording } from "./record.js";
 import { saveUiMap } from "./uimap.js";
 import { estimateDurationMs, estimateWords, type WordTiming } from "./voice.js";
 import { assemble, detectFreezes, pickMusic, planScene, runFfmpeg, type FfmpegRunner, type ScenePlan } from "./assemble.js";
-import { backgroundHtml, captionJobs, deviceFrameHtml, endCardHtml, hookCardHtml, layoutFor, type CaptionCue } from "./overlays.js";
+import { backgroundHtml, captionJobs, deviceFrameHtml, endCardHtml, hookCardHtml, layoutFor, screenMaskHtml, type CaptionCue } from "./overlays.js";
 
 export interface VideoContext {
   db: Db; env: Env; dataDir: string; log: (m: string) => void;
@@ -162,7 +162,7 @@ export const renderVideoJob: JobHandler<VideoContext> = async (ctx, job, progres
   });
 
   // 3. overlays + scene plans per device
-  type Prepared = { rec: Recording; plans: ScenePlan[]; layout: ReturnType<typeof layoutFor>; bg: string; frame: string; end: string; captions: CaptionCue[]; hooks: string[] };
+  type Prepared = { rec: Recording; plans: ScenePlan[]; layout: ReturnType<typeof layoutFor>; bg: string; frame: string; mask: string; end: string; captions: CaptionCue[]; hooks: string[] };
   const prepared = await step("overlays", async () => {
     const out: Partial<Record<s.VideoDevice, Prepared>> = {};
     const jobs: RenderJob[] = [];
@@ -173,15 +173,16 @@ export const renderVideoJob: JobHandler<VideoContext> = async (ctx, job, progres
       const freezes = await freezesOf(rec.file);
       const plans = rec.scenes.map((sc, n) => planScene(sc, freezes, audio[n]?.durationMs ?? 0, { recWidth: rec.width, recHeight: rec.height, viewportWidth: rec.viewportWidth, viewportHeight: rec.viewportHeight }));
       const tag = landscape ? "land" : "reel";
-      const bg = path.join(outDir, `${tag}-bg.png`), frame = path.join(outDir, `${tag}-frame.png`), end = path.join(outDir, `${tag}-end.png`);
+      const bg = path.join(outDir, `${tag}-bg.png`), frame = path.join(outDir, `${tag}-frame.png`), mask = path.join(outDir, `${tag}-mask.png`), end = path.join(outDir, `${tag}-end.png`);
       jobs.push({ html: backgroundHtml(kit, layout.w, layout.h, brand), width: layout.w, height: layout.h, file: bg });
       jobs.push({ html: deviceFrameHtml(kit, layout), width: layout.w, height: layout.h, file: frame, transparent: true });
+      jobs.push({ html: screenMaskHtml(layout), width: layout.inner.w, height: layout.inner.h, file: mask });
       jobs.push({ html: endCardHtml(kit, script.cta.text, script.cta.url, brand, layout.w, layout.h), width: layout.w, height: layout.h, file: end });
       const hooks = script.hooks.slice(0, landscape ? 1 : Math.max(1, variants)).map((h, n) => { const file = path.join(outDir, `${tag}-hook-${n + 1}.png`); jobs.push({ html: hookCardHtml(kit, h, brand, layout.w, layout.h), width: layout.w, height: layout.h, file }); return file; });
       const captions: CaptionCue[] = [];
       let offset = 0;
       plans.forEach((p, n) => { const cj = captionJobs(kit, audio[n]?.words ?? [], offset, layout, outDir, `${tag}-s${n}`); jobs.push(...cj.jobs); captions.push(...cj.cues); offset += p.totalMs; });
-      out[device] = { rec, plans, layout, bg, frame, end, captions, hooks };
+      out[device] = { rec, plans, layout, bg, frame, mask, end, captions, hooks };
     }
     await renderer(jobs);
     progress("overlays", { detail: `${jobs.length} Overlays gerendert` });
@@ -198,7 +199,7 @@ export const renderVideoJob: JobHandler<VideoContext> = async (ctx, job, progres
       const p = prepared.mobile!;
       for (let n = 0; n < p.hooks.length; n++) {
         const out = path.join(outDir, `reel-${n + 1}.mp4`);
-        const r = await assemble({ recording: p.rec, plans: p.plans, audio: audio.map((a) => ({ file: a.file, durationMs: a.durationMs })), layout: p.layout, hookCard: p.hooks[n]!, endCard: p.end, frame: p.frame, background: p.bg, hookMs: HOOK_MS, endMs: END_MS, captions: p.captions, music, out, segmentCache }, ffmpeg);
+        const r = await assemble({ recording: p.rec, plans: p.plans, audio: audio.map((a) => ({ file: a.file, durationMs: a.durationMs })), layout: p.layout, hookCard: p.hooks[n]!, endCard: p.end, frame: p.frame, mask: p.mask, background: p.bg, hookMs: HOOK_MS, endMs: END_MS, captions: p.captions, music, out, segmentCache }, ffmpeg);
         outputs.push({ file: out, variant: `reel-${n + 1}`, hook: script.hooks[n] ?? "", device: "mobile", landscape: false, durationMs: r.durationMs, thumb: p.hooks[n]! });
         progress("reels", { detail: `${n + 1}/${p.hooks.length} gerendert` });
       }
@@ -210,7 +211,7 @@ export const renderVideoJob: JobHandler<VideoContext> = async (ctx, job, progres
     await step("landscape", async () => {
       const p = prepared.desktop!;
       const out = path.join(outDir, "landscape.mp4");
-      const r = await assemble({ recording: p.rec, plans: p.plans, audio: audio.map((a) => ({ file: a.file, durationMs: a.durationMs })), layout: p.layout, hookCard: p.hooks[0]!, endCard: p.end, frame: p.frame, background: p.bg, hookMs: HOOK_MS, endMs: END_MS, captions: p.captions, music, out, segmentCache }, ffmpeg);
+      const r = await assemble({ recording: p.rec, plans: p.plans, audio: audio.map((a) => ({ file: a.file, durationMs: a.durationMs })), layout: p.layout, hookCard: p.hooks[0]!, endCard: p.end, frame: p.frame, mask: p.mask, background: p.bg, hookMs: HOOK_MS, endMs: END_MS, captions: p.captions, music, out, segmentCache }, ffmpeg);
       outputs.push({ file: out, variant: "landscape", hook: script.hooks[0] ?? "", device: "desktop", landscape: true, durationMs: r.durationMs, thumb: p.hooks[0]! });
     });
   } else progress("landscape", { status: "skipped", detail: "nicht angefordert" });

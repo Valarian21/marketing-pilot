@@ -72,7 +72,7 @@ export function deletePieceMedia(db: Db, dataDir: string, pieceId: string, scope
   for (const dir of dirs) {
     for (const f of listFiles(dir, path.relative(dataDir, dir))) {
       const name = path.basename(f.path);
-      const isIntermediate = /^(seg-|body-|reel-bg|reel-frame|reel-end|reel-hook|land-|reel-s\d|scene-|state\.json)/.test(name) || name.endsWith(".txt");
+      const isIntermediate = /^(seg-|body-|reel-bg|reel-frame|reel-mask|reel-end|reel-hook|land-|reel-s\d|scene-|state\.json)/.test(name) || name.endsWith(".txt");
       const isRecording = /^recording-.*\.webm$/.test(name) || /^voice\//.test(path.relative(path.relative(dataDir, dir), f.path));
       const isRender = /\.(mp4)$/.test(name) || /thumb\.png$/.test(name);
       const hit = scope === "all" || (scope === "intermediates" && isIntermediate) || (scope === "recordings" && (isRecording || isIntermediate));

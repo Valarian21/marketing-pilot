@@ -121,7 +121,7 @@ export function buildSceneArgs(rec: Recording, p: ScenePlan, layout: Layout, out
 export interface ComposeInput {
   body: string; bodyMs: number; layout: Layout;
   audio: { file: string | null; durationMs: number }[]; plans: ScenePlan[];
-  hookCard: string; endCard: string; frame: string; background: string; hookMs: number; endMs: number;
+  hookCard: string; endCard: string; frame: string; /** rounded-corner alpha mask for the recording (inner size), optional */ mask?: string; background: string; hookMs: number; endMs: number;
   captions: CaptionCue[]; music: string | null; out: string; fps?: number;
 }
 export function buildComposeArgs(i: ComposeInput): { args: string[]; totalMs: number } {
@@ -133,6 +133,7 @@ export function buildComposeArgs(i: ComposeInput): { args: string[]; totalMs: nu
   const BODY = add("-i", i.body);
   const BG = add("-loop", "1", "-framerate", String(fps), "-t", s3(totalMs), "-i", i.background);
   const FR = add("-loop", "1", "-framerate", String(fps), "-t", s3(i.bodyMs), "-itsoffset", s3(i.hookMs), "-i", i.frame);
+  const MASK = i.mask ? add("-loop", "1", "-framerate", String(fps), "-t", s3(i.bodyMs), "-i", i.mask) : null;
   const HOOK = add("-loop", "1", "-framerate", String(fps), "-t", s3(i.hookMs), "-i", i.hookCard);
   const END = add("-loop", "1", "-framerate", String(fps), "-t", s3(i.endMs), "-itsoffset", s3(i.hookMs + i.bodyMs), "-i", i.endCard);
   const caps = i.captions.filter((c) => c.endMs > c.startMs).map((c) => ({ ...c, idx: add("-loop", "1", "-framerate", String(fps), "-t", s3(c.endMs - c.startMs), "-itsoffset", s3(i.hookMs + c.startMs), "-i", c.file) }));
@@ -141,7 +142,9 @@ export function buildComposeArgs(i: ComposeInput): { args: string[]; totalMs: nu
 
   const f: string[] = [];
   const { inner } = i.layout;
-  f.push(`[${BODY}:v]setpts=PTS-STARTPTS+${s3(i.hookMs)}/TB[bodyd]`);
+  // rounded screen corners: merge the mask as alpha before the recording goes under the bezel
+  if (MASK !== null) { f.push(`[${MASK}:v]format=gray[mask]`, `[${BODY}:v]format=rgba[bodyrgba]`, `[bodyrgba][mask]alphamerge,setpts=PTS-STARTPTS+${s3(i.hookMs)}/TB[bodyd]`); }
+  else f.push(`[${BODY}:v]setpts=PTS-STARTPTS+${s3(i.hookMs)}/TB[bodyd]`);
   f.push(`[${BG}:v]format=yuv420p[bg]`);
   f.push(`[bg][bodyd]overlay=x=${inner.x}:y=${inner.y}:eof_action=pass[c0]`);
   f.push(`[c0][${FR}:v]overlay=0:0:eof_action=pass[c1]`);
@@ -168,7 +171,7 @@ export function buildComposeArgs(i: ComposeInput): { args: string[]; totalMs: nu
 
 export interface AssembleInput {
   recording: Recording; plans: ScenePlan[]; audio: { file: string | null; durationMs: number }[]; layout: Layout;
-  hookCard: string; endCard: string; frame: string; background: string; hookMs: number; endMs: number;
+  hookCard: string; endCard: string; frame: string; /** rounded-corner alpha mask for the recording (inner size), optional */ mask?: string; background: string; hookMs: number; endMs: number;
   captions: CaptionCue[]; music: string | null; out: string; fps?: number;
   /** Reuse scene segments across variants (same recording/layout, different hook). */
   segmentCache?: Map<string, string>;
@@ -194,7 +197,7 @@ export async function assemble(i: AssembleInput, run: FfmpegRunner = runFfmpeg):
     i.segmentCache?.set(cacheKey, body);
   }
   const bodyMs = i.plans.reduce((n, p) => n + p.totalMs, 0);
-  const { args, totalMs } = buildComposeArgs({ body, bodyMs, layout: i.layout, audio: i.audio, plans: i.plans, hookCard: i.hookCard, endCard: i.endCard, frame: i.frame, background: i.background, hookMs: i.hookMs, endMs: i.endMs, captions: i.captions, music: i.music, out: i.out, fps });
+  const { args, totalMs } = buildComposeArgs({ body, bodyMs, layout: i.layout, audio: i.audio, plans: i.plans, hookCard: i.hookCard, endCard: i.endCard, frame: i.frame, ...(i.mask ? { mask: i.mask } : {}), background: i.background, hookMs: i.hookMs, endMs: i.endMs, captions: i.captions, music: i.music, out: i.out, fps });
   await run(args);
   return { file: i.out, durationMs: totalMs };
 }

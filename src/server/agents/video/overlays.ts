@@ -19,7 +19,8 @@ export interface Layout { w: number; h: number; inner: { x: number; y: number; w
 /** Where the recording sits inside the output frame. */
 export function layoutFor(device: VideoDevice, landscape: boolean, rec: { width: number; height: number }): Layout {
   const w = landscape ? 1920 : 1080, h = landscape ? 1080 : 1920;
-  const maxW = landscape ? 1560 : 940, maxH = landscape ? 900 : 1500;
+  // a little air between screen and bezel - the recording must never touch the rounded frame corners
+  const maxW = landscape ? 1500 : 880, maxH = landscape ? 860 : 1400;
   const s = Math.min(maxW / rec.width, maxH / rec.height);
   const iw = Math.round(rec.width * s / 2) * 2, ih = Math.round(rec.height * s / 2) * 2;
   const x = Math.round((w - iw) / 2), y = landscape ? Math.round((h - ih) / 2) - 20 : Math.round((h - ih) / 2) - 60;
@@ -38,7 +39,12 @@ export function backgroundHtml(kit: BrandKit, w: number, h: number, brand: strin
 /** Transparent frame with a rounded cut-out where the recording goes (drawn on top of the video). */
 export function deviceFrameHtml(kit: BrandKit, lay: Layout): string {
   const { inner: r, radius } = lay;
-  return base(kit, lay.w, lay.h, `<svg width="${lay.w}" height="${lay.h}" viewBox="0 0 ${lay.w} ${lay.h}"><defs><mask id="m"><rect width="100%" height="100%" fill="#fff"/><rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" rx="${radius}" fill="#000"/></mask></defs><rect width="100%" height="100%" fill="rgba(0,0,0,0)" mask="url(#m)"/><rect x="${r.x - 6}" y="${r.y - 6}" width="${r.w + 12}" height="${r.h + 12}" rx="${radius + 6}" fill="none" stroke="rgba(20,20,20,.9)" stroke-width="12" mask="url(#m)"/><rect x="${r.x - 3}" y="${r.y - 3}" width="${r.w + 6}" height="${r.h + 6}" rx="${radius + 3}" fill="none" stroke="rgba(255,255,255,.18)" stroke-width="2"/></svg>`, true);
+  return base(kit, lay.w, lay.h, `<svg width="${lay.w}" height="${lay.h}" viewBox="0 0 ${lay.w} ${lay.h}"><defs><mask id="m"><rect width="100%" height="100%" fill="#fff"/><rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" rx="${radius}" fill="#000"/></mask></defs><rect width="100%" height="100%" fill="rgba(0,0,0,0)" mask="url(#m)"/><rect x="${r.x - 10}" y="${r.y - 10}" width="${r.w + 20}" height="${r.h + 20}" rx="${radius + 10}" fill="none" stroke="rgba(20,20,20,.94)" stroke-width="20" mask="url(#m)"/><rect x="${r.x - 20}" y="${r.y - 20}" width="${r.w + 40}" height="${r.h + 40}" rx="${radius + 20}" fill="none" stroke="rgba(255,255,255,.16)" stroke-width="2"/></svg>`, true);
+}
+/** Alpha mask for the recording itself: white rounded rectangle (screen shape) on black - the square video corners must not poke past the bezel. */
+export function screenMaskHtml(lay: Layout): string {
+  const { inner: r, radius } = lay;
+  return `<!doctype html><html><body style="margin:0;background:#000"><svg width="${r.w}" height="${r.h}" viewBox="0 0 ${r.w} ${r.h}" style="display:block"><rect width="${r.w}" height="${r.h}" rx="${radius}" fill="#fff"/></svg></body></html>`;
 }
 /** One caption frame: the current chunk with the active word highlighted. */
 export function captionHtml(kit: BrandKit, words: string[], active: number, w: number, h: number): string {
