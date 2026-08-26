@@ -54,7 +54,7 @@ export function overview(db: Db): s.ProjectOverview[] {
     const openTasksThisWeek = tasks.filter((x) => x.status !== "done" && x.status !== "skipped" && (weekOf(startDate, x.dueAt) ?? x.week) === thisWeek).length;
     const piecesInReview = db.select({ id: t.mpContentPieces.id }).from(t.mpContentPieces).where(and(eq(t.mpContentPieces.projectId, p.id), eq(t.mpContentPieces.status, "review"))).all().length;
     const since = new Date(Date.now() - 7 * 86_400_000).toISOString();
-    const signups7d = db.select().from(t.mpInsights).where(eq(t.mpInsights.projectId, p.id)).all().filter((i) => i.createdAt >= since).reduce((n, i) => n + i.signups, 0);
+    const signups7d = db.select({ event: t.mpEvents.event, occurredAt: t.mpEvents.occurredAt }).from(t.mpEvents).where(eq(t.mpEvents.projectId, p.id)).all().filter((e) => e.event === "signup" && e.occurredAt >= since).length;
     const rep = latestReport(db, p.id);
     return { ...p, openTasksThisWeek, piecesInReview, signups7d, geoVisibility: geoSummary(db, p.id).visibility, briefConfirmed: briefConfirmed(db, p.id), planVersion: plan?.version ?? null,
       latestReport: rep ? { id: rep.id, weekStart: rep.weekStart, status: rep.status, excerpt: rep.report.slice(0, 220) } : null };

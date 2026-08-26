@@ -279,3 +279,4 @@ button, input { font: inherit; color: inherit; }
 .mp-report { margin-bottom: 10px; }
 .mp-report-card { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border-radius: var(--mp-radius-sm); background: var(--mp-warn-soft); color: var(--mp-ink); text-decoration: none; }
 .mp-report-card:hover { color: var(--mp-ink); background: var(--mp-tile-hi); }
+.mp-report-text p { margin: 4px 0 8px; } .mp-report-text strong { display: block; margin-top: 8px; font-family: var(--mp-font-display); }

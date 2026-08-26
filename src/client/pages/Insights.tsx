@@ -5,6 +5,7 @@ import type { InsightsView, WeeklyReport } from "../../shared/schemas.js";
 import { api } from "../api.js";
 import { Button, Card, Notice, PageHeader, Pill, Stat } from "../components/ui.js";
 import { ProjectNav } from "../components/ProjectNav.js";
+import { markdownToHtml } from "../../shared/markdown.js";
 
 export function InsightsPage() {
   const { id = "" } = useParams();
@@ -80,7 +81,7 @@ export function InsightsPage() {
         {reports.length === 0 ? <p className="mp-muted">Sonntags erzeugt der Agent einen Klartext-Report mit Plan-Vorschlag – oder oben per Knopf.</p> : reports.map((r) => (
           <div key={r.id} className="mp-sub mp-report">
             <div className="mp-sub-head"><strong>Woche ab {r.weekStart}</strong><div className="mp-inline"><Pill kind={r.status === "adopted" ? "done" : r.status === "dismissed" ? "kind" : "review"}>{r.status === "adopted" ? "übernommen" : r.status === "dismissed" ? "verworfen" : "Vorschlag"}</Pill><span className="mp-label">{r.diff.length} Plan-Änderungen</span></div></div>
-            <pre className="mp-pre mp-pre--post">{r.report}</pre>
+            <div className="mp-report-text" dangerouslySetInnerHTML={{ __html: markdownToHtml(r.report) }} />
             {r.diff.length > 0 && <details className="mp-details"><summary className="mp-label">Vorgeschlagene Änderungen</summary><ul className="mp-diff">{r.diff.map((d, i) => <li key={i}><code className="mp-code">{d.path}</code><span className="mp-diff-before">{JSON.stringify(d.before)}</span><span className="mp-diff-after">{JSON.stringify(d.after)}</span></li>)}</ul></details>}
             {r.status === "proposed" && <div className="mp-form-actions"><Button variant="primary" disabled={busy} onClick={() => void run(() => api(`/reports/${r.id}/adopt`, { method: "POST" }))}>Als Plan-Update übernehmen (+ Aufgaben nächste Woche)</Button><Button disabled={busy} onClick={() => void run(() => api(`/reports/${r.id}/dismiss`, { method: "POST" }))}>Verwerfen</Button></div>}
           </div>
