@@ -17,6 +17,7 @@ export function briefPrompt(input: { url: string; pages: PageExcerpt[] }): LlmMe
 You are a senior product marketer. From the crawled pages of a software product, write a precise PRODUCT BRIEF as JSON.
 Rules:
 - Only state what the pages support. No invented features or prices. Empty array when unknown.
+- If the pages carry almost no product information (login wall, placeholder, error page), say exactly that in "oneLiner" (e.g. "Seite liefert keine Produktinformationen: nur Login-Formular sichtbar") and leave the lists empty. Never infer a product from its name alone.
 - "oneLiner": the core benefit in ONE sentence, from the user's perspective, no marketing fluff.
 - "targetAudience": how the product itself describes its users (quote-like, not your guess).
 - "tone": 1-2 sentences describing the product's own voice (formal/informal, du/Sie, humour, jargon).
