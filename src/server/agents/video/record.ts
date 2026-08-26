@@ -119,13 +119,24 @@ export async function collectUiLabels(page: Page): Promise<string[]> {
   } catch { return []; }
 }
 
-/** Contextual tips/toasts ("Tipp: …" with a × button) that products show on first use - close them, they hide the UI on tape. */
+/** Contextual tips/toasts ("Tipp: …" with a × button) that products show on first use - close them, they hide the UI on tape.
+ *  Runs in the page: only VISIBLE containers count (products keep dozens of hidden tips in the DOM), innermost first. */
 async function dismissTips(page: Page): Promise<void> {
   try {
-    const tip = page.locator(':is(div, section, aside, p)').filter({ hasText: /Tipp:/ }).last();
-    if (!(await tip.count()) || !(await tip.isVisible())) return;
-    const close = tip.locator('button, [role="button"], a').filter({ hasText: /^\s*[×✕✖x]\s*$/i }).first();
-    if (await close.count()) { await close.click({ timeout: 1500 }).catch(() => undefined); await sleep(250); }
+    const clicked = await page.evaluate(() => {
+      const vis = (e: Element) => { const r = e.getBoundingClientRect(); const cs = getComputedStyle(e); return r.width > 0 && r.height > 0 && cs.visibility !== "hidden" && cs.display !== "none" && cs.opacity !== "0"; };
+      const boxes = Array.from(document.querySelectorAll("div, section, aside, p")).filter((e) => vis(e) && /(^|\s|\W)Tipp:/.test(e.textContent ?? "") && (e.textContent ?? "").trim().length < 400);
+      for (const box of boxes.reverse()) {
+        let el: Element | null = box;
+        for (let i = 0; i < 4 && el; i++) {
+          const btn = Array.from(el.querySelectorAll("button, [role='button'], a, span, i")).find((c) => vis(c) && (/^[×✕✖x]$/i.test((c.textContent ?? "").trim()) || /schlie|close|dismiss/i.test((c.getAttribute("aria-label") ?? "") + (c.getAttribute("title") ?? ""))));
+          if (btn) { (btn as HTMLElement).click(); return true; }
+          el = el.parentElement;
+        }
+      }
+      return false;
+    });
+    if (clicked) await sleep(300);
   } catch { /* no tip */ }
 }
 
