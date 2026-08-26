@@ -36,7 +36,7 @@ Return JSON: {"script": {<full VideoScript with the same schema>}, "needsRecordi
 export function sceneCheckPrompt(input: { sceneId: string; voiceover: string; caption: string; actions: string; language: string; image: string }): LlmMessage[] {
   return [
     { role: "system", content: `[task:scene-check]
-You compare a screenshot from a screen recording with the voiceover that plays over it. Answer strictly as JSON: {"match": true|false, "seen": "<what the screen shows, max 20 words>", "issue": "<if no match: what is wrong, e.g. 'onboarding tour covers the app', 'cookie banner', 'wrong page', max 25 words, else empty>"} in ${lang(input.language)}.` },
+You compare a still from a screen recording with the voiceover that plays over it. The still is taken at the END of the scene, after its planned actions ran - so when the voiceover announces an action ("I click X", "I type Y"), the RESULT of that action on screen is a match, even if X itself is no longer visible. Report a mismatch only when the screen shows something the voiceover does not describe at all (wrong page, an overlay/tour/banner/dialog covering the app, an error, a step the voiceover skips). Answer strictly as JSON: {"match": true|false, "seen": "<what the screen shows, max 20 words>", "issue": "<if no match: what is wrong, e.g. 'onboarding tour covers the app', 'cookie banner', 'wrong page', max 25 words, else empty>"} in ${lang(input.language)}.` },
     { role: "user", content: `SCENE ${input.sceneId}\nVOICEOVER: ${input.voiceover}\nCAPTION: ${input.caption || "-"}\nPLANNED ACTIONS: ${input.actions || "-"}`, images: [input.image] },
   ];
 }
