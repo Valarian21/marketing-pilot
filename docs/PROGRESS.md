@@ -162,3 +162,7 @@ Erledigt:
 - Platzhalter-Musikbett `assets/music/platzhalter-pad.mp3` (synthetisch, ersetzen!); MP3s dort sind gitignored.
 - Hörprobe F (v3 mit Tags) unter `/mp/hoerproben/index.html`. Key-Rechte für Music-API fehlen (`music_generation`).
 - Phase 3 offen: Lautheit −14 LUFS, UI-Sounds, Stabilität 0.3 vs 0.5 per Hörprobe.
+- UI-Politur nach Sichtprüfung aller 15 Seiten: Knöpfe nie umbrechend (nowrap, 13 px), Video-Toolbar als eigene
+  Optionszeile (Reels/Landscape/Musik/Aufnahme wiederverwenden, Primärknopf rechts), Szenenkarten kompakt (Feld-
+  flex-basis wurde in Spaltenkarten zur Höhe), `waitFor` im Aktions-Dropdown, Studio-Reiter gestylt, Tabellen-
+  überschriften/Zahlen/Daten ohne Umbruch, Aktivität einspaltig, Objekt-IDs gekürzt, Speicher-Formate lesbar.

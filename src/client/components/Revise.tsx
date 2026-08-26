@@ -23,7 +23,7 @@ export function ReviseBox({ piece, onDone }: { piece: ContentPiece; onDone: () =
   return (
     <div className="mp-revise">
       <label className="mp-field"><span>Änderungswunsch an den Agenten</span>
-        <textarea rows={2} value={text} onChange={(e) => setText(e.target.value)} placeholder={isVideo ? "z. B. „Sekunde 12–20 ist falsch: nimm die Szene neu auf und zeige dabei das fertige Arbeitsblatt“ oder „Untertitel in Szene 2 kürzer“" : "z. B. „Kürzer, ohne den zweiten Absatz, und am Ende eine konkrete Zahl“"} disabled={busy || piece.status === "published"} />
+        <textarea rows={3} value={text} onChange={(e) => setText(e.target.value)} placeholder={isVideo ? "z. B. „Sekunde 12–20 ist falsch: nimm die Szene neu auf und zeige dabei das fertige Arbeitsblatt“ oder „Untertitel in Szene 2 kürzer“" : "z. B. „Kürzer, ohne den zweiten Absatz, und am Ende eine konkrete Zahl“"} disabled={busy || piece.status === "published"} />
       </label>
       <div className="mp-form-actions"><Button variant="primary" disabled={busy || text.trim().length < 3 || piece.status === "published"} onClick={() => void submit()}>{busy ? "Agent arbeitet …" : "Anpassen lassen"}</Button><span className="mp-label">Kosten bisher {fmtUsd(piece.costUsd)}</span></div>
       {msg && <Notice kind="info">{msg}</Notice>}

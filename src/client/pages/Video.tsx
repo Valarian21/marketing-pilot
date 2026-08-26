@@ -9,7 +9,7 @@ import { ReviseBox, fmtUsd } from "../components/Revise.js";
 
 const STEP_LABEL: Record<string, string> = { record: "Aufnehmen", check: "Szenen-Check", voice: "Voiceover", overlays: "Overlays", reels: "Reels rendern", landscape: "Landscape rendern", assets: "Assets speichern" };
 const STEP_PILL: Record<string, PillKind> = { pending: "todo", running: "progress", done: "done", failed: "review", skipped: "kind" };
-const ACTION_TYPES: VideoAction["type"][] = ["goto", "click", "type", "scroll", "wait", "hover", "press"];
+const ACTION_TYPES: VideoAction["type"][] = ["goto", "click", "type", "scroll", "wait", "hover", "press", "waitFor"];
 
 export function VideoPage() {
   const { id = "" } = useParams();
@@ -75,12 +75,13 @@ export function VideoPage() {
           <Card>
             <div className="mp-card-head">
               <div><div className="mp-label">Skript · {script.devices.join(" + ")} · {script.scenes.length} Szenen</div><h2>{script.title}</h2>{piece && <div className="mp-small mp-muted">Erstellt {fmtDateTime(piece.createdAt)} · Zuletzt bearbeitet {fmtDateTime(piece.updatedAt)}{typeof piece.meta["renderedAt"] === "string" && <> · Zuletzt gerendert {fmtDateTime(piece.meta["renderedAt"] as string)}</>}</div>}</div>
-              <div className="mp-inline">{dirty && <Pill kind="review">ungespeichert</Pill>}<Button disabled={busy || !dirty} onClick={() => void saveScript()}>Speichern</Button><label className="mp-small mp-inline" title="Zahl der Reel-Varianten (je ein Hook)">Reels <select value={opts.variants} onChange={(e) => setOpts({ ...opts, variants: Number(e.target.value) })}>{[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n}</option>)}</select></label>
-                <label className="mp-small mp-inline" title="Landscape braucht eine zweite (Desktop-)Aufnahme - bei Demo-Konten mit Credits kostet das doppelt"><input type="checkbox" checked={opts.landscape} onChange={(e) => setOpts({ ...opts, landscape: e.target.checked })} /> Landscape</label>
-                <label className="mp-small mp-inline" title="Musikbett aus marketing-pilot/assets/music/ - Reels bekommen ihren Sound besser beim Posten aus der Plattform-Bibliothek">Musik <select value={opts.music} onChange={(e) => setOpts({ ...opts, music: e.target.value as typeof opts.music })}><option value="none">keine</option><option value="landscape">nur Landscape</option><option value="all">alle</option></select></label>
-                <label className="mp-small mp-inline" title="Nur Stimme, Untertitel und Schnitt neu - ohne Browser-Aufnahme"><input type="checkbox" disabled={!piece?.meta["recordings"]} checked={opts.reuseRecording} onChange={(e) => setOpts({ ...opts, reuseRecording: e.target.checked })} /> Aufnahme wiederverwenden</label>
-                <Button variant="primary" disabled={busy || Boolean(activeJob) || !view.workerAlive} onClick={() => void render()}>{activeJob ? "läuft …" : "Aufnehmen und rendern"}</Button></div>
+              <div className="mp-inline">{dirty && <Pill kind="review">ungespeichert</Pill>}<Button disabled={busy || !dirty} onClick={() => void saveScript()}>Speichern</Button></div>
             </div>
+            <div className="mp-toolbar"><label  title="Zahl der Reel-Varianten (je ein Hook)">Reels <select value={opts.variants} onChange={(e) => setOpts({ ...opts, variants: Number(e.target.value) })}>{[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n}</option>)}</select></label>
+                <label  title="Landscape braucht eine zweite (Desktop-)Aufnahme - bei Demo-Konten mit Credits kostet das doppelt"><input type="checkbox" checked={opts.landscape} onChange={(e) => setOpts({ ...opts, landscape: e.target.checked })} /> Landscape</label>
+                <label  title="Musikbett aus marketing-pilot/assets/music/ - Reels bekommen ihren Sound besser beim Posten aus der Plattform-Bibliothek">Musik <select value={opts.music} onChange={(e) => setOpts({ ...opts, music: e.target.value as typeof opts.music })}><option value="none">keine</option><option value="landscape">nur Landscape</option><option value="all">alle</option></select></label>
+                <label  title="Nur Stimme, Untertitel und Schnitt neu - ohne Browser-Aufnahme"><input type="checkbox" disabled={!piece?.meta["recordings"]} checked={opts.reuseRecording} onChange={(e) => setOpts({ ...opts, reuseRecording: e.target.checked })} /> Aufnahme wiederverwenden</label>
+                <div className="mp-toolbar-end"><Button variant="primary" disabled={busy || Boolean(activeJob) || !view.workerAlive} onClick={() => void render()}>{activeJob ? "Render läuft …" : "Aufnehmen und rendern"}</Button></div></div>
             <label className="mp-field"><span>Ziel</span><input value={script.goal} onChange={(e) => edit((sc) => ({ ...sc, goal: e.target.value }))} /></label>
             <div className="mp-form mp-form--row">
               <label className="mp-field mp-field--short"><span>Geräte</span>
@@ -103,10 +104,10 @@ export function VideoPage() {
                   <div key={k} className="mp-action-row">
                     <select value={a.type} onChange={(e) => edit((s0) => ({ ...s0, scenes: s0.scenes.map((x, j) => (j === i ? { ...x, actions: x.actions.map((y, l) => (l === k ? { ...y, type: e.target.value as VideoAction["type"] } : y)) } : x)) }))}>{ACTION_TYPES.map((tp) => <option key={tp} value={tp}>{tp}</option>)}</select>
                     {a.type === "goto" && <input placeholder="URL" value={a.url ?? ""} onChange={(e) => edit((s0) => ({ ...s0, scenes: s0.scenes.map((x, j) => (j === i ? { ...x, actions: x.actions.map((y, l) => (l === k ? { ...y, url: e.target.value } : y)) } : x)) }))} />}
-                    {(a.type === "click" || a.type === "type" || a.type === "hover") && <input placeholder="Ziel (Text oder Selektor)" value={a.target ?? ""} onChange={(e) => edit((s0) => ({ ...s0, scenes: s0.scenes.map((x, j) => (j === i ? { ...x, actions: x.actions.map((y, l) => (l === k ? { ...y, target: e.target.value } : y)) } : x)) }))} />}
+                    {(a.type === "click" || a.type === "type" || a.type === "hover" || a.type === "waitFor") && <input placeholder={a.type === "waitFor" ? "Text, der erscheinen soll" : "Ziel (sichtbarer Text)"} value={a.target ?? ""} onChange={(e) => edit((s0) => ({ ...s0, scenes: s0.scenes.map((x, j) => (j === i ? { ...x, actions: x.actions.map((y, l) => (l === k ? { ...y, target: e.target.value } : y)) } : x)) }))} />}
                     {(a.type === "type" || a.type === "press") && <input placeholder={a.type === "press" ? "Taste" : "Text"} value={a.text ?? ""} onChange={(e) => edit((s0) => ({ ...s0, scenes: s0.scenes.map((x, j) => (j === i ? { ...x, actions: x.actions.map((y, l) => (l === k ? { ...y, text: e.target.value } : y)) } : x)) }))} />}
                     {a.type === "scroll" && <input type="number" placeholder="px" value={a.y ?? 600} onChange={(e) => edit((s0) => ({ ...s0, scenes: s0.scenes.map((x, j) => (j === i ? { ...x, actions: x.actions.map((y, l) => (l === k ? { ...y, y: Number(e.target.value) } : y)) } : x)) }))} />}
-                    {a.type === "wait" && <input type="number" placeholder="ms" value={a.ms ?? 1000} onChange={(e) => edit((s0) => ({ ...s0, scenes: s0.scenes.map((x, j) => (j === i ? { ...x, actions: x.actions.map((y, l) => (l === k ? { ...y, ms: Number(e.target.value) } : y)) } : x)) }))} />}
+                    {(a.type === "wait" || a.type === "waitFor") && <input type="number" placeholder={a.type === "waitFor" ? "max ms" : "ms"} value={a.ms ?? (a.type === "waitFor" ? 90000 : 1000)} onChange={(e) => edit((s0) => ({ ...s0, scenes: s0.scenes.map((x, j) => (j === i ? { ...x, actions: x.actions.map((y, l) => (l === k ? { ...y, ms: Number(e.target.value) } : y)) } : x)) }))} />}
                     <Button variant="danger" onClick={() => edit((s0) => ({ ...s0, scenes: s0.scenes.map((x, j) => (j === i ? { ...x, actions: x.actions.filter((_, l) => l !== k) } : x)) }))}>×</Button>
                   </div>
                 ))}

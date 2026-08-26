@@ -32,7 +32,7 @@ export function ActivityPage() {
         <Stat label="Kosten gesamt (100 Läufe)" value={fmtUsd(total)} />
         {[...byProvider.entries()].slice(0, 2).map(([prov, v]) => <Stat key={prov} label={prov} value={fmtUsd(v)} />)}
       </div>
-      <div className="mp-two-col">
+      <div className="mp-stack">
         <Card>
           <h2>Agenten-Läufe</h2>
           {runs.length === 0 ? <p className="mp-muted">Noch kein Lauf. Jeder Aufruf eines Modells erscheint hier mit Tokens, Kosten und Dauer.</p> : (
@@ -59,7 +59,7 @@ export function ActivityPage() {
                 <tr key={a.id}>
                   <td>{fmt(a.createdAt)}</td><td>{a.user}</td>
                   <td><code className="mp-code">{a.action}</code></td>
-                  <td>{String(a.content["name"] ?? a.entityId ?? "")}</td>
+                  <td><span className="mp-trunc" title={String(a.content["name"] ?? a.entityId ?? "")}>{String(a.content["name"] ?? a.entityId ?? "")}</span></td>
                 </tr>
               ))}</tbody>
             </table></div>
