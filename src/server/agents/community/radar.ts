@@ -25,6 +25,18 @@ import type { JobHandler } from "../../jobs.js";
 export const LEAD_THRESHOLD = 60;
 const SOURCES_KEY = (pid: string) => `community_sources:${pid}`;
 const LAST_SCAN_KEY = (pid: string) => `community_last_scan:${pid}`;
+const SEEN_KEY = (pid: string) => `community_seen:${pid}`;
+const SEEN_MAX = 3000;
+
+/** Threads already scored (lead or not) - never re-score the same URL. */
+function loadSeen(db: Db, projectId: string): Set<string> {
+  const row = db.select().from(t.mpSettings).where(eq(t.mpSettings.key, SEEN_KEY(projectId))).get();
+  return new Set(parseJson<string[]>(row?.value ?? "[]", []));
+}
+function saveSeen(db: Db, projectId: string, seen: Set<string>): void {
+  const list = [...seen].slice(-SEEN_MAX);
+  db.insert(t.mpSettings).values({ key: SEEN_KEY(projectId), value: toJson(list), updatedAt: nowIso() }).onConflictDoUpdate({ target: t.mpSettings.key, set: { value: toJson(list), updatedAt: nowIso() } }).run();
+}
 
 // --- sources -----------------------------------------------------------------
 
@@ -159,7 +171,8 @@ export async function scanCommunity(ctx: CommunityContext, projectId: string, op
   let sources = loadSources(ctx.db, projectId);
   if (!sources.length) { sources = deriveSources(personas, listChannels(ctx, projectId)); saveSources(ctx.db, projectId, sources); }
   const warnings: string[] = [];
-  const known = new Set(ctx.db.select({ url: t.mpCommunityLeads.url }).from(t.mpCommunityLeads).where(eq(t.mpCommunityLeads.projectId, projectId)).all().map((r) => r.url));
+  const known = loadSeen(ctx.db, projectId);
+  for (const r of ctx.db.select({ url: t.mpCommunityLeads.url }).from(t.mpCommunityLeads).where(eq(t.mpCommunityLeads.projectId, projectId)).all()) known.add(r.url);
   const threads: Thread[] = [];
   for (const src of sources.filter((x) => x.enabled)) {
     const fetcher = ctx.fetchers?.[src.type] ?? FETCHERS[src.type];
@@ -170,6 +183,8 @@ export async function scanCommunity(ctx: CommunityContext, projectId: string, op
     } catch (e) { warnings.push(`${src.label || src.value}: ${e instanceof Error ? e.message : String(e)}`); }
   }
   const fresh = threads.filter((x, i, arr) => arr.findIndex((y) => y.url === x.url) === i).slice(0, opts.maxThreads ?? 120);
+  for (const x of fresh) known.add(x.url);
+  saveSeen(ctx.db, projectId, known);
   if (!fresh.length) { ctx.db.insert(t.mpSettings).values({ key: LAST_SCAN_KEY(projectId), value: nowIso(), updatedAt: nowIso() }).onConflictDoUpdate({ target: t.mpSettings.key, set: { value: nowIso(), updatedAt: nowIso() } }).run(); return { scanned: 0, scored: 0, leads: 0, warnings }; }
 
   const cheap = modelFor("scoring");
