@@ -70,7 +70,7 @@ Erledigt:
 - **Voiceover** (`agents/video/voice.ts`): ElevenLabs `with-timestamps` → Wort-Timings; ohne Key geschätzte Timings (Video läuft trotzdem, Hinweis am Stück).
 - **Assembly** (`agents/video/assemble.ts`, **ffmpeg statt Remotion**, siehe DECISIONS): Auto-Cut eingefrorener Strecken (freezedetect, > 1,8 s → 0,9 s), Letztes-Frame-Padding auf Voiceover-Länge, Zoom-in auf den Klickpunkt (zoompan), Concat, Hook-Karte 1,5 s, Geräterahmen + Hintergrund, Wort-Captions als transparente PNG-Overlays (aktives Wort hervorgehoben), Endcard 2,5 s, Musikbett aus `assets/music/` (-18 dB, Fade-out), H.264/AAC MP4 mit `AI-generated`-Metadaten, Thumbnail = Hook-Frame (PNG gekennzeichnet).
 - **Varianten**: je Hook ein Reel (Standard 3) + ein Landscape-Schnitt 1920×1080 aus der Desktop-Aufnahme.
-- **Job-Queue** (`jobs.ts`, Tabelle `mp_jobs`) + **Worker-Prozess** (`worker.ts`, systemd `app-marketing-pilot-worker`, MemoryMax 2G): API stellt ein, Worker rendert; Herzschlag in `mp_settings`, UI warnt, wenn der Worker steht; abgebrochene Jobs werden beim Neustart markiert.
+- **Job-Queue** (`jobs.ts`, Tabelle `mp_jobs`) + **Worker-Prozess** (`worker.ts`, systemd `app-marketing-pilot-worker`, MemoryMax 3G): API stellt ein, Worker rendert; Herzschlag in `mp_settings`, UI warnt, wenn der Worker steht; abgebrochene Jobs werden beim Neustart markiert.
 - UI `/mp/projects/:id/studio/video`: Skript-Editor (Ziel, Geräte, CTA, Hooks, Szenen mit Aktionen), „Aufnehmen und rendern“, Fortschritt je Schritt, Galerie mit Playern; Freigabe zeigt Videos mit Player; Asset-Endpoint streamt mit Range-Requests.
 - 60 Tests.
 ## Shot 5 – Community-Radar, Insights, Wochen-Loop: offen

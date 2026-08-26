@@ -8,7 +8,7 @@ WorkingDirectory=/home/developer/ai_empire/marketing-pilot
 ExecStart=/usr/bin/node dist/server/src/server/worker.js
 Restart=always
 RestartSec=3
-MemoryMax=2G
+MemoryMax=3G
 Environment=NODE_ENV=production
 Environment=PLAYWRIGHT_BROWSERS_PATH=/home/developer/.cache/ms-playwright
 EnvironmentFile=-/home/developer/ai_empire/marketing-pilot/.env
