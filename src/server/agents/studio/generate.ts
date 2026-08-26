@@ -10,7 +10,7 @@ import { modelFor } from "../../../../config/models.js";
 import { DEFAULT_DIRECTORIES } from "../../../../config/directories.js";
 import { chatJson, withRun, type AgentContext, type UsageCollector } from "../runner.js";
 import type { ImageProvider, PublishProvider } from "../../providers/index.js";
-import { articlePrompt, carouselPrompt, directoryPrompt, imagePrompt, pinPrompt, textPostPrompt } from "../prompts/studio.js";
+import { articleMetaPrompt, articlePrompt, carouselPrompt, directoryPrompt, imagePrompt, pinPrompt, textPostPrompt } from "../prompts/studio.js";
 import { getProject } from "../../repo/projects.js";
 import { listPersonas } from "../analysis/personas.js";
 import { listCompetitors } from "../analysis/competitors.js";
@@ -160,14 +160,19 @@ async function draftFor(ctx: StudioContext, base: Base, req: s.ContentRequest, p
       const kind = req.articleKind ?? "comparison";
       const comps = listCompetitors(ctx, base.project.id);
       const competitor = req.competitor ?? comps[0]?.name;
-      const out = await chatJson(ctx.llm, modelFor("analysis"), z.object({ title: z.string(), slug: z.string().default(""), metaDescription: z.string().default(""), markdown: z.string().min(200), faq: z.array(z.object({ q: z.string(), a: z.string() })).default([]), jsonLd: z.array(z.record(z.string(), z.unknown())).default([]) }),
-        articlePrompt({ ...common, kind, ...(competitor ? { competitor } : {}), competitors: comps.map((c) => ({ name: c.name, positioning: c.positioning, pricing: c.pricing, complaints: c.complaints.map((x) => x.text) })), productUrl: base.project.url }), usage, { maxTokens: 8000, temperature: 0.4 });
-      const rev = await reviseWithCritic(ctx, usage, { body: out.markdown, language: base.language, voiceProfile: base.voice, format: "article", maxRounds: 1 });
-      const slug = slugify(out.slug || out.title);
-      const jsonLd = out.jsonLd.length ? out.jsonLd : [{ "@context": "https://schema.org", "@type": "FAQPage", mainEntity: out.faq.map((f) => ({ "@type": "Question", name: f.q, acceptedAnswer: { "@type": "Answer", text: f.a } })) }];
-      const html = renderArticleHtml({ title: out.title, metaDescription: out.metaDescription, markdown: rev.body, jsonLd, language: base.language });
+      // Long Markdown as plain text (JSON escaping breaks on 10k+ chars), metadata in a second small JSON call.
+      const draft = await ctx.llm.chat(modelFor("analysis"), articlePrompt({ ...common, kind, ...(competitor ? { competitor } : {}), competitors: comps.map((c) => ({ name: c.name, positioning: c.positioning, pricing: c.pricing, complaints: c.complaints.map((x) => x.text) })), productUrl: base.project.url }), { temperature: 0.4, maxTokens: 9000 });
+      usage.add(draft.usage);
+      const markdown = draft.text.replace(/^```(?:markdown|md)?\s*/i, "").replace(/\s*```$/, "").trim();
+      if (markdown.length < 400) throw new Error("Artikel zu kurz - Modell hat keinen vollständigen Text geliefert.");
+      const rev = await reviseWithCritic(ctx, usage, { body: markdown, language: base.language, voiceProfile: base.voice, format: "article", maxRounds: 1 });
+      const meta = await chatJson(ctx.llm, modelFor("critic"), z.object({ title: z.string(), slug: z.string().default(""), metaDescription: z.string().default(""), faq: z.array(z.object({ q: z.string(), a: z.string() })).default([]), jsonLd: z.array(z.record(z.string(), z.unknown())).default([]) }),
+        articleMetaPrompt({ brief: base.brief, markdown: rev.body, productUrl: base.project.url }), usage, { maxTokens: 4000 });
+      const slug = slugify(meta.slug || meta.title);
+      const jsonLd = meta.jsonLd.length ? meta.jsonLd : [{ "@context": "https://schema.org", "@type": "FAQPage", mainEntity: meta.faq.map((f) => ({ "@type": "Question", name: f.q, acceptedAnswer: { "@type": "Answer", text: f.a } })) }];
+      const html = renderArticleHtml({ title: meta.title, metaDescription: meta.metaDescription, markdown: rev.body, jsonLd, language: base.language });
       const file = path.join(outDir, `${slug}.html`); fs.mkdirSync(outDir, { recursive: true }); fs.writeFileSync(file, html);
-      return { title: out.title, body: rev.body, format: "article", channel: "website", meta: { kind, competitor: competitor ?? null, slug, metaDescription: out.metaDescription, faq: out.faq, jsonLd, htmlPath: path.relative(ctx.dataDir, file), request: req }, assets: [], score: rev.score, notes: rev.notes };
+      return { title: meta.title, body: rev.body, format: "article", channel: "website", meta: { kind, competitor: competitor ?? null, slug, metaDescription: meta.metaDescription, faq: meta.faq, jsonLd, htmlPath: path.relative(ctx.dataDir, file), request: req }, assets: [], score: rev.score, notes: rev.notes };
     }
     default:
       throw err(`Format "${req.format}" kommt in einem späteren Shot (Video: Shot 4, Community-Antworten: Shot 5).`);

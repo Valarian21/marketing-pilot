@@ -34,7 +34,8 @@ const fakeLlm: LlmProvider = {
       case "carousel": return json({ title: "Carousel Sonntag", caption: "Warum Sonntag frei bleibt.", slides: [{ kind: "text", headline: "Sonntag frei", body: "in 10 Minuten" }, { kind: "screenshot", headline: "So sieht es aus", body: "", screenshotId: "" }, { kind: "text", headline: "Probier es", body: "beispielwerk.test" }] });
       case "pin": return json({ title: "Arbeitsblatt in 10 Minuten", description: "So sparst du den Sonntagabend.", overlay: "Sonntag frei", altText: "Pin" });
       case "directory": return json({ tagline: "Arbeitsblätter in Minuten, lehrplangenau für dein Bundesland und mehr", descriptionShort: "kurz", descriptionMedium: "mittel", descriptionLong: "lang lang lang", categories: ["Education"], tags: ["teachers"], alternatives: ["RivalTool"], firstComment: "Hi, ich bin der Maker." });
-      case "article-comparison": return json({ title: "Beispielwerk vs RivalTool", slug: "beispielwerk-vs-rivaltool", metaDescription: "Vergleich.", markdown: "# Beispielwerk vs RivalTool\n\nKurz: beide erstellen Arbeitsblätter.\n\n| Kriterium | Beispielwerk | RivalTool |\n|---|---|---|\n| Preis | 0 € | 9 € |\n\n## FAQ\n\n### Ist Beispielwerk kostenlos?\n\nJa, es gibt einen Free-Plan.\n" + "x".repeat(120), faq: [{ q: "Ist Beispielwerk kostenlos?", a: "Ja." }], jsonLd: [] });
+      case "article-comparison": return { text: "# Beispielwerk vs RivalTool\n\nKurz: beide erstellen Arbeitsblätter.\n\n| Kriterium | Beispielwerk | RivalTool |\n|---|---|---|\n| Preis | 0 € | 9 € |\n\n## FAQ\n\n### Ist Beispielwerk kostenlos?\n\nJa, es gibt einen Free-Plan.\n" + "x".repeat(400), model: "fake", usage };
+      case "article-meta": return json({ title: "Beispielwerk vs RivalTool", slug: "beispielwerk-vs-rivaltool", metaDescription: "Vergleich.", faq: [{ q: "Ist Beispielwerk kostenlos?", a: "Ja." }], jsonLd: [] });
       default: return { text: "irrelevant", model: "fake", usage };
     }
   },

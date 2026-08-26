@@ -94,12 +94,23 @@ export function articlePrompt(input: { brief: Brief; kind: "comparison" | "best_
   return [
     { role: "system", content: `[task:article-${input.kind}]
 Write a GEO-optimised article for the product's own website so AI assistants and search engines can cite it. ${kindText}
-Structure: H1, short intro that answers the main question in the first 2 sentences (LLMs quote openings), H2/H3, tables for comparisons, FAQ section with the exact questions as H3.
-Also return JSON-LD: for FAQ/comparison a "FAQPage" object with the FAQ pairs; plus a "SoftwareApplication" object for ${input.brief.productName} (name, url ${input.productUrl}, applicationCategory, offers from pricing).
+Structure: one H1, a short intro that answers the main question in the first 2 sentences (LLMs quote openings), H2/H3, tables for comparisons, a section "## FAQ" whose questions are H3 headings each followed by the answer paragraph.
 Facts only from the brief and the competitor data; unknown numbers -> [PLATZHALTER: …].
 ${writingRules({ language: input.brief.language, voiceProfile: input.voiceProfile })}
-Return JSON: {"title", "slug", "metaDescription" (max 155 chars), "markdown", "faq": [{"q","a"}], "jsonLd": [ {...}, {...} ]}` },
-    { role: "user", content: `TOPIC: ${input.topic || "-"}\nHINT: ${input.hint || "-"}\n\nBRIEF\n${JSON.stringify(input.brief)}\n\nCOMPETITORS\n${input.competitors.map((c) => `- ${c.name}: ${c.positioning} | ${c.pricing} | complaints: ${c.complaints.join("; ")}`).join("\n") || "(none)"}\n\nPERSONA\n${personaBlock(input.persona)}` },
+Return ONLY the article as Markdown. No JSON, no code fences, no commentary before or after.` },
+    { role: "user", content: `TOPIC: ${input.topic || "-"}\nHINT: ${input.hint || "-"}\nTONE / ADDRESS FORM (follow exactly): ${input.brief.tone || "wie im Brief"}\n\nBRIEF\n${JSON.stringify(input.brief)}\n\nCOMPETITORS\n${input.competitors.map((c) => `- ${c.name}: ${c.positioning} | ${c.pricing} | complaints: ${c.complaints.join("; ")}`).join("\n") || "(none)"}\n\nPERSONA\n${personaBlock(input.persona)}` },
+  ];
+}
+
+export function articleMetaPrompt(input: { brief: Brief; markdown: string; productUrl: string }): LlmMessage[] {
+  return [
+    { role: "system", content: `[task:article-meta]
+From the Markdown article, extract page metadata and structured data as JSON:
+- "title": the H1 text. "slug": URL slug (lowercase, hyphens, ascii). "metaDescription": max 155 chars, ${lang(input.brief.language)}.
+- "faq": every question from the FAQ section with its answer (plain text).
+- "jsonLd": an array with (1) a schema.org "FAQPage" object built from "faq" and (2) a "SoftwareApplication" object for ${input.brief.productName} (name, url "${input.productUrl}", applicationCategory, operatingSystem "Web", offers with price from: ${input.brief.pricing.map((p) => `${p.plan} ${p.price}`).join("; ") || "unknown"}).
+Return JSON: {"title","slug","metaDescription","faq":[{"q","a"}],"jsonLd":[{...},{...}]}` },
+    { role: "user", content: input.markdown.slice(0, 40_000) },
   ];
 }
 

@@ -59,6 +59,8 @@ Erledigt:
 - **Publish-Paket** `/publish/:pieceId`: Text kopieren, Assets laden, UTM-Link, Deep-Link zur Upload-Seite, „Als veröffentlicht markieren“ mit externer URL; Directory-Variante mit allen Feldern zum Kopieren + Abhaken; „Jetzt planen“ bei `MP_PUBLISH_PROVIDER=postiz`.
 - API: `GET …/studio`, `POST …/brandkit/extract`, `PATCH …/brandkit`, `POST/DELETE …/voice/samples`, `POST …/voice/derive`, `POST …/content` (ContentRequest), `POST /content/:id/regenerate`, `GET /content/:id/package`, `POST /content/:id/schedule`, `GET /content/:id/export.html`, `GET/PUT …/directories`, `POST …/directories/:slug/prepare`.
 
-Offen: Community-Antworten (Shot 5), Video (Shot 4); Voice-Profil braucht Marcels eigene Texte.
+Live-Test an **Lehreule** (2026-08-26): Brand-Kit extrahiert (Palette #8B8199/#615572/#ECDCC8 …, Schriften Source Sans 3 + Nunito, Logo via og:image), LinkedIn-Post (AI-Tell 7/10, 13 s), Carousel „Klausur mit Erwartungshorizont“ (7 Slides × 2 Größen, echter Playwright-Render mit Produkt-Screenshot, 34 s), AlternativeTo-Eintrag (Tagline 58/60, 3 Screenshots 1280×800, Alternativen = die 6 analysierten Wettbewerber), Vergleichsartikel „Lehreule vs meinUnterricht“ (11.800 Zeichen, Tabelle, FAQPage + SoftwareApplication JSON-LD, HTML-Export). Gesamtkosten der Studio-Läufe ≈ 0,05 $. Gelernt: lange Artikel nicht als JSON-String anfordern (Escaping bricht) → jetzt Markdown + separates Meta-JSON; Consent-Banner vor Screenshots wegklicken.
+
+Offen: Community-Antworten (Shot 5), Video (Shot 4); Voice-Profil braucht Marcels eigene Texte (Studio warnt so lange).
 ## Shot 4 – Video-Fabrik: offen
 ## Shot 5 – Community-Radar, Insights, Wochen-Loop: offen

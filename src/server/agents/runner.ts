@@ -52,7 +52,27 @@ export function extractJson(text: string): unknown {
   const close = open === "{" ? "}" : "]";
   const end = candidate.lastIndexOf(close);
   if (end <= start) throw new Error("Unvollständiges JSON in der Modellantwort");
-  return JSON.parse(candidate.slice(start, end + 1));
+  const slice = candidate.slice(start, end + 1);
+  try { return JSON.parse(slice); } catch { return JSON.parse(repairJsonStrings(slice)); }
+}
+
+/** Models often leave raw newlines/tabs (and stray backslashes) inside JSON strings - escape them. */
+export function repairJsonStrings(src: string): string {
+  let out = "", inStr = false, esc = false;
+  for (const ch of src) {
+    if (inStr) {
+      if (esc) { out += ch; esc = false; continue; }
+      if (ch === "\\") { out += ch; esc = true; continue; }
+      if (ch === '"') { inStr = false; out += ch; continue; }
+      if (ch === "\n") { out += "\\n"; continue; }
+      if (ch === "\r") { continue; }
+      if (ch === "\t") { out += "\\t"; continue; }
+      out += ch; continue;
+    }
+    if (ch === '"') inStr = true;
+    out += ch;
+  }
+  return out;
 }
 
 export async function chatJson<T>(

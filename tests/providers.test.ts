@@ -50,6 +50,7 @@ describe("json extraction", () => {
     expect(extractJson('Here you go:\n```json\n{"a":1}\n```')).toEqual({ a: 1 });
     expect(extractJson('Sure! {"b":[1,2]} hope this helps')).toEqual({ b: [1, 2] });
     expect(() => extractJson("nothing here")).toThrow();
+    expect(extractJson('{"body": "Zeile 1\nZeile 2\t"}')).toEqual({ body: "Zeile 1\nZeile 2\t" });
   });
 });
 
