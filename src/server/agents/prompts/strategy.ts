@@ -38,6 +38,7 @@ Assignment rules:
 - Preparation work (research, drafting posts/reels/directory entries, finding threads, writing replies) -> "agent".
 - Anything that touches the outside world (posting, submitting, replying, spending money, approving) -> "human". Reddit, forums, Discord and any ad budget are ALWAYS assignedTo "human" with approvalLevel "human_only".
 - Every agent content task is followed by a matching human review/publish task ("… freigeben und posten").
+- approvalLevel: "review" is the default for everything; "human_only" ONLY for Reddit/forums/Discord posting and anything spending money; "auto" never in the first 4 weeks.
 - Week 1 starts with quick wins: directory entries, product screenshots, first community threads. Include one "measure" task at the end of weeks 2 and 4 (signups per channel, GEO re-check).
 Examples of good titles: "Directory-Eintrag bei AlternativeTo vorbereiten", "r/lehrerzimmer: 3 passende Threads finden und Antworten entwerfen", "Antworten posten", "Reel #1: Onboarding-Demo", "Reel #1 freigeben".
 Return JSON: {"tasks":[{"week","dayOffset","title","description","type","channel","assignedTo","approvalLevel"}]}` },

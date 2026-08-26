@@ -31,7 +31,7 @@ export function domainRoutes(app: FastifyInstance, db: Db): void {
 
   r.get("/api/mp/projects/:projectId/tasks", { schema: { params: P, response: { 200: z.array(s.Task) } } },
     async (req) => db.select().from(t.mpTasks).where(eq(t.mpTasks.projectId, req.params.projectId))
-      .orderBy(t.mpTasks.order).all()
+      .orderBy(t.mpTasks.week, t.mpTasks.order).all()
       .map((x) => ({ ...x, type: x.type as s.Task["type"], status: x.status as s.Task["status"],
         assignedTo: x.assignedTo as s.Task["assignedTo"], approvalLevel: x.approvalLevel as s.Task["approvalLevel"],
         outputRefs: arr(x.outputRefs) })));

@@ -36,9 +36,10 @@ export function TimelinePage() {
                     const items = row.items.filter((it) => it.week === w);
                     return (
                       <div key={w} className={`mp-tl-cell${view.todayWeek === w ? " is-today" : ""}`}>
-                        {items.map((it) => (
+                        {items.slice(0, 3).map((it) => (
                           <button key={it.id} type="button" title={it.title} className={`mp-bar mp-bar--full ${it.planned ? "mp-bar--planned" : "mp-bar--done"}${it.kind === "piece" ? " mp-bar--piece" : ""}`} onClick={() => setSel({ item: it, channel: row.channel })} />
                         ))}
+                        {items.length > 3 && <button type="button" className="mp-tl-more mp-linkbtn" title={items.slice(3).map((i) => i.title).join("\n")} onClick={() => setSel({ item: items[3]!, channel: row.channel })}>+{items.length - 3}</button>}
                       </div>
                     );
                   })}
