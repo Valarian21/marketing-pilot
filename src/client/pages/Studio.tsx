@@ -1,0 +1,210 @@
+import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { Link, useParams, useSearchParams } from "react-router";
+import type { BrandKit, ContentPiece, DirectoryStatus, StudioView } from "../../shared/schemas.js";
+import { api } from "../api.js";
+import { Button, Card, Notice, PageHeader, Pill, type PillKind } from "../components/ui.js";
+import { ProjectNav } from "../components/ProjectNav.js";
+
+const TABS = [{ id: "erstellen", label: "Erstellen" }, { id: "brand", label: "Brand-Kit & Stimme" }, { id: "verzeichnisse", label: "Verzeichnisse" }, { id: "geo", label: "GEO-Artikel" }] as const;
+type Tab = (typeof TABS)[number]["id"];
+const FORMAT_LABEL: Record<string, string> = { text: "Text-Post", carousel: "Carousel", pin: "Pinterest-Pin", image: "Bild (KI)", ad_creative: "Ad-Hintergrund (KI)", article: "GEO-Artikel", directory_entry: "Directory-Eintrag", video: "Video", community_reply: "Community-Antwort" };
+const STATUS: Record<ContentPiece["status"], { label: string; kind: PillKind }> = { draft: { label: "Entwurf", kind: "todo" }, review: { label: "in Freigabe", kind: "review" }, approved: { label: "freigegeben", kind: "done" }, published: { label: "veröffentlicht", kind: "done" }, rejected: { label: "abgelehnt", kind: "kind" } };
+
+export function StudioPage() {
+  const { id = "" } = useParams();
+  const [params, setParams] = useSearchParams();
+  const tab = (TABS.find((t) => t.id === params.get("tab"))?.id ?? "erstellen") as Tab;
+  const [view, setView] = useState<StudioView | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const load = useCallback(async () => { try { setView(await api<StudioView>(`/projects/${id}/studio`)); setError(null); } catch (e) { setError(e instanceof Error ? e.message : "Fehler"); } }, [id]);
+  useEffect(() => { void load(); }, [load]);
+
+  const run = async (label: string, fn: () => Promise<unknown>) => {
+    setBusy(label); setError(null);
+    try { await fn(); await load(); } catch (e) { setError(e instanceof Error ? e.message : "Fehler"); } finally { setBusy(null); }
+  };
+
+  if (!view) return <><ProjectNav id={id} />{error && <Notice kind="bad">{error}</Notice>}</>;
+  const noVoice = !view.brandKit.voiceProfile;
+
+  return (
+    <>
+      <ProjectNav id={id} />
+      <PageHeader label="Stufe 3" title="Content Studio" />
+      {error && <Notice kind="bad">{error}</Notice>}
+      {!view.hasBrief && <Notice kind="warn">Ohne Brief kein Content – <Link to={`/projects/${id}/analysis`}>Analyse ausführen</Link>.</Notice>}
+      {noVoice && view.hasBrief && <Notice kind="warn">Kein Voice-Profil: Texte klingen dann generisch. Lade unter „Brand-Kit &amp; Stimme“ 5–20 eigene Texte hoch und leite das Profil ab.</Notice>}
+      <nav className="mp-subnav" aria-label="Studio-Bereiche">
+        {TABS.map((t) => <button key={t.id} type="button" className={`mp-subnav-item mp-linkbtn${tab === t.id ? " is-active" : ""}`} onClick={() => setParams({ tab: t.id })}>{t.label}</button>)}
+      </nav>
+
+      {tab === "erstellen" && <CreateTab id={id} view={view} busy={busy} run={run} />}
+      {tab === "brand" && <BrandTab id={id} kit={view.brandKit} busy={busy} run={run} />}
+      {tab === "verzeichnisse" && <DirectoriesTab id={id} dirs={view.directories} busy={busy} run={run} />}
+      {tab === "geo" && <GeoTab id={id} view={view} busy={busy} run={run} />}
+    </>
+  );
+}
+
+type Run = (label: string, fn: () => Promise<unknown>) => Promise<void>;
+
+function CreateTab({ id, view, busy, run }: { id: string; view: StudioView; busy: string | null; run: Run }) {
+  const [format, setFormat] = useState("text");
+  const [platform, setPlatform] = useState("linkedin");
+  const [template, setTemplate] = useState("clean");
+  const [topic, setTopic] = useState("");
+  const [hint, setHint] = useState("");
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    void run("create", () => api(`/projects/${id}/content`, { method: "POST", json: { format, platform: format === "pin" ? "pinterest" : platform, template, topic, hint } }));
+  };
+  return (
+    <>
+      <Card className="mp-form-card">
+        <form className="mp-form" onSubmit={submit}>
+          <div className="mp-form mp-form--row">
+            <label className="mp-field mp-field--short"><span>Format</span>
+              <select value={format} onChange={(e) => setFormat(e.target.value)}>
+                <option value="text">Text-Post</option><option value="carousel">Carousel (PNG 1080²/1080×1350)</option><option value="pin">Pinterest-Pin (1000×1500)</option><option value="image">Bild / Thumbnail (KI)</option><option value="ad_creative">Ad-Hintergrund (KI)</option>
+              </select></label>
+            {format === "text" && <label className="mp-field mp-field--short"><span>Plattform</span><select value={platform} onChange={(e) => setPlatform(e.target.value)}>{["linkedin", "x", "threads", "bluesky", "facebook", "instagram"].map((p) => <option key={p} value={p}>{p}</option>)}</select></label>}
+            {format === "carousel" && <><label className="mp-field mp-field--short"><span>Plattform</span><select value={platform} onChange={(e) => setPlatform(e.target.value)}><option value="instagram">instagram</option><option value="linkedin">linkedin</option></select></label>
+              <label className="mp-field mp-field--short"><span>Layout</span><select value={template} onChange={(e) => setTemplate(e.target.value)}>{["clean", "bold", "screenshot", "list", "story"].map((t) => <option key={t} value={t}>{t}</option>)}</select></label></>}
+            <label className="mp-field"><span>Thema / Blickwinkel</span><input value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="z. B. „Sonntagabend-Vorbereitung in 10 Minuten“" /></label>
+          </div>
+          <div className="mp-form mp-form--row">
+            <label className="mp-field"><span>Hinweis (optional)</span><input value={hint} onChange={(e) => setHint(e.target.value)} placeholder="Ton, Zahlen, was rein soll, was nicht" /></label>
+            <div className="mp-form-actions"><Button type="submit" variant="primary" disabled={busy !== null || !view.hasBrief}>{busy === "create" ? "Agent schreibt …" : "Entwurf erzeugen"}</Button></div>
+          </div>
+          <p className="mp-small mp-muted">Jeder Entwurf durchläuft den AI-Tell-Prüfer (Score 0–10, unter 7 wird automatisch überarbeitet) und landet in der Freigabe. {view.screenshots.length} Produkt-Screenshots stehen für Carousel und Pin bereit.</p>
+        </form>
+      </Card>
+      <PieceList id={id} pieces={view.recent} />
+    </>
+  );
+}
+
+export function PieceList({ id, pieces }: { id: string; pieces: ContentPiece[] }) {
+  if (!pieces.length) return <Card className="mp-empty"><h2>Noch keine Stücke</h2><p>Erzeuge oben einen Entwurf oder führe eine Agent-Aufgabe aus.</p></Card>;
+  return (
+    <Card>
+      <h2>Zuletzt erzeugt</h2>
+      <div className="mp-table-wrap"><table className="mp-table">
+        <thead><tr><th>Stück</th><th>Format</th><th>Kanal</th><th>AI-Tell</th><th>Status</th><th></th></tr></thead>
+        <tbody>{pieces.map((p) => { const st = STATUS[p.status]; return (
+          <tr key={p.id}>
+            <td>{p.title || "(ohne Titel)"}</td>
+            <td><Pill kind="kind">{FORMAT_LABEL[p.format] ?? p.format}</Pill></td>
+            <td className="mp-small">{p.channel}</td>
+            <td className="mp-num-cell">{p.aiTellScore === null ? "–" : `${p.aiTellScore}/10`}</td>
+            <td><Pill kind={st.kind}>{st.label}</Pill></td>
+            <td><Link className="mp-btn" to={p.status === "approved" || p.status === "published" ? `/projects/${id}/publish/${p.id}` : `/projects/${id}/review?piece=${p.id}`}>{p.status === "approved" || p.status === "published" ? "Paket" : "Prüfen"}</Link></td>
+          </tr>); })}</tbody>
+      </table></div>
+    </Card>
+  );
+}
+
+function BrandTab({ id, kit, busy, run }: { id: string; kit: BrandKit; busy: string | null; run: Run }) {
+  const [text, setText] = useState("");
+  const [source, setSource] = useState("");
+  const [primary, setPrimary] = useState(kit.primary ?? "");
+  useEffect(() => setPrimary(kit.primary ?? ""), [kit.primary]);
+  const addSample = (e: FormEvent) => { e.preventDefault(); void run("sample", async () => { await api(`/projects/${id}/voice/samples`, { method: "POST", json: { text, source } }); setText(""); setSource(""); }); };
+  return (
+    <div className="mp-two-col">
+      <Card>
+        <div className="mp-card-head"><h2>Brand-Kit</h2><Button onClick={() => void run("brand", () => api(`/projects/${id}/brandkit/extract`, { method: "POST" }))} disabled={busy !== null}>{busy === "brand" ? "liest Website …" : kit.extractedAt ? "Neu aus Website lesen" : "Aus Website extrahieren"}</Button></div>
+        {kit.extractedAt ? (
+          <>
+            <div className="mp-swatches">{kit.colors.map((c) => <button key={c} type="button" className={`mp-swatch${c === kit.primary ? " is-primary" : ""}`} style={{ background: c }} title={c} onClick={() => void run("primary", () => api(`/projects/${id}/brandkit`, { method: "PATCH", json: { primary: c } }))}><span>{c}</span></button>)}</div>
+            <form className="mp-form mp-form--row" onSubmit={(e) => { e.preventDefault(); void run("primary", () => api(`/projects/${id}/brandkit`, { method: "PATCH", json: { primary } })); }}>
+              <label className="mp-field mp-field--short"><span>Primärfarbe</span><input value={primary} onChange={(e) => setPrimary(e.target.value)} placeholder="#3D7A4E" /></label>
+              <div className="mp-form-actions"><Button type="submit">Speichern</Button></div>
+            </form>
+            <dl className="mp-dl">
+              <dt>Text / Fläche</dt><dd>{kit.ink ?? "–"} / {kit.background ?? "–"}</dd>
+              <dt>Schriften</dt><dd>{kit.fonts.join(", ") || "–"}</dd>
+              <dt>Logo</dt><dd>{kit.logoAssetId ? <img className="mp-logo" src={`/api/mp/assets/${kit.logoAssetId}/file`} alt="Logo" /> : kit.logoUrl ?? "–"}</dd>
+            </dl>
+            <p className="mp-small mp-muted">Farben und Schriften fließen in Carousel-, Pin- und Directory-Vorlagen. Primärfarbe per Klick auf ein Feld wählen.</p>
+          </>
+        ) : <p className="mp-muted">Noch nicht extrahiert. Der Agent liest Farben, Logo und Schriften direkt von der Website.</p>}
+      </Card>
+      <Card>
+        <div className="mp-card-head"><h2>Voice-Profil</h2><Button variant="primary" disabled={busy !== null || kit.voiceSamples.length < 3} onClick={() => void run("voice", () => api(`/projects/${id}/voice/derive`, { method: "POST" }))}>{busy === "voice" ? "leitet ab …" : kit.voiceProfile ? "Profil neu ableiten" : "Profil ableiten"}</Button></div>
+        {kit.voiceProfile ? (
+          <div className="mp-sub">
+            <p>{kit.voiceProfile.summary}</p>
+            <dl className="mp-dl mp-small">
+              <dt>Anrede</dt><dd>{kit.voiceProfile.address}</dd>
+              <dt>Satzlänge</dt><dd>{kit.voiceProfile.sentenceLength}</dd>
+              <dt>Lieblingswörter</dt><dd>{kit.voiceProfile.favoriteWords.join(", ")}</dd>
+              <dt>Humor</dt><dd>{kit.voiceProfile.humor}</dd>
+              <dt>Einstiege</dt><dd>{kit.voiceProfile.typicalOpeners.join(" · ")}</dd>
+              <dt>No-Gos</dt><dd>{kit.voiceProfile.noGos.join(", ")}</dd>
+            </dl>
+            <details className="mp-details"><summary className="mp-label">Prompt-Baustein</summary><pre className="mp-pre">{kit.voiceProfile.promptBlock}</pre></details>
+            <span className="mp-label">aus {kit.voiceProfile.sampleCount} Texten · {new Date(kit.voiceProfile.derivedAt).toLocaleDateString("de-DE")}</span>
+          </div>
+        ) : <Notice kind="warn">Noch kein Profil. Mindestens 3, besser 5–20 eigene Texte (Posts, Mails, README-Abschnitte) einfügen.</Notice>}
+        <form className="mp-form" onSubmit={addSample}>
+          <label className="mp-field"><span>Eigener Text ({kit.voiceSamples.length}/30)</span><textarea rows={5} value={text} onChange={(e) => setText(e.target.value)} placeholder="Einen eigenen Text einfügen (mind. 40 Zeichen)" /></label>
+          <div className="mp-form mp-form--row">
+            <label className="mp-field mp-field--short"><span>Quelle</span><input value={source} onChange={(e) => setSource(e.target.value)} placeholder="LinkedIn-Post, Mail, README …" /></label>
+            <div className="mp-form-actions"><Button type="submit" disabled={busy !== null || text.trim().length < 40}>Text hinzufügen</Button></div>
+          </div>
+        </form>
+        {kit.voiceSamples.length > 0 && (
+          <ul className="mp-samples">{kit.voiceSamples.map((sm) => <li key={sm.id}><span className="mp-small">{sm.source && <strong>{sm.source}: </strong>}{sm.text.slice(0, 140)}{sm.text.length > 140 ? " …" : ""}</span><Button variant="danger" aria-label="Entfernen" onClick={() => void run("del", () => api(`/projects/${id}/voice/samples/${sm.id}`, { method: "DELETE" }))}>×</Button></li>)}</ul>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+function DirectoriesTab({ id, dirs, busy, run }: { id: string; dirs: DirectoryStatus[]; busy: string | null; run: Run }) {
+  return (
+    <Card>
+      <h2>Verzeichnis-Einträge <span className="mp-muted mp-small">alle Felder vorbereitet, Einreichen bleibt bei dir</span></h2>
+      <div className="mp-table-wrap"><table className="mp-table">
+        <thead><tr><th>Verzeichnis</th><th>Hinweis</th><th>Status</th><th></th></tr></thead>
+        <tbody>{dirs.map((d) => (
+          <tr key={d.slug}>
+            <td><strong>{d.name}</strong><div className="mp-small"><a href={d.submitUrl} target="_blank" rel="noreferrer">{d.submitUrl.replace(/^https?:\/\//, "")}</a></div></td>
+            <td className="mp-small mp-muted">{d.notes}</td>
+            <td>{d.submittedAt ? <Pill kind="done">eingereicht</Pill> : d.pieceStatus ? <Pill kind={STATUS[d.pieceStatus].kind}>{STATUS[d.pieceStatus].label}</Pill> : <Pill kind="todo">offen</Pill>}</td>
+            <td className="mp-inline">
+              {d.pieceId ? <Link className="mp-btn mp-btn--primary" to={`/projects/${id}/publish/${d.pieceId}`}>Einreichen-Seite</Link> : null}
+              <Button disabled={busy !== null} onClick={() => void run(d.slug, () => api(`/projects/${id}/directories/${d.slug}/prepare`, { method: "POST" }))}>{busy === d.slug ? "bereitet vor …" : d.pieceId ? "Neu vorbereiten" : "Vorbereiten"}</Button>
+            </td>
+          </tr>
+        ))}</tbody>
+      </table></div>
+      <p className="mp-small mp-muted">Liste anpassen: <code className="mp-code">PUT /api/mp/projects/{id}/directories</code> (Standard: Product Hunt, AlternativeTo, G2, There's An AI For That, SaaSHub).</p>
+    </Card>
+  );
+}
+
+function GeoTab({ id, view, busy, run }: { id: string; view: StudioView; busy: string | null; run: Run }) {
+  const [kind, setKind] = useState("comparison");
+  const [competitor, setCompetitor] = useState(view.competitors[0] ?? "");
+  const [topic, setTopic] = useState("");
+  const articles = view.recent.filter((p) => p.format === "article");
+  return (
+    <>
+      <Card className="mp-form-card">
+        <form className="mp-form mp-form--row" onSubmit={(e) => { e.preventDefault(); void run("article", () => api(`/projects/${id}/content`, { method: "POST", json: { format: "article", articleKind: kind, competitor: kind === "comparison" ? competitor : undefined, topic, hint: "" } })); }}>
+          <label className="mp-field mp-field--short"><span>Art</span><select value={kind} onChange={(e) => setKind(e.target.value)}><option value="comparison">Vergleich „X vs Y“</option><option value="best_tools">„Beste Tools für …“</option><option value="faq">FAQ-Seite</option></select></label>
+          {kind === "comparison" && <label className="mp-field mp-field--short"><span>Wettbewerber</span><select value={competitor} onChange={(e) => setCompetitor(e.target.value)}>{view.competitors.map((c) => <option key={c} value={c}>{c}</option>)}</select></label>}
+          <label className="mp-field"><span>Thema (für „Beste Tools“) / Fokus</span><input value={topic} onChange={(e) => setTopic(e.target.value)} /></label>
+          <div className="mp-form-actions"><Button type="submit" variant="primary" disabled={busy !== null || !view.hasBrief}>{busy === "article" ? "schreibt …" : "Artikel erzeugen"}</Button></div>
+        </form>
+        <p className="mp-small mp-muted">Markdown + HTML-Export mit JSON-LD (FAQPage, SoftwareApplication) für deine eigene Website.</p>
+      </Card>
+      <PieceList id={id} pieces={articles} />
+    </>
+  );
+}

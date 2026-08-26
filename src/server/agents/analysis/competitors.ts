@@ -62,7 +62,7 @@ export async function runCompetitorsStep(ctx: AgentContext, project: { id: strin
     const reviews = (await mapLimit(picked, 2, async (h) => {
       try { const f = await fetchPage(h.url, { maxChars: 6000 }); return f.text.length > 200 ? { url: h.url, text: f.text } : null; } catch { return null; }
     })).filter((r): r is { url: string; text: string } => r !== null);
-    const d = await chatJson(ctx.llm, strong, Detail, competitorDetailPrompt({ brief, name: c.name, url: c.url, pageText, reviews }), usage, { maxTokens: 2500 });
+    const d = await chatJson(ctx.llm, strong, Detail, competitorDetailPrompt({ brief, name: c.name, url: c.url, pageText, reviews }), usage, { maxTokens: 4000 });
     return { ...c, ...d };
   });
 

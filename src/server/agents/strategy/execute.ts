@@ -49,12 +49,12 @@ export async function executeTask(ctx: AgentContext, taskId: string, user: HostU
     const piece = {
       id: newId(), projectId: task.projectId, taskId: task.id, channel: task.channel, format, title: result.title || task.title,
       body: result.body + (result.notes ? `\n\n---\nHinweise für die Prüfung:\n${result.notes}` : ""), assets: "[]", status: "review",
-      humanEdited: false, publishedAt: null, externalUrl: null, utm: "{}", createdAt: ts, updatedAt: ts,
+      humanEdited: false, publishedAt: null, externalUrl: null, utm: "{}", meta: "{}", aiTellScore: null, aiTellNotes: "", rejectionReason: "", createdAt: ts, updatedAt: ts,
     };
     ctx.db.insert(t.mpContentPieces).values(piece).run();
     ctx.db.update(t.mpTasks).set({ status: "review", outputRefs: toJson([...task.outputRefs, piece.id]), updatedAt: ts }).where(eq(t.mpTasks.id, taskId)).run();
     writeAudit(ctx.db, { user, action: "task.execute", entityType: "task", entityId: task.id, projectId: task.projectId, content: { piece: piece.id, format } });
-    return { ...piece, format, status: "review", assets: [], utm: {} };
+    return { ...piece, format, status: "review", assets: [], utm: {}, meta: {} };
   } catch (e) {
     ctx.db.update(t.mpTasks).set({ status: task.status === "review" ? "review" : "todo", updatedAt: nowIso() }).where(eq(t.mpTasks.id, taskId)).run();
     throw e;

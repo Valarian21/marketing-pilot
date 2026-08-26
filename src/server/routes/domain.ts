@@ -40,7 +40,7 @@ export function domainRoutes(app: FastifyInstance, db: Db): void {
     async (req) => db.select().from(t.mpContentPieces).where(eq(t.mpContentPieces.projectId, req.params.projectId))
       .orderBy(desc(t.mpContentPieces.createdAt)).all()
       .map((x) => ({ ...x, format: x.format as s.ContentPiece["format"], status: x.status as s.ContentPiece["status"],
-        assets: arr(x.assets), utm: obj(x.utm) })));
+        assets: arr(x.assets), utm: obj(x.utm), meta: obj(x.meta) })));
 
   r.get("/api/mp/projects/:projectId/insights", { schema: { params: P, response: { 200: z.array(s.Insight) } } },
     async (req) => db.select().from(t.mpInsights).where(eq(t.mpInsights.projectId, req.params.projectId))
@@ -62,7 +62,6 @@ export function domainRoutes(app: FastifyInstance, db: Db): void {
 
   // Write paths that later shots implement. Listed explicitly so nothing 404s by accident.
   const pending: [string, number][] = [
-    ["/api/mp/projects/:projectId/content", 3],
     ["/api/mp/projects/:projectId/community/scan", 5],
     ["/api/mp/events", 5],
   ];

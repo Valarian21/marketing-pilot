@@ -45,9 +45,9 @@ describe("projects API", () => {
       expect(r.json()).toEqual([]);
     }
 
-    const stub = await t.app.inject({ method: "POST", url: `/api/mp/projects/${p.id}/content`, headers: t.auth });
+    const stub = await t.app.inject({ method: "POST", url: `/api/mp/projects/${p.id}/community/scan`, headers: t.auth });
     expect(stub.statusCode).toBe(501);
-    expect(stub.json().shot).toBe(3);
+    expect(stub.json().shot).toBe(5);
     // no OPENROUTER_API_KEY in the test env -> analysis refuses clearly instead of failing late
     const noKey = await t.app.inject({ method: "POST", url: `/api/mp/projects/${p.id}/analysis/run`, headers: t.auth });
     expect(noKey.statusCode).toBe(503);

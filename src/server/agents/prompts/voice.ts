@@ -8,7 +8,7 @@ export const BANNED_PHRASES: readonly string[] = [
   "It's important to note", "unlock", "elevate", "seamless", "nahtlos",
 ];
 
-export function writingRules(opts: { language: string; community?: boolean }): string {
+export function writingRules(opts: { language: string; community?: boolean; voiceProfile?: string | null }): string {
   const de = opts.language.toLowerCase().startsWith("de");
   const base = `WRITING RULES (mandatory):
 - First person, concrete, with numbers, screenshots and things that went wrong. One thought per post.
@@ -20,5 +20,6 @@ COMMUNITY REPLY RULES:
 - Answer the actual question first and fully. Mention our own product at most in the last third, always with disclosure ("Ich bau das Tool selbst" / "I build this tool myself").
 - No link if the community forbids links in comments; read and quote the community rules in the draft.
 - Never post automatically - this is a draft for a human.`;
-  return base + (opts.community ? community : "");
+  const voice = opts.voiceProfile ? `\nVOICE PROFILE OF THE AUTHOR (match it - this is how the founder actually writes):\n${opts.voiceProfile}` : "\nNo voice profile yet: keep it plain and personal, avoid marketing register.";
+  return base + voice + (opts.community ? community : "");
 }

@@ -1,0 +1,58 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`helpers > prompt snapshots carry the ban list 1`] = `
+[
+  {
+    "content": "[task:text-post]
+Write ONE x post for "Beispielwerk". Hard limit: 280 characters (count them). One thought per post. Max 2 hashtags, only if natural on x; none on LinkedIn/X unless a real community tag.
+
+X: one idea, no thread unless asked; no link in the first post if possible.
+1 product screenshots exist - reference what the reader will see ("im Screenshot ...") when it helps.
+WRITING RULES (mandatory):
+- First person, concrete, with numbers, screenshots and things that went wrong. One thought per post.
+- Write in German. Use the address form (du/Sie) from the brief's tone.
+- Forbidden: "In der heutigen schnelllebigen Welt", "Game-Changer", "Lass uns eintauchen", "revolutionär", "Es ist wichtig zu beachten", "In today's fast-paced world", "game changer", "Let's dive in", "revolutionary", "It's important to note", "unlock", "elevate", "seamless", "nahtlos"; a rhetorical question as opener followed by its answer; triple lists of staccato adjectives; emojis as bullets; hashtag walls; sentences starting with "It is important to note"; a closing summary of what was just said; em dashes as a stylistic tic.
+- No invented facts, testimonials or numbers. If a claim needs a number you do not have, leave a [PLATZHALTER: …] the human fills in.
+VOICE PROFILE OF THE AUTHOR (match it - this is how the founder actually writes):
+Use du.
+Return JSON: {"title": "internal label", "body": "the post", "altText": "alt text for an attached screenshot or empty"}",
+    "role": "system",
+  },
+  {
+    "content": "TOPIC: t
+HINT: -
+CORE MESSAGE: -
+
+BRIEF
+{"productName":"Beispielwerk","oneLiner":"Arbeitsblätter in Minuten.","category":"worksheet generator","language":"de","features":["Generator"],"pricing":[{"plan":"Free","price":"0 €","notes":""}],"usp":["Lehrplan"],"tone":"Du","targetAudience":"Lehrkräfte","keywords":[],"sources":[]}
+
+PERSONA
+(none)",
+    "role": "user",
+  },
+]
+`;
+
+exports[`helpers > prompt snapshots carry the ban list 2`] = `
+[
+  {
+    "content": "[task:directory]
+Prepare the listing of "Beispielwerk" for the directory "SaaSHub". 
+Fields: "tagline" (max 60 chars, no period), "descriptionShort" (max 160 chars), "descriptionMedium" (max 500 chars), "descriptionLong" (max 1500 chars, paragraphs allowed), "categories" (3-5 from what such directories offer), "tags" (5-10), "alternatives" (well-known tools it replaces - from this list where sensible: RivalTool), "firstComment" (maker's first comment: why built, what's next, honest, max 700 chars).
+All text in German unless the directory is clearly English-only (Product Hunt, G2, There's An AI For That, SaaSHub, AlternativeTo -> English).
+WRITING RULES (mandatory):
+- First person, concrete, with numbers, screenshots and things that went wrong. One thought per post.
+- Write in German. Use the address form (du/Sie) from the brief's tone.
+- Forbidden: "In der heutigen schnelllebigen Welt", "Game-Changer", "Lass uns eintauchen", "revolutionär", "Es ist wichtig zu beachten", "In today's fast-paced world", "game changer", "Let's dive in", "revolutionary", "It's important to note", "unlock", "elevate", "seamless", "nahtlos"; a rhetorical question as opener followed by its answer; triple lists of staccato adjectives; emojis as bullets; hashtag walls; sentences starting with "It is important to note"; a closing summary of what was just said; em dashes as a stylistic tic.
+- No invented facts, testimonials or numbers. If a claim needs a number you do not have, leave a [PLATZHALTER: …] the human fills in.
+No voice profile yet: keep it plain and personal, avoid marketing register.
+Return JSON: {"tagline","descriptionShort","descriptionMedium","descriptionLong","categories":[],"tags":[],"alternatives":[],"firstComment"}",
+    "role": "system",
+  },
+  {
+    "content": "BRIEF
+{"productName":"Beispielwerk","oneLiner":"Arbeitsblätter in Minuten.","category":"worksheet generator","language":"de","features":["Generator"],"pricing":[{"plan":"Free","price":"0 €","notes":""}],"usp":["Lehrplan"],"tone":"Du","targetAudience":"Lehrkräfte","keywords":[],"sources":[]}",
+    "role": "user",
+  },
+]
+`;

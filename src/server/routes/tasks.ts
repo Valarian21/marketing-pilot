@@ -5,7 +5,7 @@ import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import * as s from "../../shared/schemas.js";
 import * as t from "../db/schema.js";
-import { newId, nowIso, parseJson, type Db } from "../db/index.js";
+import { newId, nowIso, type Db } from "../db/index.js";
 import { writeAudit } from "../audit.js";
 import { getProject, listProjects } from "../repo/projects.js";
 import type { AgentContext } from "../agents/runner.js";
@@ -13,7 +13,7 @@ import { executeTask, rowToTask } from "../agents/strategy/execute.js";
 import { currentVersion, dueAtFor, enforceApproval, geoSummary, isoDate } from "../agents/strategy/plan.js";
 import { briefConfirmed } from "./strategy.js";
 
-const pieceOf = (r: typeof t.mpContentPieces.$inferSelect): s.ContentPiece => ({ ...r, format: r.format as s.ContentPiece["format"], status: r.status as s.ContentPiece["status"], assets: parseJson<string[]>(r.assets, []), utm: parseJson<Record<string, unknown>>(r.utm, {}) });
+import { pieceOf } from "../agents/studio/generate.js";
 
 export function weekOf(startDate: string, iso: string | null): number | null {
   if (!iso) return null;
@@ -135,8 +135,10 @@ export function taskRoutes(app: FastifyInstance, db: Db, getCtx: () => AgentCont
     const set: Partial<typeof t.mpContentPieces.$inferInsert> = { updatedAt: nowIso() };
     if (req.body.body !== undefined && req.body.body !== row.body) { set.body = req.body.body; set.humanEdited = true; }
     if (req.body.title !== undefined) set.title = req.body.title;
+    if (req.body.externalUrl !== undefined) set.externalUrl = req.body.externalUrl || null;
     if (req.body.status) {
       set.status = req.body.status;
+      if (req.body.status === "rejected") set.rejectionReason = req.body.reason ?? "";
       if (req.body.status === "published" && !row.publishedAt) set.publishedAt = nowIso();
       // Approval with outside effect is logged with user, time and content (rule 4).
       writeAudit(db, { user: req.user, action: `content.${req.body.status}`, entityType: "content_piece", entityId: row.id, projectId: row.projectId,

@@ -27,7 +27,7 @@ export function listPersonas(ctx: AgentContext, projectId: string): Persona[] {
 
 export async function runPersonasStep(ctx: AgentContext, project: { id: string }, brief: Brief, competitors: Competitor[], usage: UsageCollector): Promise<string> {
   const excerpts = pageExcerpts(ctx, project.id, 14_000);
-  const out = await chatJson(ctx.llm, modelFor("analysis"), Out, personasPrompt({ brief, competitors, excerpts }), usage, { maxTokens: 5000 });
+  const out = await chatJson(ctx.llm, modelFor("analysis"), Out, personasPrompt({ brief, competitors, excerpts }), usage, { maxTokens: 14000 });
   ctx.db.delete(mpPersonas).where(eq(mpPersonas.projectId, project.id)).run();
   const ts = nowIso();
   for (const p of out.personas.slice(0, 4)) {

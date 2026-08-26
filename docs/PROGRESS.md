@@ -46,6 +46,19 @@ Erledigt:
 - 38 Tests grün.
 
 Offen: Ist-Daten in der Timeline (Insights) kommen mit Shot 5; Live-Test siehe Zusammenfassung.
-## Shot 3 – Content Studio: offen
+## Shot 3 – Content Studio: **gebaut** (2026-08-26)
+
+Erledigt:
+- **Brand-Kit** (`agents/studio/brandkit.ts`): Farben (gewichtete Häufigkeit + Button-Farben + `theme-color`), Logo (Header-Bild/og:image/Icon → als Asset gespeichert), Schriften per Playwright von der Website; Primärfarbe im UI wählbar.
+- **Voice-Profil** (`agents/studio/voice.ts`): 5–20 eigene Texte im Brand-Kit (max. 30), Agent leitet Anrede, Satzlänge, Lieblingswörter, Humor, Einstiege, No-Gos und einen Prompt-Baustein ab; ohne Profil warnt das Studio sichtbar.
+- **Schreibregeln** zentral in `agents/prompts/voice.ts` (Verbotsliste, Community-Regeln, Voice-Block) – in jedem Text-Prompt.
+- **AI-Tell-Prüfer** (`agents/studio/critic.ts`): Score 0–10 gegen Verbotsliste + Voice-Profil, unter 7 automatische Überarbeitung (max. 2 Runden), Score + Protokoll am Stück.
+- **Formate** (`agents/studio/generate.ts`): Text-Posts (X 280 / Threads 500 / Bluesky 300 / LinkedIn 3000 / Facebook 2000, Hashtag-Limit), Carousels (5 Token-Layouts, Playwright-Render 1080×1080 + 1080×1350, Produkt-Screenshots als Slides), Pinterest-Pins (1000×1500, UTM-Ziel-URL), Bilder/Ad-Hintergründe über `ImageProvider` (OpenRouter-Bildmodell, nie als Screenshot-Ersatz), Directory-Einträge (Tagline ≤ 60, Beschreibung in 3 Längen, Kategorien, Alternativen, erster Kommentar, Screenshots in den geforderten Größen; Liste in `config/directories.ts`, je Projekt über `PUT …/directories`), GEO-Artikel (Vergleich / Beste Tools / FAQ, Markdown + HTML-Export mit JSON-LD FAQPage + SoftwareApplication).
+- **Kennzeichnung**: alle gerenderten/generierten PNGs bekommen `AI-generated: true` + XMP (IPTC DigitalSourceType) als PNG-Chunks (`util/png.ts`); Hinweis im Publish-Paket. c2pa-node bewusst nicht (native Rust-Build, siehe DECISIONS).
+- **Freigabe-Queue** `/review`: Stücke nacheinander, Plattform-Vorschau (Post-Karte, Slides, Artikel-HTML), Text inline editierbar (`humanEdited`), Freigeben / Ablehnen mit Grund / Neu generieren mit Hinweis, AI-Tell-Protokoll.
+- **Publish-Paket** `/publish/:pieceId`: Text kopieren, Assets laden, UTM-Link, Deep-Link zur Upload-Seite, „Als veröffentlicht markieren“ mit externer URL; Directory-Variante mit allen Feldern zum Kopieren + Abhaken; „Jetzt planen“ bei `MP_PUBLISH_PROVIDER=postiz`.
+- API: `GET …/studio`, `POST …/brandkit/extract`, `PATCH …/brandkit`, `POST/DELETE …/voice/samples`, `POST …/voice/derive`, `POST …/content` (ContentRequest), `POST /content/:id/regenerate`, `GET /content/:id/package`, `POST /content/:id/schedule`, `GET /content/:id/export.html`, `GET/PUT …/directories`, `POST …/directories/:slug/prepare`.
+
+Offen: Community-Antworten (Shot 5), Video (Shot 4); Voice-Profil braucht Marcels eigene Texte.
 ## Shot 4 – Video-Fabrik: offen
 ## Shot 5 – Community-Radar, Insights, Wochen-Loop: offen

@@ -74,6 +74,9 @@ export async function chatJson<T>(
       lastError = parsed.error.issues.slice(0, 5).map((i) => `${i.path.join(".")}: ${i.message}`).join("; ");
     } catch (e) {
       lastError = e instanceof Error ? e.message : String(e);
+      if (/Unexpected end|after array element|Unterminated|Unvollständiges/.test(lastError) && res.text.length > 2000) {
+        lastError += ` (Antwort vermutlich am Token-Limit abgeschnitten, ${res.text.length} Zeichen)`;
+      }
     }
     convo = [...messages, { role: "assistant", content: res.text.slice(0, 6000) },
       { role: "user", content: `Your JSON did not match the required schema: ${lastError}. Reply with ONLY the corrected JSON object.` }];

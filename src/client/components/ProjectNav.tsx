@@ -4,7 +4,7 @@ import { NavLink } from "react-router";
 
 const TABS = [
   { to: "", label: "Übersicht" }, { to: "/analysis", label: "Analyse" }, { to: "/strategy", label: "Strategie" },
-  { to: "/tasks", label: "Aufgaben" }, { to: "/timeline", label: "Timeline" }, { to: "/review", label: "Freigaben" },
+  { to: "/tasks", label: "Aufgaben" }, { to: "/timeline", label: "Timeline" }, { to: "/studio", label: "Studio" }, { to: "/review", label: "Freigaben" },
 ];
 
 export function rememberProject(id: string): void { try { localStorage.setItem("mp_project", id); } catch { /* ignore */ } }

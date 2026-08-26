@@ -24,7 +24,7 @@ export function listChannels(ctx: AgentContext, projectId: string): Channel[] {
 }
 
 export async function runAttentionStep(ctx: AgentContext, project: { id: string }, brief: Brief, personas: Persona[], competitors: Competitor[], usage: UsageCollector): Promise<string> {
-  const out = await chatJson(ctx.llm, modelFor("strategy"), Out, attentionMapPrompt({ brief, personas, competitors, budgetEurMax: 300 }), usage, { maxTokens: 4000 });
+  const out = await chatJson(ctx.llm, modelFor("strategy"), Out, attentionMapPrompt({ brief, personas, competitors, budgetEurMax: 300 }), usage, { maxTokens: 8000 });
   ctx.db.delete(mpChannels).where(and(eq(mpChannels.projectId, project.id), eq(mpChannels.status, ATTENTION_STATUS))).run();
   const ts = nowIso();
   const sorted = [...out.channels].sort((a, b) => a.rank - b.rank);

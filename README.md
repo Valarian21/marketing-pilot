@@ -95,6 +95,16 @@ Aufgaben der ersten 4 Wochen; `POST …/tasks/generate` nur die Aufgaben. Aufgab
 (Agent-Aufgabe → ContentPiece in Freigabe). `GET …/timeline` liefert 12 Wochen je Kanal,
 `GET /api/mp/overview` die Projektkarten. Freigabe-Regeln werden serverseitig erzwungen.
 
+## Content Studio (Shot 3)
+
+`/mp/projects/:id/studio`: Brand-Kit aus der Website (`POST …/brandkit/extract`), Voice-Profil aus
+eigenen Texten (`POST …/voice/samples`, `POST …/voice/derive`), Entwürfe je Format
+(`POST …/content` mit `{format, platform?, topic, hint, template?, articleKind?, directory?}`),
+Directory-Einträge (`POST …/directories/:slug/prepare`), GEO-Artikel mit HTML-Export
+(`GET /content/:id/export.html`). Jeder Text läuft durch den AI-Tell-Prüfer; Bilder werden als
+KI-generiert gekennzeichnet. Freigabe unter `/review`, Publish-Paket unter `/publish/:pieceId`
+(`GET /content/:id/package`). Postiz: `MP_PUBLISH_PROVIDER=postiz` + `POSTIZ_API_URL/KEY`.
+
 ## Freigabe-Stufen und Kennzeichnung
 
 Jede Aktion mit Außenwirkung trägt `auto | review | human_only` (Default `review`;

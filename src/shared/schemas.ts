@@ -12,7 +12,7 @@ export const Assignee = z.enum(["agent", "human"]);
 /** Approval level for anything with outside effect. Default is `review`. */
 export const ApprovalLevel = z.enum(["auto", "review", "human_only"]);
 export const ContentFormat = z.enum([
-  "text", "carousel", "image", "video", "article", "directory_entry", "community_reply", "ad_creative",
+  "text", "carousel", "image", "pin", "video", "article", "directory_entry", "community_reply", "ad_creative",
 ]);
 export const ContentStatus = z.enum(["draft", "review", "approved", "published", "rejected"]);
 export const AssetKind = z.enum(["screenshot", "recording", "voiceover", "render", "image"]);
@@ -110,6 +110,7 @@ export const ContentPiece = z.object({
   title: z.string(), body: z.string(), assets: z.array(z.string()),
   status: ContentStatus, humanEdited: z.boolean(),
   publishedAt: Iso.nullable(), externalUrl: z.string().nullable(), utm: Json,
+  meta: Json, aiTellScore: z.number().int().nullable(), aiTellNotes: z.string(), rejectionReason: z.string(),
   createdAt: Iso, updatedAt: Iso,
 });
 
@@ -294,6 +295,90 @@ export const ContentPatch = z.object({
   body: z.string().optional(),
   title: z.string().optional(),
   reason: z.string().optional(),
+  externalUrl: z.string().optional(),
+});
+
+// --- Content Studio (Shot 3) -------------------------------------------------
+
+export const VoiceSample = z.object({ id: Id, text: z.string(), source: z.string().default(""), addedAt: Iso });
+export const VoiceProfile = z.object({
+  summary: z.string(),
+  address: z.enum(["du", "Sie", "mixed", "n/a"]).default("n/a"),
+  sentenceLength: z.string().default(""),
+  favoriteWords: z.array(z.string()).default([]),
+  humor: z.string().default(""),
+  typicalOpeners: z.array(z.string()).default([]),
+  noGos: z.array(z.string()).default([]),
+  /** Ready-to-paste block for prompts. */
+  promptBlock: z.string(),
+  derivedAt: Iso,
+  model: z.string().default(""),
+  sampleCount: z.number().int().default(0),
+});
+export const BrandKit = z.object({
+  colors: z.array(z.string()).default([]),
+  primary: z.string().nullable().default(null),
+  ink: z.string().nullable().default(null),
+  background: z.string().nullable().default(null),
+  logoAssetId: z.string().nullable().default(null),
+  logoUrl: z.string().nullable().default(null),
+  fonts: z.array(z.string()).default([]),
+  extractedAt: Iso.nullable().default(null),
+  voiceSamples: z.array(VoiceSample).default([]),
+  voiceProfile: VoiceProfile.nullable().default(null),
+});
+export const BrandKitPatch = z.object({
+  colors: z.array(z.string()).optional(), primary: z.string().nullable().optional(), ink: z.string().nullable().optional(),
+  background: z.string().nullable().optional(),
+});
+export const VoiceSampleCreate = z.object({ text: z.string().trim().min(40, "Mindestens 40 Zeichen"), source: z.string().default("") });
+
+export const Platform = z.enum(["x", "threads", "bluesky", "linkedin", "facebook", "instagram", "pinterest", "youtube", "tiktok", "website", "other"]);
+export const ArticleKind = z.enum(["comparison", "best_tools", "faq"]);
+export const CarouselTemplate = z.enum(["clean", "bold", "screenshot", "list", "story"]);
+export const ContentRequest = z.object({
+  format: ContentFormat,
+  platform: Platform.optional(),
+  topic: z.string().default(""),
+  hint: z.string().default(""),
+  taskId: Id.nullable().optional(),
+  competitor: z.string().optional(),
+  articleKind: ArticleKind.optional(),
+  directory: z.string().optional(),
+  template: CarouselTemplate.optional(),
+  screenshotAssetIds: z.array(Id).optional(),
+});
+export const RegenerateRequest = z.object({ hint: z.string().default("") });
+
+export const DirectoryDef = z.object({
+  slug: z.string(), name: z.string(), submitUrl: z.string(), notes: z.string().default(""),
+  taglineMax: z.number().int().default(60), screenshotSizes: z.array(z.object({ w: z.number().int(), h: z.number().int() })).default([]),
+  fields: z.array(z.string()).default([]),
+});
+export const DirectoryStatus = DirectoryDef.extend({
+  pieceId: Id.nullable(), pieceStatus: ContentStatus.nullable(), submittedUrl: z.string().nullable(), submittedAt: Iso.nullable(),
+});
+
+export const PublishPackage = z.object({
+  piece: ContentPiece,
+  platform: z.string(),
+  text: z.string(),
+  assets: z.array(z.object({ id: Id, kind: z.string(), url: z.string(), filename: z.string(), width: z.number().int().nullable(), height: z.number().int().nullable(), aiGenerated: z.boolean() })),
+  utmLink: z.string().nullable(),
+  deepLink: z.string().nullable(),
+  deepLinkLabel: z.string().nullable(),
+  postizAvailable: z.boolean(),
+  notes: z.array(z.string()),
+});
+export const ScheduleRequest = z.object({ date: Iso });
+
+export const StudioView = z.object({
+  brandKit: BrandKit,
+  hasBrief: z.boolean(),
+  screenshots: z.array(Asset),
+  recent: z.array(ContentPiece),
+  directories: z.array(DirectoryStatus),
+  competitors: z.array(z.string()),
 });
 
 /** Shape of GET /api/mp/host - what the client needs to render the shell. */
@@ -351,3 +436,14 @@ export type TimelineItem = z.infer<typeof TimelineItem>;
 export type TimelineView = z.infer<typeof TimelineView>;
 export type ProjectOverview = z.infer<typeof ProjectOverview>;
 export type ContentPatch = z.infer<typeof ContentPatch>;
+export type VoiceSample = z.infer<typeof VoiceSample>;
+export type VoiceProfile = z.infer<typeof VoiceProfile>;
+export type BrandKit = z.infer<typeof BrandKit>;
+export type Platform = z.infer<typeof Platform>;
+export type ArticleKind = z.infer<typeof ArticleKind>;
+export type CarouselTemplate = z.infer<typeof CarouselTemplate>;
+export type ContentRequest = z.infer<typeof ContentRequest>;
+export type DirectoryDef = z.infer<typeof DirectoryDef>;
+export type DirectoryStatus = z.infer<typeof DirectoryStatus>;
+export type PublishPackage = z.infer<typeof PublishPackage>;
+export type StudioView = z.infer<typeof StudioView>;

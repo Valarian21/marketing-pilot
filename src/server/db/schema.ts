@@ -83,6 +83,11 @@ export const mpContentPieces = sqliteTable("mp_content_pieces", {
   publishedAt: text("published_at"),
   externalUrl: text("external_url"),
   utm: text("utm").notNull().default("{}"),
+  /** Format-specific data: platform, slides, directory fields, JSON-LD, generation hints. */
+  meta: text("meta").notNull().default("{}"),
+  aiTellScore: integer("ai_tell_score"),
+  aiTellNotes: text("ai_tell_notes").notNull().default(""),
+  rejectionReason: text("rejection_reason").notNull().default(""),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 }, (t) => [index("mp_content_project").on(t.projectId), index("mp_content_status").on(t.status)]);
