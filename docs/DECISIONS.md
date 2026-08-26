@@ -108,3 +108,15 @@ läuft ohne Unterbrechung, und das Bild entspricht exakt dem, was im Video zu se
   jeder Aufnahme fließen in Skript- und Revise-Prompt – der Agent rät keine Buttonnamen mehr.
 - **„Neu generieren“ bei Videos** startet einen Render-Job; der Studio-Pfad hatte Aufnahmen und
   Renders gelöscht und nichts erzeugt (Vorfall 26.08., 19:14).
+
+## Voiceover am Stück, Musik mit Ducking (2026-08-27)
+
+Szenenweise TTS klang abgehackt: fünf kalte Starts, keine gemeinsame Prosodie (v3 kennt kein
+`previous_text`). Jetzt geht das ganze Skript in **einen** ElevenLabs-Aufruf, Szenen durch `[pause]`
+(v3) bzw. `<break time="0.7s"/>` (v2) getrennt; die Wort-Timestamps werden über Zeichen-Offsets den
+Szenen zugeordnet und das Szenen-Audio aus dem Master geschnitten (mit 120/180 ms Vor-/Nachlauf, nie
+in Nachbarwörter). Audio-Tags (`[excited]` …) und reine Satzzeichen erscheinen nie in Untertiteln.
+Stille Szenenenden werden auf Stimme + 1,5 s gekappt (das Ergebnis des letzten Klicks bleibt ≥ 0,8 s).
+Musikbett mit Sidechain-Kompressor (Stimme drückt Musik weg), Grundpegel 30 %. Reels standardmäßig
+**ohne** Musik – auf Instagram/TikTok kommt der Sound lizenzsauber aus der Plattform-Bibliothek;
+Landscape (YouTube/Website) mit Musik. ElevenLabs-Music-API bräuchte am Key `music_generation`.

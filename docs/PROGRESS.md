@@ -154,3 +154,11 @@ Erledigt:
 - Smartphone-Mockup: Mitschnitt bekommt eine Rundeck-Alphamaske (alphamerge) und sitzt kleiner im Rahmen
   (880×1400 statt 940×1500), Rahmen 20 px statt 12 px – eckige Videoecken ragten an den runden Rahmenecken heraus.
   Geht per „Aufnahme wiederverwenden“ ohne Neuaufnahme.
+
+### Stimme & Musik, Phase 1+2 (27.08.)
+
+- Voiceover am Stück (ein Request, Pausen per Tag), Sprechregeln + v3-Audio-Tags im Skript-/Revise-Prompt,
+  Untertitel ohne Tags, stille Szenenenden gekappt, Musik-Ducking, Musik-Schalter (keine/nur Landscape/alle).
+- Platzhalter-Musikbett `assets/music/platzhalter-pad.mp3` (synthetisch, ersetzen!); MP3s dort sind gitignored.
+- Hörprobe F (v3 mit Tags) unter `/mp/hoerproben/index.html`. Key-Rechte für Music-API fehlen (`music_generation`).
+- Phase 3 offen: Lautheit −14 LUFS, UI-Sounds, Stabilität 0.3 vs 0.5 per Hörprobe.
