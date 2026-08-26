@@ -105,3 +105,10 @@ Erledigt:
 - Live-Beispiel Änderungswunsch: „Es gibt keinen Button ‚Neu‘ – der Button heißt ‚Material
   erstellen‘ …“ → Skript in 23 s angepasst, Neuaufnahme automatisch, Szenen-Check danach 2/5
   statt 5/5 Abweichungen; zweite Anweisung korrigierte Szene 3.
+- Recorder: Klick auf eine Feldbeschriftung ohne `<label for>` trifft jetzt das Feld darunter,
+  `type` ohne Ziel schreibt ins fokussierte Feld (Revise-Skripte trennen gern click + type).
+- **Offen (Skript-Entscheidung, nicht Code):** In Lehreule öffnet „Arbeitsblatt erstellen“ den
+  Dialog „KI-Aktion bestätigen · 3 Credits“. Das Demo-Skript klickt ihn nicht weg, deshalb zeigen
+  Szene 4/5 den Dialog statt des fertigen Blatts. Wer das echte Ergebnis im Video will, braucht
+  einen Klick auf „Ja, 3 Credits nutzen“ + ~2 Min Wartezeit je Aufnahme (kostet Demo-Credits,
+  Konto hat 12) – oder ein vorab erzeugtes Blatt, das Szene 5 per goto öffnet.
