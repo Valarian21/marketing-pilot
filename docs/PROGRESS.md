@@ -112,3 +112,13 @@ Erledigt:
   Szene 4/5 den Dialog statt des fertigen Blatts. Wer das echte Ergebnis im Video will, braucht
   einen Klick auf „Ja, 3 Credits nutzen“ + ~2 Min Wartezeit je Aufnahme (kostet Demo-Credits,
   Konto hat 12) – oder ein vorab erzeugtes Blatt, das Szene 5 per goto öffnet.
+
+### Qualitätsrunde Video (26.08., spät)
+
+- Ruckeln: zwei Ursachen behoben (30-fps-Schnitt einer 25-fps-Quelle; Wheel-Tick-Scrollen) → rAF-Scroll
+  + 25 fps; Prompt-Regel „nur scrollen, wenn nötig“.
+- Stimme: Modell/Settings per `.env`, Sprache fest, Satzkontext; Hörproben A–E an Marcel geschickt.
+- Credits dürfen laut Marcel verbraucht werden: Demo-Skript bestätigt „Ja, 3 Credits nutzen“, wartet per
+  `waitFor` auf „Drucken / als PDF“, Szene 5 zeigt das fertige Blatt; nur mobile Aufnahme (3 Credits je Render).
+- „Neu generieren“ auf Video-Stück löschte alle Dateien → jetzt Render-Job.
+- UI-Karte je Projekt aus den Aufnahmen; Prompts kennen `waitFor` und Bestätigungsdialoge.

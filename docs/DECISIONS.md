@@ -88,3 +88,23 @@ Geräte-Skalierung zurück – im Screencast erscheint die Seite dann als Miniat
 (sichtbar am Start jeder Szene). Die Standbilder werden deshalb nachträglich per ffmpeg aus dem
 webm gezogen (0,4 s vor Szenenende, auf 600 px Breite verkleinert). Nebeneffekt: die Aufnahme
 läuft ohne Unterbrechung, und das Bild entspricht exakt dem, was im Video zu sehen ist.
+
+## Video-Qualitätsrunde: 25 fps, rAF-Scrollen, waitFor, ElevenLabs-Modell (2026-08-26)
+
+- **25 fps statt 30.** Playwrights Screencast liefert fest 25 fps; ein 30-fps-Schnitt verdoppelt jedes
+  fünfte Bild – auf Scrolls sichtbar als Ruckeln. Instagram/TikTok/YouTube nehmen 25 fps an.
+- **Scrollen per requestAnimationFrame** im scrollbaren Container unter dem Cursor (Dialoge scrollen
+  in sich selbst) statt Wheel-Ticks: Chromiums Smooth-Scroll überlagerte 40 Ticks zu Stufen. Regel im
+  Prompt: nur scrollen, wenn etwas sichtbar werden muss, höchstens einmal je Szene.
+- **waitFor** (Ziel-Text, max. Wartezeit bis 240 s): Der Recorder wartet, bis die App fertig ist,
+  markiert die Zeit als Idle, der Schnitt entfernt sie wie einen Freeze (0,9 s bleiben). So passen
+  Voiceover („Fertig.“) und Bild (fertiges Blatt) zusammen, ohne dass 90 s Spinner auf Band liegen.
+- **ElevenLabs:** `eleven_multilingual_v2` nimmt keinen `language_code` und rät die Sprache je Satz
+  („Material“ englisch). Standard jetzt `eleven_turbo_v2_5` mit fester Sprache aus dem Skript,
+  neutrale Voice-Settings (style 0, kein Speaker-Boost – die alten Werte verfärbten die Stimme) und
+  `previous_text`/`next_text` als Satzkontext. Modell und Settings per `.env` umschaltbar; Marcel wählt
+  nach Hörproben (A–E im Chat vom 26.08.).
+- **UI-Karte** (`mp_settings` `ui-map:<projectId>`): sichtbare Button-/Link-/Feld-Beschriftungen
+  jeder Aufnahme fließen in Skript- und Revise-Prompt – der Agent rät keine Buttonnamen mehr.
+- **„Neu generieren“ bei Videos** startet einen Render-Job; der Studio-Pfad hatte Aufnahmen und
+  Renders gelöscht und nichts erzeugt (Vorfall 26.08., 19:14).
