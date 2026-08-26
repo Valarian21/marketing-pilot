@@ -220,3 +220,20 @@ export const mpStrategyPlans = sqliteTable("mp_strategy_plans", {
   note: text("note").notNull().default(""),
   createdAt: createdAt(),
 }, (t) => [index("mp_strategy_project").on(t.projectId)]);
+
+// --- Jobs (Shot 4) -----------------------------------------------------------
+
+/** Simple DB queue: the API enqueues, a separate worker process claims and runs jobs. */
+export const mpJobs = sqliteTable("mp_jobs", {
+  id: id(),
+  projectId: text("project_id").references(() => mpProjects.id, { onDelete: "cascade" }),
+  kind: text("kind").notNull(),
+  payload: text("payload").notNull().default("{}"),
+  status: text("status").notNull().default("queued"),
+  steps: text("steps").notNull().default("[]"),
+  result: text("result").notNull().default("{}"),
+  error: text("error"),
+  createdAt: createdAt(),
+  startedAt: text("started_at"),
+  finishedAt: text("finished_at"),
+}, (t) => [index("mp_jobs_status").on(t.status), index("mp_jobs_project").on(t.projectId)]);

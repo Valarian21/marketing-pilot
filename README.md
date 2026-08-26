@@ -105,6 +105,16 @@ Directory-Einträge (`POST …/directories/:slug/prepare`), GEO-Artikel mit HTML
 KI-generiert gekennzeichnet. Freigabe unter `/review`, Publish-Paket unter `/publish/:pieceId`
 (`GET /content/:id/package`). Postiz: `MP_PUBLISH_PROVIDER=postiz` + `POSTIZ_API_URL/KEY`.
 
+## Video-Fabrik (Shot 4)
+
+Zwei Prozesse: die API (`app-marketing-pilot`) stellt Render-Jobs in `mp_jobs` ein, der Worker
+(`app-marketing-pilot-worker`, `deploy/app-marketing-pilot-worker.service`, Start lokal:
+`node dist/server/src/server/worker.js`) nimmt Aufnahme (Playwright), Voiceover (ElevenLabs),
+Overlays und ffmpeg-Schnitt. Konfiguration: `MP_DEMO_BASE_URL`, `MP_DEMO_USER`, `MP_DEMO_PASSWORD`,
+`MP_DEMO_RESET_URL`, `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID`; Musik nach `assets/music/`.
+API: `POST …/video/script`, `PUT /content/:id/script`, `POST /content/:id/video/render`
+(`{variants, landscape}`), `GET /jobs/:id`. UI: `/mp/projects/:id/studio/video`.
+
 ## Freigabe-Stufen und Kennzeichnung
 
 Jede Aktion mit Außenwirkung trägt `auto | review | human_only` (Default `review`;

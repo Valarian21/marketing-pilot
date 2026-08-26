@@ -111,7 +111,19 @@ export function analysisRoutes(app: FastifyInstance, db: Db, getCtx: () => Pipel
     const dataDir = ctx?.dataDir ?? process.env["MP_DATA_DIR"] ?? "";
     const abs = path.resolve(dataDir, asset.path);
     if (!abs.startsWith(path.resolve(dataDir) + path.sep) || !fs.existsSync(abs)) return reply.code(404).send({ detail: "Datei fehlt." });
-    return reply.type(abs.endsWith(".png") ? "image/png" : "application/octet-stream").send(fs.createReadStream(abs));
+    const ext = path.extname(abs).toLowerCase();
+    const mime: Record<string, string> = { ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp", ".svg": "image/svg+xml", ".mp4": "video/mp4", ".webm": "video/webm", ".mp3": "audio/mpeg", ".html": "text/html; charset=utf-8" };
+    const type = mime[ext] ?? "application/octet-stream";
+    const size = fs.statSync(abs).size;
+    const range = /^bytes=(\d*)-(\d*)$/.exec(String(req.headers.range ?? ""));
+    reply.header("Accept-Ranges", "bytes").header("Content-Disposition", `inline; filename="${path.basename(abs)}"`);
+    if (range && size > 0) {
+      const start = range[1] ? parseInt(range[1], 10) : 0;
+      const end = range[2] ? Math.min(parseInt(range[2], 10), size - 1) : Math.min(start + 4 * 1024 * 1024, size - 1);
+      if (start >= size || start > end) return reply.code(416).header("Content-Range", `bytes */${size}`).send();
+      return reply.code(206).type(type).header("Content-Range", `bytes ${start}-${end}/${size}`).header("Content-Length", String(end - start + 1)).send(fs.createReadStream(abs, { start, end }));
+    }
+    return reply.type(type).header("Content-Length", String(size)).send(fs.createReadStream(abs));
   });
 
   r.get("/api/mp/projects/:projectId/pages/:id", { schema: { params: P.extend({ id: z.string() }), response: { 200: z.object({ id: z.string(), url: z.string(), title: z.string(), text: z.string() }), 404: s.ErrorBody } } }, async (req, reply) => {

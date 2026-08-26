@@ -1,0 +1,42 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`pure helpers > script prompt snapshot and readable body 1`] = `
+[
+  {
+    "content": "[task:video-script]
+Write a screen-recording DEMO SCRIPT for a 30-second vertical reel (and a landscape cut) of "Beispielwerk". Style: clean, templated, like a Screen Studio recording - not cinematic. One idea per scene.
+SCENES (4-7): each has
+- "voiceover": max 2 short sentences, first person, German, spoken in 3-6 seconds.
+- "caption": 2-6 words shown on screen (may be empty).
+- "actions": what the browser does during the scene, in order. Types: goto {url}, click {target}, type {target, text}, scroll {y}, hover {target}, wait {ms}, press {text = key name}. "target" is the visible text of a button/link, a placeholder/label of an input, or a CSS selector. Prefer visible text. Keep 1-3 actions per scene.
+- "durationMs": minimum dwell (2500-6000).
+The recording starts already LOGGED IN at https://demo.test (a demo account). Do not script the login.
+HOOKS: exactly 5 alternative opening lines for the first 2 seconds (max 8 words each, German), each a different angle: pain, number, contrast, question-free statement, outcome. No clickbait.
+CTA: one short sentence + the product URL.
+"devices": ["mobile"] for app-like products, ["desktop"] for wide dashboards, or both.
+WRITING RULES (mandatory):
+- First person, concrete, with numbers, screenshots and things that went wrong. One thought per post.
+- Write in German. Use the address form (du/Sie) from the brief's tone.
+- Forbidden: "In der heutigen schnelllebigen Welt", "Game-Changer", "Lass uns eintauchen", "revolutionär", "Es ist wichtig zu beachten", "In today's fast-paced world", "game changer", "Let's dive in", "revolutionary", "It's important to note", "unlock", "elevate", "seamless", "nahtlos"; a rhetorical question as opener followed by its answer; triple lists of staccato adjectives; emojis as bullets; hashtag walls; sentences starting with "It is important to note"; a closing summary of what was just said; em dashes as a stylistic tic.
+- No invented facts, testimonials or numbers. If a claim needs a number you do not have, leave a [PLATZHALTER: …] the human fills in.
+No voice profile yet: keep it plain and personal, avoid marketing register.
+Return JSON: {"title","goal","persona","devices":["mobile"|"desktop"],"language","hooks":[5 strings],"scenes":[{"id":"s1","voiceover","caption","actions":[{"type","url","target","text","y","ms"}],"durationMs"}],"cta":{"text","url"}}",
+    "role": "system",
+  },
+  {
+    "content": "TOPIC / TASK: Onboarding
+HINT: -
+BASE URL: https://demo.test
+
+BRIEF
+{"productName":"Beispielwerk","oneLiner":"Arbeitsblätter in Minuten.","category":"worksheet generator","language":"de","features":["Generator"],"pricing":[],"usp":["Lehrplan"],"tone":"Du","targetAudience":"Lehrkräfte","keywords":[],"sources":["https://beispielwerk.test/"]}
+
+PERSONA
+(none)
+
+KNOWN PAGES
+- https://x.test/ (home: Start)",
+    "role": "user",
+  },
+]
+`;

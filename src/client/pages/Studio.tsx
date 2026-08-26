@@ -38,6 +38,7 @@ export function StudioPage() {
       {noVoice && view.hasBrief && <Notice kind="warn">Kein Voice-Profil: Texte klingen dann generisch. Lade unter „Brand-Kit &amp; Stimme“ 5–20 eigene Texte hoch und leite das Profil ab.</Notice>}
       <nav className="mp-subnav" aria-label="Studio-Bereiche">
         {TABS.map((t) => <button key={t.id} type="button" className={`mp-subnav-item mp-linkbtn${tab === t.id ? " is-active" : ""}`} onClick={() => setParams({ tab: t.id })}>{t.label}</button>)}
+        <Link className="mp-subnav-item" to={`/projects/${id}/studio/video`}>Video-Fabrik</Link>
       </nav>
 
       {tab === "erstellen" && <CreateTab id={id} view={view} busy={busy} run={run} />}

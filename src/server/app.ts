@@ -17,18 +17,9 @@ import { analysisRoutes } from "./routes/analysis.js";
 import { strategyRoutes } from "./routes/strategy.js";
 import { taskRoutes } from "./routes/tasks.js";
 import { studioRoutes } from "./routes/studio.js";
-import { OpenRouterImageProvider } from "./providers/image.js";
-import { createPublishProvider } from "./providers/publish.js";
-import { MODEL_IMAGE } from "../../config/models.js";
-import type { ImageProvider, PublishProvider } from "./providers/index.js";
-import type { Renderer } from "./agents/studio/render.js";
-import type { BrandExtractor } from "./agents/studio/brandkit.js";
-import type { StudioContext } from "./agents/studio/generate.js";
-import { OpenRouterProvider } from "./providers/openrouter.js";
-import { createSearchProvider } from "./providers/search.js";
-import type { LlmProvider, SearchProvider } from "./providers/index.js";
-import type { Crawler } from "./agents/analysis/crawl.js";
-import { markStaleRuns, type PipelineContext } from "./agents/analysis/pipeline.js";
+import { videoRoutes } from "./routes/video.js";
+import { buildContext, type FullContext, type ServiceOverrides } from "./services.js";
+import { markStaleRuns } from "./agents/analysis/pipeline.js";
 
 declare module "fastify" {
   interface FastifyRequest { user: HostUser }
@@ -36,12 +27,8 @@ declare module "fastify" {
 
 const PUBLIC_API = ["/api/mp/health", "/api/mp/host"];
 
-export interface BuiltApp { app: FastifyInstance; db: Db; host: HostAdapter; ctx: (PipelineContext & StudioContext) | null; close: () => Promise<void> }
-
-export interface ServiceOverrides {
-  llm?: LlmProvider; search?: SearchProvider; crawler?: Crawler; geoEngines?: readonly string[]; geoCount?: number;
-  image?: ImageProvider | null; publish?: PublishProvider; renderer?: Renderer; brandExtractor?: BrandExtractor;
-}
+export interface BuiltApp { app: FastifyInstance; db: Db; host: HostAdapter; ctx: FullContext | null; close: () => Promise<void> }
+export type { ServiceOverrides };
 
 export async function buildApp(env: Env, opts: { host?: HostAdapter; dbFile?: string; logger?: boolean; services?: ServiceOverrides } = {}): Promise<BuiltApp> {
   const version = (JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8")) as { version: string }).version;
@@ -77,18 +64,7 @@ export async function buildApp(env: Env, opts: { host?: HostAdapter; dbFile?: st
   });
 
   // Agent services. Without an OpenRouter key the pipeline endpoints answer 503 instead of failing late.
-  const llm = opts.services?.llm ?? (env.OPENROUTER_API_KEY ? new OpenRouterProvider(env.OPENROUTER_API_KEY, { referer: env.MP_PUBLIC_BASE }) : null);
-  const search = opts.services?.search ?? createSearchProvider(env).provider;
-  const image = opts.services?.image !== undefined ? opts.services.image : (env.OPENROUTER_API_KEY ? new OpenRouterImageProvider(env.OPENROUTER_API_KEY, MODEL_IMAGE) : null);
-  const publish = opts.services?.publish ?? createPublishProvider(env);
-  const ctx: (PipelineContext & StudioContext) | null = llm ? {
-    db, env, llm, search, image, publish, dataDir: env.MP_DATA_DIR, log: (m) => app.log.info(m),
-    ...(opts.services?.crawler ? { crawler: opts.services.crawler } : {}),
-    ...(opts.services?.geoEngines ? { geoEngines: opts.services.geoEngines } : {}),
-    ...(opts.services?.geoCount ? { geoCount: opts.services.geoCount } : {}),
-    ...(opts.services?.renderer ? { renderer: opts.services.renderer } : {}),
-    ...(opts.services?.brandExtractor ? { brandExtractor: opts.services.brandExtractor } : {}),
-  } : null;
+  const ctx = buildContext(env, db, (m) => app.log.info(m), opts.services ?? {});
   const stale = markStaleRuns(db);
   if (stale) app.log.warn(`${stale} Analyse-Lauf/Läufe nach Neustart als abgebrochen markiert`);
 
@@ -100,6 +76,7 @@ export async function buildApp(env: Env, opts: { host?: HostAdapter; dbFile?: st
   strategyRoutes(app, db, () => ctx);
   taskRoutes(app, db, () => ctx);
   studioRoutes(app, db, () => ctx);
+  videoRoutes(app, db, () => ctx);
 
   // Client bundle under /mp/ (both host modes share the same URL space).
   const clientDir = path.join(ROOT, "dist/client");

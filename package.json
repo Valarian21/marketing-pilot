@@ -21,7 +21,9 @@
     "lint": "eslint .",
     "test": "vitest run",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "tsx src/server/db/migrate.ts"
+    "db:migrate": "tsx src/server/db/migrate.ts",
+    "start:worker": "node dist/server/src/server/worker.js",
+    "dev:worker": "tsx watch src/server/worker.ts"
   },
   "dependencies": {
     "@fastify/cookie": "^11.0.2",

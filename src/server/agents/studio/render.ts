@@ -8,7 +8,7 @@ import type { BrandKit, CarouselTemplate } from "../../../shared/schemas.js";
 import { markPng } from "../../util/png.js";
 
 export interface Slide { kind: "text" | "screenshot"; headline: string; body: string; imageDataUrl?: string; index: number; total: number }
-export interface RenderJob { html: string; width: number; height: number; file: string }
+export interface RenderJob { html: string; width: number; height: number; file: string; transparent?: boolean }
 export type Renderer = (jobs: RenderJob[]) => Promise<void>;
 
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -74,7 +74,7 @@ export const playwrightRenderer: Renderer = async (jobs) => {
       await page.evaluate(() => (document as Document & { fonts: { ready: Promise<unknown> } }).fonts.ready).catch(() => undefined);
       await page.waitForTimeout(250);
       fs.mkdirSync(path.dirname(job.file), { recursive: true });
-      await page.screenshot({ path: job.file, type: "png", clip: { x: 0, y: 0, width: job.width, height: job.height } });
+      await page.screenshot({ path: job.file, type: "png", clip: { x: 0, y: 0, width: job.width, height: job.height }, omitBackground: Boolean(job.transparent) });
       await page.close();
     }
   } finally {

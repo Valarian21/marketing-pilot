@@ -6,6 +6,7 @@ import { api } from "../api.js";
 import { Button, Card, Notice, PageHeader, Pill, type PillKind } from "../components/ui.js";
 import { ProjectNav } from "../components/ProjectNav.js";
 import { markdownToHtml } from "../../shared/markdown.js";
+import { VideoGallery } from "./Video.js";
 
 const STATUS: Record<ContentPiece["status"], { label: string; kind: PillKind }> = { draft: { label: "Entwurf", kind: "todo" }, review: { label: "in Freigabe", kind: "review" }, approved: { label: "freigegeben", kind: "done" }, published: { label: "veröffentlicht", kind: "done" }, rejected: { label: "abgelehnt", kind: "kind" } };
 
@@ -105,6 +106,9 @@ function Preview({ piece, text }: { piece: ContentPiece; text: string }) {
         {piece.format === "carousel" && <div className="mp-post"><p>{String(piece.meta["caption"] ?? "")}</p></div>}
       </div>
     );
+  }
+  if (piece.format === "video") {
+    return <div className="mp-preview"><VideoGallery piece={piece} /><p className="mp-small mp-muted">Skript und Varianten: <Link to={`/projects/${piece.projectId}/studio/video?piece=${piece.id}`}>Video-Fabrik</Link></p></div>;
   }
   if (piece.format === "article") {
     return <div className="mp-preview mp-article" dangerouslySetInnerHTML={{ __html: markdownToHtml(text) }} />;

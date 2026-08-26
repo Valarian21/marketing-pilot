@@ -11,6 +11,7 @@ import { SettingsPage } from "./pages/Settings.js";
 import { CommunityPage, InsightsPage } from "./pages/Placeholders.js";
 import { StudioPage } from "./pages/Studio.js";
 import { PublishPage } from "./pages/Publish.js";
+import { VideoPage } from "./pages/Video.js";
 import { StrategyPage } from "./pages/Strategy.js";
 import { TasksPage } from "./pages/Tasks.js";
 import { TimelinePage } from "./pages/Timeline.js";
@@ -34,6 +35,7 @@ function Gate() {
           <Route path="projects/:id/timeline" element={<TimelinePage />} />
           <Route path="projects/:id/review" element={<ReviewPage />} />
           <Route path="projects/:id/studio" element={<StudioPage />} />
+          <Route path="projects/:id/studio/video" element={<VideoPage />} />
           <Route path="projects/:id/publish/:pieceId" element={<PublishPage />} />
           <Route path="timeline" element={<ProjectScoped page="timeline" title="Timeline" />} />
           <Route path="tasks" element={<ProjectScoped page="tasks" title="Aufgaben" />} />

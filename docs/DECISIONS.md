@@ -52,3 +52,13 @@ Format: Datum · Entscheidung · Grund · Alternative, die verworfen wurde.
 - **Regenerieren behält die Stück-ID** (Verlauf in Audit + Aufgaben-`outputRefs` bleibt gültig), löscht alte Assets und setzt `humanEdited` zurück.
 - **Markdown-Renderer selbst geschrieben** (`shared/markdown.ts`, ~60 Zeilen) statt `marked`/`remark`: nur Überschriften, Absätze, Listen, Tabellen, Links, Code – reicht für Artikel und Vorschau, keine Sanitizer-Fragen, da nur eigene Modellausgabe gerendert wird.
 - **Postiz** optional; nur Text wird geplant (Bilder bleiben im manuellen Paket), weil der Upload-Pfad der Postiz-API je Version variiert.
+
+## 2026-08-26 (Shot 4)
+
+- **ffmpeg statt Remotion**: Remotion hätte ein zweites Chrome, ein Webpack-Bundle und deutlich mehr RAM (der Dienst läuft mit 1–2 GB Deckel) gebraucht. Die Vorteile (React-Templates, Tokens) holt sich der ffmpeg-Weg über HTML-Overlays, die Playwright rendert – dieselben Token-Templates wie Carousel und Pin. Zoom, Auto-Cut und Captions sind ffmpeg-Filter (`zoompan`, `freezedetect`, `overlay … enable`).
+- **Eigene Worker-Prozess statt BullMQ**: BullMQ braucht Redis; eine SQLite-Tabelle mit atomarem Claim reicht für einen Render zur Zeit und hält die Isolation (ein Prozess, eine DB). Der Worker hat einen eigenen Speicherdeckel, damit ein Render nie die API trifft.
+- **Playwright `recordVideo` statt CDP-Screencast**: robust, keine Frame-Synchronisation nötig; Zeitstempel kommen aus der Wanduhr relativ zum Seitenstart (±200 ms), was für Zoom-Fenster von 1,6 s reicht.
+- **Login außerhalb der Aufnahme**: Anmeldung läuft in einem separaten Kontext, der `storageState` wird in den aufgezeichneten Kontext übernommen – Zugangsdaten erscheinen nie im Video.
+- **Ohne ElevenLabs-Key trotzdem rendern**: Captions aus geschätztem Timing (≈ 2,6 Wörter/s), Hinweis am Stück. Sobald `ELEVENLABS_API_KEY`/`VOICE_ID` gesetzt sind, wird automatisch gesprochen.
+- **Provenance im MP4** nur als Container-Metadaten (`comment=AI-generated: true`) – c2pa gilt wie bei den Bildern als offen (nativer Build).
+- **Klick-Zoom pro Szene nur auf den ersten Klick**: mehrere Zooms pro 3–5-Sekunden-Szene wirken nervös.

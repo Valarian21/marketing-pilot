@@ -381,6 +381,55 @@ export const StudioView = z.object({
   competitors: z.array(z.string()),
 });
 
+// --- Video factory (Shot 4) --------------------------------------------------
+
+export const VideoDevice = z.enum(["mobile", "desktop"]);
+export const VideoAction = z.object({
+  type: z.enum(["goto", "click", "type", "scroll", "wait", "hover", "press"]),
+  url: z.string().optional(),
+  /** Visible text, aria name, placeholder/label, or a CSS selector. */
+  target: z.string().optional(),
+  text: z.string().optional(),
+  y: z.number().int().optional(),
+  ms: z.number().int().min(0).max(15000).optional(),
+});
+export const VideoScene = z.object({
+  id: z.string(),
+  voiceover: z.string(),
+  caption: z.string().default(""),
+  actions: z.array(VideoAction).default([]),
+  /** Minimum dwell time for the scene (ms) - recording pads to voiceover length anyway. */
+  durationMs: z.number().int().min(800).max(20000).default(3500),
+});
+export const VideoScript = z.object({
+  title: z.string(),
+  goal: z.string().default(""),
+  persona: z.string().default(""),
+  devices: z.array(VideoDevice).min(1).default(["mobile"]),
+  hooks: z.array(z.string()).min(1).max(8),
+  scenes: z.array(VideoScene).min(1).max(12),
+  cta: z.object({ text: z.string(), url: z.string() }),
+  language: z.string().default("de"),
+});
+export const VideoScriptRequest = z.object({ topic: z.string().default(""), hint: z.string().default(""), taskId: Id.nullable().optional(), devices: z.array(VideoDevice).optional() });
+export const VideoRenderRequest = z.object({ variants: z.number().int().min(1).max(5).default(3), landscape: z.boolean().default(true) });
+
+export const JobStatus = z.enum(["queued", "running", "done", "failed", "cancelled"]);
+export const JobStep = z.object({ name: z.string(), status: z.enum(["pending", "running", "done", "failed", "skipped"]), detail: z.string().default(""), startedAt: Iso.nullable().default(null), finishedAt: Iso.nullable().default(null) });
+export const Job = z.object({
+  id: Id, projectId: Id.nullable(), kind: z.string(), status: JobStatus,
+  payload: Json, steps: z.array(JobStep), result: Json, error: z.string().nullable(),
+  createdAt: Iso, startedAt: Iso.nullable(), finishedAt: Iso.nullable(),
+});
+export const VideoView = z.object({
+  pieces: z.array(ContentPiece),
+  jobs: z.array(Job),
+  demoConfigured: z.boolean(),
+  voiceConfigured: z.boolean(),
+  workerAlive: z.boolean(),
+  musicTracks: z.number().int(),
+});
+
 /** Shape of GET /api/mp/host - what the client needs to render the shell. */
 export const HostInfo = z.object({
   mode: z.enum(["dashboard", "standalone"]),
@@ -447,3 +496,11 @@ export type DirectoryDef = z.infer<typeof DirectoryDef>;
 export type DirectoryStatus = z.infer<typeof DirectoryStatus>;
 export type PublishPackage = z.infer<typeof PublishPackage>;
 export type StudioView = z.infer<typeof StudioView>;
+export type VideoAction = z.infer<typeof VideoAction>;
+export type VideoScene = z.infer<typeof VideoScene>;
+export type VideoScript = z.infer<typeof VideoScript>;
+export type VideoDevice = z.infer<typeof VideoDevice>;
+export type VideoScriptRequest = z.infer<typeof VideoScriptRequest>;
+export type Job = z.infer<typeof Job>;
+export type JobStep = z.infer<typeof JobStep>;
+export type VideoView = z.infer<typeof VideoView>;
