@@ -62,23 +62,30 @@ export const CURSOR_SCRIPT = `(() => {
 
 
 
-const FIELD_XPATH = 'xpath=following::*[self::textarea or self::input[not(@type="hidden")] or @contenteditable="true"][1]';
+const FIELD_XPATH = 'xpath=following::*[self::textarea or self::select or self::input[not(@type="hidden")] or @contenteditable="true"][1]';
 
 export async function findTarget(page: Page, target: string, kind: "click" | "type" = "click"): Promise<Locator | null> {
   const candidates: { loc: Locator; fieldBelow?: boolean }[] = [];
-  const add = (...locs: Locator[]) => { for (const loc of locs) candidates.push({ loc }); };
-  if (isSelector(target)) add(page.locator(target).first());
+  // hidden duplicates (other forms, closed panels) must not win: only visible matches, then the first of those
+  const vis = (l: Locator) => l.filter({ visible: true }).first();
+  const add = (...locs: Locator[]) => { for (const loc of locs) candidates.push({ loc: vis(loc) }); };
+  if (isSelector(target)) add(page.locator(target));
   else {
-    const re = new RegExp(target.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
-    if (kind === "type") {
-      // typing must land in a field: label/placeholder first, then the first field that follows the matching text
-      // (many forms show the field name as plain text above the textarea, without a <label for>)
-      add(page.getByLabel(re).first(), page.getByPlaceholder(re).first(), page.locator(`[aria-label*="${target}" i]`).first(), page.getByText(re).first().locator(FIELD_XPATH).first(), page.getByRole("textbox", { name: re }).first());
+    const esc = target.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    // exact caption first ("Fach" must not resolve to the heading "Klasse & Fach"), loose match as fallback
+    const exact = new RegExp(`^\\s*${esc}\\s*[*:]?\\s*$`, "i"), loose = new RegExp(esc, "i");
+    for (const re of [exact, loose]) {
+      if (kind === "type") {
+        // typing must land in a field: label/placeholder first, then the first field that follows the matching text
+        // (many forms show the field name as plain text above the textarea, without a <label for>)
+        add(page.getByLabel(re), page.getByPlaceholder(re), page.getByText(re).locator(FIELD_XPATH), page.getByRole("textbox", { name: re }));
+      }
+      // cheap CSS+text filters first (role queries walk the whole accessibility tree - seconds on big pages)
+      add(page.locator('button, [role="button"], a[href], [role="tab"], input[type="submit"], summary').filter({ hasText: re }), page.getByPlaceholder(re), page.getByLabel(re));
+      if (re === loose) add(page.locator(`[aria-label*="${target}" i], [title*="${target}" i]`), page.getByRole("button", { name: re }), page.getByRole("link", { name: re }));
+      // plain text last - and when that text is a field caption (a field sits right below it), the field is what the author meant
+      candidates.push({ loc: vis(page.getByText(re)), fieldBelow: true });
     }
-    // cheap CSS+text filters first (role queries walk the whole accessibility tree - seconds on big pages)
-    add(page.locator('button, [role="button"], a[href], [role="tab"], input[type="submit"], summary').filter({ hasText: re }).first(), page.getByPlaceholder(re).first(), page.getByLabel(re).first(), page.locator(`[aria-label*="${target}" i], [title*="${target}" i]`).first(), page.getByRole("button", { name: re }).first(), page.getByRole("link", { name: re }).first());
-    // plain text last - and when that text is a field caption (a field sits right below it), the field is what the author meant
-    candidates.push({ loc: page.getByText(re).first(), fieldBelow: true });
   }
   for (const { loc, fieldBelow } of candidates) {
     try {
@@ -115,7 +122,7 @@ export async function collectUiLabels(page: Page): Promise<string[]> {
 /** Contextual tips/toasts ("Tipp: …" with a × button) that products show on first use - close them, they hide the UI on tape. */
 async function dismissTips(page: Page): Promise<void> {
   try {
-    const tip = page.locator(':is(div, section, aside, p)').filter({ hasText: /^\s*(💡\s*)?Tipp:/ }).last();
+    const tip = page.locator(':is(div, section, aside, p)').filter({ hasText: /Tipp:/ }).last();
     if (!(await tip.count()) || !(await tip.isVisible())) return;
     const close = tip.locator('button, [role="button"], a').filter({ hasText: /^\s*[×✕✖x]\s*$/i }).first();
     if (await close.count()) { await close.click({ timeout: 1500 }).catch(() => undefined); await sleep(250); }
@@ -238,7 +245,7 @@ export const playwrightRecorder: Recorder = async (script, opts) => {
               if (!loc && a.type === "type" && !a.target) loc = await focusedField(page);   // "click caption, then type" - no target on the type step
               if (!loc && a.type === "type") {
                 // the script author guessed a label/selector that does not exist - the first visible empty text field is the best bet
-                const fallback = page.locator('textarea:visible, input[type="text"]:visible, input[type="search"]:visible, input:not([type]):visible, [contenteditable="true"]:visible').first();
+                const fallback = page.locator('textarea:visible, select:visible, input[type="text"]:visible, input[type="search"]:visible, input:not([type]):visible, [contenteditable="true"]:visible').first();
                 if (await fallback.count() > 0) { loc = fallback; warnings.push(`Szene ${scene.id}: ${a.target ? `Ziel „${a.target}“ nicht gefunden` : "type ohne Ziel und ohne fokussiertes Feld"} – erstes sichtbares Textfeld genutzt`); }
               }
               if (!loc) throw new Error(`Ziel nicht gefunden: ${a.target ?? "(leer)"}`);
@@ -257,7 +264,12 @@ export const playwrightRecorder: Recorder = async (script, opts) => {
                 await sleep(200);
                 // <select>: pick the option by its visible text (typing would only be Chrome's type-ahead); text fields: replace, don't append
                 const tag = await loc.evaluate((el) => el.tagName.toLowerCase()).catch(() => "");
-                if (tag === "select") { await loc.selectOption({ label: a.text ?? "" }).catch(async () => { await loc.selectOption(a.text ?? "").catch(() => undefined); }); }
+                if (tag === "select") {
+                  const want = (a.text ?? "").trim().toLowerCase();
+                  const value = await loc.evaluate((el, w) => { const o = Array.from((el as HTMLSelectElement).options).find((x) => x.text.trim().toLowerCase() === w) ?? Array.from((el as HTMLSelectElement).options).find((x) => x.text.trim().toLowerCase().includes(w)); return o ? o.value : null; }, want).catch(() => null);
+                  if (value === null) throw new Error(`Option „${a.text ?? ""}“ nicht in der Auswahlliste`);
+                  await loc.selectOption(value);
+                }
                 else { await loc.evaluate((el) => { const f = el as HTMLInputElement; if (typeof f.select === "function" && f.value) f.select(); }).catch(() => undefined); await page.keyboard.type(a.text ?? "", { delay: 55 }); }
               }
               await page.waitForLoadState("networkidle", { timeout: 1_500 }).catch(() => undefined);

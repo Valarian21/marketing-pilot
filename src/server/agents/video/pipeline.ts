@@ -119,7 +119,7 @@ export const renderVideoJob: JobHandler<VideoContext> = async (ctx, job, progres
     try {
       for (const sc of script.scenes) {
         const r = rec.scenes.find((x) => x.id === sc.id);
-        if (r && !r.shot && !r.error) {
+        if (r && !r.shot) {
           // still from the recording ~0.4 s before the scene ends (after its actions settled), downscaled for the vision model
           const shot = path.join(outDir, `scene-${rec.device}-${sc.id}.png`);
           const at = Math.max(r.startMs, r.endMs - 400) / 1000;
