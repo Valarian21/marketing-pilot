@@ -72,5 +72,7 @@ Erledigt:
 - **Varianten**: je Hook ein Reel (Standard 3) + ein Landscape-Schnitt 1920×1080 aus der Desktop-Aufnahme.
 - **Job-Queue** (`jobs.ts`, Tabelle `mp_jobs`) + **Worker-Prozess** (`worker.ts`, systemd `app-marketing-pilot-worker`, MemoryMax 3G): API stellt ein, Worker rendert; Herzschlag in `mp_settings`, UI warnt, wenn der Worker steht; abgebrochene Jobs werden beim Neustart markiert.
 - UI `/mp/projects/:id/studio/video`: Skript-Editor (Ziel, Geräte, CTA, Hooks, Szenen mit Aktionen), „Aufnehmen und rendern“, Fortschritt je Schritt, Galerie mit Playern; Freigabe zeigt Videos mit Player; Asset-Endpoint streamt mit Range-Requests.
-- 60 Tests.
+- 57 Tests.
+
+Live-Test an **Lehreule** (2026-08-26, ohne Demo-Login und ohne ElevenLabs-Key): Skript-Agent in 14 s (4 Szenen über die öffentliche Landingpage, 5 Hooks, CTA), Render-Job 260 s (Mobile + Desktop-Aufnahme 21 s, 111 Overlays, 2 Reels 1080×1920 + Landscape 1920×1080, je 27,6 s, H.264/AAC mit `AI-generated`-Metadaten, Thumbnails). Drei Live-Bugs behoben: ffmpeg-OOM (→ dreistufiger Schnitt), Mobile-Video nur in der Ecke (→ `--force-device-scale-factor=3`), Cookie-Banner im Bild (→ Consent-Dismiss beim Recording). Für Aufnahmen *in* der App fehlen `MP_DEMO_BASE_URL/USER/PASSWORD`, für Sprache `ELEVENLABS_API_KEY/VOICE_ID`.
 ## Shot 5 – Community-Radar, Insights, Wochen-Loop: offen
