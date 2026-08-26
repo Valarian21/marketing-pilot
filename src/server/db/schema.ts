@@ -16,6 +16,8 @@ export const mpProjects = sqliteTable("mp_projects", {
   url: text("url").notNull(),
   status: text("status").notNull().default("draft"),
   brief: text("brief").notNull().default("{}"),
+  briefMeta: text("brief_meta").notNull().default("{}"),
+  briefMarkdown: text("brief_markdown").notNull().default(""),
   brandKit: text("brand_kit").notNull().default("{}"),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
@@ -28,7 +30,11 @@ export const mpPersonas = sqliteTable("mp_personas", {
   description: text("description").notNull().default(""),
   painPoints: text("pain_points").notNull().default("[]"),
   language: text("language").notNull().default("de"),
+  phrases: text("phrases").notNull().default("[]"),
+  objections: text("objections").notNull().default("[]"),
+  buyingTriggers: text("buying_triggers").notNull().default("[]"),
   whereTheyHangOut: text("where_they_hang_out").notNull().default("[]"),
+  evidence: text("evidence").notNull().default("[]"),
   createdAt: createdAt(),
 }, (t) => [index("mp_personas_project").on(t.projectId)]);
 
@@ -40,6 +46,7 @@ export const mpChannels = sqliteTable("mp_channels", {
   cadence: text("cadence").notNull().default(""),
   priority: integer("priority").notNull().default(0),
   status: text("status").notNull().default("planned"),
+  meta: text("meta").notNull().default("{}"),
   createdAt: createdAt(),
 }, (t) => [index("mp_channels_project").on(t.projectId)]);
 
@@ -79,12 +86,13 @@ export const mpContentPieces = sqliteTable("mp_content_pieces", {
 
 export const mpAssets = sqliteTable("mp_assets", {
   id: id(),
-  contentPieceId: text("content_piece_id").notNull().references(() => mpContentPieces.id, { onDelete: "cascade" }),
+  contentPieceId: text("content_piece_id").references(() => mpContentPieces.id, { onDelete: "cascade" }),
+  projectId: text("project_id").references(() => mpProjects.id, { onDelete: "cascade" }),
   kind: text("kind").notNull(),
   path: text("path").notNull(),
   meta: text("meta").notNull().default("{}"),
   createdAt: createdAt(),
-}, (t) => [index("mp_assets_piece").on(t.contentPieceId)]);
+}, (t) => [index("mp_assets_piece").on(t.contentPieceId), index("mp_assets_project").on(t.projectId)]);
 
 export const mpInsights = sqliteTable("mp_insights", {
   id: id(),
@@ -106,8 +114,9 @@ export const mpGeoSnapshots = sqliteTable("mp_geo_snapshots", {
   position: integer("position"),
   competitorsMentioned: text("competitors_mentioned").notNull().default("[]"),
   rawAnswer: text("raw_answer").notNull().default(""),
+  batch: text("batch").notNull().default(""),
   takenAt: text("taken_at").notNull(),
-}, (t) => [index("mp_geo_project").on(t.projectId)]);
+}, (t) => [index("mp_geo_project").on(t.projectId), index("mp_geo_batch").on(t.batch)]);
 
 export const mpCommunityLeads = sqliteTable("mp_community_leads", {
   id: id(),
@@ -154,3 +163,38 @@ export const mpSettings = sqliteTable("mp_settings", {
   value: text("value").notNull(),
   updatedAt: updatedAt(),
 });
+
+// --- Analysis (Shot 1) -------------------------------------------------------
+
+export const mpCompetitors = sqliteTable("mp_competitors", {
+  id: id(),
+  projectId: projectRef(),
+  name: text("name").notNull(),
+  url: text("url").notNull(),
+  positioning: text("positioning").notNull().default(""),
+  pricing: text("pricing").notNull().default(""),
+  complaints: text("complaints").notNull().default("[]"),
+  createdAt: createdAt(),
+}, (t) => [index("mp_competitors_project").on(t.projectId)]);
+
+/** Crawled pages of the product site (text kept for later steps, e.g. brand kit). */
+export const mpPages = sqliteTable("mp_pages", {
+  id: id(),
+  projectId: projectRef(),
+  url: text("url").notNull(),
+  title: text("title").notNull().default(""),
+  kind: text("kind").notNull().default("other"),
+  status: integer("status").notNull().default(0),
+  text: text("text").notNull().default(""),
+  fetchedAt: text("fetched_at").notNull(),
+}, (t) => [index("mp_pages_project").on(t.projectId)]);
+
+export const mpAnalysisRuns = sqliteTable("mp_analysis_runs", {
+  id: id(),
+  projectId: projectRef(),
+  status: text("status").notNull().default("running"),
+  steps: text("steps").notNull().default("[]"),
+  startedAt: text("started_at").notNull(),
+  finishedAt: text("finished_at"),
+  error: text("error"),
+}, (t) => [index("mp_analysis_project").on(t.projectId)]);

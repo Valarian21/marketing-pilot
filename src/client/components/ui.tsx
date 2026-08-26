@@ -1,7 +1,7 @@
 /** Small token-driven building blocks. No colours here - only classes from app.css. */
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 
-export function PageHeader({ label, title, actions }: { label?: string; title: string; actions?: ReactNode }) {
+export function PageHeader({ label, title, actions }: { label?: ReactNode; title: string; actions?: ReactNode }) {
   return (
     <header className="mp-page-header">
       <div>

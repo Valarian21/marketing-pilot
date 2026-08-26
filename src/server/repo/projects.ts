@@ -28,7 +28,7 @@ export function createProject(db: Db, input: ProjectCreate): Project {
   const ts = nowIso();
   const row: Row = {
     id: newId(), name: input.name, url: input.url, status: "draft",
-    brief: "{}", brandKit: "{}", createdAt: ts, updatedAt: ts,
+    brief: "{}", briefMeta: "{}", briefMarkdown: "", brandKit: "{}", createdAt: ts, updatedAt: ts,
   };
   db.insert(mpProjects).values(row).run();
   return toDomain(row);

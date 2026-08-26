@@ -43,18 +43,32 @@ export const ProjectUpdate = ProjectCreate.partial().extend({
   brandKit: Json.optional(),
 });
 
+export const Evidence = z.object({ claim: z.string(), quote: z.string(), url: z.string() });
 export const Persona = z.object({
   id: Id, projectId: Id,
   name: z.string(), description: z.string(),
   painPoints: z.array(z.string()), language: z.string(),
+  /** Real phrasings taken from sources (how this persona talks about the problem). */
+  phrases: z.array(z.string()),
+  objections: z.array(z.string()),
+  buyingTriggers: z.array(z.string()),
   whereTheyHangOut: z.array(z.string()),
+  evidence: z.array(Evidence),
   createdAt: Iso,
 });
 
+export const ChannelMeta = z.object({
+  format: z.string().default(""),
+  reach: z.string().default(""),
+  costEstimate: z.string().default(""),
+  effort: z.string().default(""),
+  evidenceRefs: z.array(z.string()).default([]),
+});
 export const Channel = z.object({
   id: Id, projectId: Id,
   platform: z.string(), rationale: z.string(), cadence: z.string(),
   priority: z.number().int(), status: z.string(),
+  meta: ChannelMeta,
   createdAt: Iso,
 });
 
@@ -77,7 +91,8 @@ export const ContentPiece = z.object({
 });
 
 export const Asset = z.object({
-  id: Id, contentPieceId: Id, kind: AssetKind, path: z.string(), meta: Json, createdAt: Iso,
+  id: Id, contentPieceId: Id.nullable(), projectId: Id.nullable(),
+  kind: AssetKind, path: z.string(), meta: Json, createdAt: Iso,
 });
 
 export const Insight = z.object({
@@ -111,6 +126,86 @@ export const AuditEntry = z.object({
   entityType: z.string(), entityId: z.string().nullable(), content: Json, createdAt: Iso,
 });
 
+// --- Analysis (Shot 1) -------------------------------------------------------
+
+export const PricePlan = z.object({ plan: z.string(), price: z.string(), notes: z.string().default("") });
+/** Product brief - structured output of the analysis, editable by the user. */
+export const Brief = z.object({
+  productName: z.string(),
+  oneLiner: z.string(),
+  category: z.string(),
+  language: z.string(),
+  features: z.array(z.string()),
+  pricing: z.array(PricePlan),
+  usp: z.array(z.string()),
+  tone: z.string(),
+  targetAudience: z.string(),
+  keywords: z.array(z.string()),
+  sources: z.array(z.string()),
+});
+export const BriefPatch = Brief.partial();
+export const BriefMeta = z.object({
+  generatedAt: Iso.nullable().default(null),
+  model: z.string().nullable().default(null),
+  userEdited: z.boolean().default(false),
+  editedFields: z.array(z.string()).default([]),
+  editedAt: Iso.nullable().default(null),
+  confirmedAt: Iso.nullable().default(null),
+});
+
+export const Complaint = z.object({ text: z.string(), quote: z.string(), source: z.string(), url: z.string() });
+export const Competitor = z.object({
+  id: Id, projectId: Id,
+  name: z.string(), url: z.string(), positioning: z.string(), pricing: z.string(),
+  complaints: z.array(Complaint),
+  createdAt: Iso,
+});
+
+export const PageKind = z.enum(["home", "pricing", "features", "docs", "changelog", "about", "blog", "appstore", "github", "other"]);
+export const CrawlPage = z.object({
+  id: Id, projectId: Id, url: z.string(), title: z.string(), kind: PageKind,
+  status: z.number().int(), textLength: z.number().int(), fetchedAt: Iso,
+});
+
+export const AnalysisStepName = z.enum(["crawl", "brief", "competitors", "personas", "attention", "geo"]);
+export const AnalysisStepStatus = z.enum(["pending", "running", "done", "failed", "skipped"]);
+export const AnalysisStep = z.object({
+  name: AnalysisStepName,
+  status: AnalysisStepStatus,
+  startedAt: Iso.nullable(),
+  finishedAt: Iso.nullable(),
+  error: z.string().nullable(),
+  summary: z.string(),
+  runId: z.string().nullable(),
+});
+export const AnalysisRun = z.object({
+  id: Id, projectId: Id,
+  status: RunStatus,
+  steps: z.array(AnalysisStep),
+  startedAt: Iso, finishedAt: Iso.nullable(), error: z.string().nullable(),
+});
+export const AnalysisStart = z.object({ from: AnalysisStepName.optional() });
+
+export const GeoModelStat = z.object({ model: z.string(), asked: z.number().int(), mentioned: z.number().int() });
+export const AnalysisView = z.object({
+  run: AnalysisRun.nullable(),
+  brief: Brief.nullable(),
+  briefMeta: BriefMeta,
+  briefMarkdown: z.string(),
+  personas: z.array(Persona),
+  channels: z.array(Channel),
+  competitors: z.array(Competitor),
+  pages: z.array(CrawlPage),
+  screenshots: z.array(Asset),
+  geo: z.object({
+    snapshots: z.array(GeoSnapshot),
+    models: z.array(z.string()),
+    visibility: z.number().nullable(),
+    perModel: z.array(GeoModelStat),
+    batch: z.string().nullable(),
+  }),
+});
+
 /** Shape of GET /api/mp/host - what the client needs to render the shell. */
 export const HostInfo = z.object({
   mode: z.enum(["dashboard", "standalone"]),
@@ -142,3 +237,16 @@ export type CommunityLead = z.infer<typeof CommunityLead>;
 export type AgentRun = z.infer<typeof AgentRun>;
 export type AuditEntry = z.infer<typeof AuditEntry>;
 export type HostInfo = z.infer<typeof HostInfo>;
+export type Evidence = z.infer<typeof Evidence>;
+export type ChannelMeta = z.infer<typeof ChannelMeta>;
+export type Brief = z.infer<typeof Brief>;
+export type BriefPatch = z.infer<typeof BriefPatch>;
+export type BriefMeta = z.infer<typeof BriefMeta>;
+export type Complaint = z.infer<typeof Complaint>;
+export type Competitor = z.infer<typeof Competitor>;
+export type CrawlPage = z.infer<typeof CrawlPage>;
+export type PageKind = z.infer<typeof PageKind>;
+export type AnalysisStepName = z.infer<typeof AnalysisStepName>;
+export type AnalysisStep = z.infer<typeof AnalysisStep>;
+export type AnalysisRun = z.infer<typeof AnalysisRun>;
+export type AnalysisView = z.infer<typeof AnalysisView>;

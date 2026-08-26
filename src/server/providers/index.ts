@@ -10,7 +10,7 @@ export interface LlmUsage { tokensIn: number; tokensOut: number; costUsd: number
 export interface LlmResult { text: string; model: string; usage: LlmUsage }
 export interface LlmProvider {
   /** Chat completion through OpenRouter. `model` is a full OpenRouter id. */
-  chat(model: string, messages: LlmMessage[], opts?: { temperature?: number; json?: boolean }): Promise<LlmResult>;
+  chat(model: string, messages: LlmMessage[], opts?: { temperature?: number; json?: boolean; maxTokens?: number }): Promise<LlmResult>;
 }
 
 export interface ImageRequest { prompt: string; width: number; height: number; negative?: string }

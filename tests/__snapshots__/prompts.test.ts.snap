@@ -1,0 +1,202 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`analysis prompts (snapshots) > attention map 1`] = `
+[
+  {
+    "content": "[task:attention-map]
+Rank marketing channels for "Beispielwerk" by REACHABILITY OF THE PERSONAS with a budget of 0-300 € per month and one founder's time. Think: where do these personas already pay attention, where do competitor complaints create openings, what can a solo founder sustain.
+Return 6-10 channels, best first, JSON: {"channels":[{"platform","rank","format","cadence","reach","costEstimate","effort","rationale","evidenceRefs":[]}]}
+- "platform": e.g. "Reddit r/lehrerzimmer", "Instagram Reels", "Directories (AlternativeTo, Product Hunt)", "SEO/GEO comparison pages", "YouTube Shorts", "Newsletter sponsorships".
+- "rationale": 2-3 sentences that explicitly reference persona names and competitor complaints from the input.
+- "evidenceRefs": names of personas/competitors the rationale relies on.
+- "reach": qualitative estimate for THIS audience, "costEstimate": € per month, "effort": hours per week.
+Exclude anything that automates engagement (mass DMs, follow/unfollow, bots). Write free text in German.",
+    "role": "system",
+  },
+  {
+    "content": "BRIEF: Erstellt Arbeitsblätter in Minuten.
+Audience: Lehrkräfte an Grundschulen
+USP: Lehrplan-Bezug
+
+PERSONAS
+- Grundschullehrerin: pains Sonntagabend Vorbereitung | hangouts r/lehrerzimmer
+
+COMPETITOR COMPLAINTS
+- RivalTool: Zu teuer",
+    "role": "user",
+  },
+]
+`;
+
+exports[`analysis prompts (snapshots) > brief 1`] = `
+[
+  {
+    "content": "[task:brief]
+You are a senior product marketer. From the crawled pages of a software product, write a precise PRODUCT BRIEF as JSON.
+Rules:
+- Only state what the pages support. No invented features or prices. Empty array when unknown.
+- "oneLiner": the core benefit in ONE sentence, from the user's perspective, no marketing fluff.
+- "targetAudience": how the product itself describes its users (quote-like, not your guess).
+- "tone": 1-2 sentences describing the product's own voice (formal/informal, du/Sie, humour, jargon).
+- "category": a short generic product category in English (e.g. "worksheet generator for teachers") - used for web searches.
+- "language": ISO code of the product's primary language (de, en, ...).
+- "keywords": 8-15 search phrases prospects would type, in the product's language.
+- "sources": the URLs you actually used.
+Write all free-text fields in the product's own language.
+Return JSON: {"productName","oneLiner","category","language","features":[],"pricing":[{"plan","price","notes"}],"usp":[],"tone","targetAudience","keywords":[],"sources":[]}",
+    "role": "system",
+  },
+  {
+    "content": "Product URL: https://example.test
+
+### [home] Start
+URL: https://example.test/
+Hallo Welt",
+    "role": "user",
+  },
+]
+`;
+
+exports[`analysis prompts (snapshots) > competitor candidates 1`] = `
+[
+  {
+    "content": "[task:competitor-candidates]
+You identify DIRECT competitors of a software product: tools a prospect would realistically compare it with (same job, similar audience). Exclude the product itself, generic platforms (Canva, Google Docs) unless they are the real alternative, listicles, agencies and news sites.
+Use the search results as evidence; you may add well-known competitors you are certain exist, each with its real homepage URL.
+Return 5-10 competitors as JSON: {"competitors":[{"name","url","why"}]} - "why" is one sentence in German.",
+    "role": "system",
+  },
+  {
+    "content": "Product: Beispielwerk - Erstellt Arbeitsblätter in Minuten.
+Category: worksheet generator for teachers
+Audience: Lehrkräfte an Grundschulen
+
+Search results:
+1. Rival
+   https://rival.test
+   Rival tool",
+    "role": "user",
+  },
+]
+`;
+
+exports[`analysis prompts (snapshots) > competitor detail 1`] = `
+[
+  {
+    "content": "[task:competitor-detail]
+Profile one competitor of "Beispielwerk" from its own website and from review/discussion pages.
+- "positioning": 2-3 sentences - who it is for and how it sells itself.
+- "pricing": concise, with numbers if present ("Free; Pro 9 €/month"), else "unbekannt".
+- "complaints": the 5 most frequent complaints users voice about it. Each with "text" (the complaint, paraphrased), "quote" (a verbatim snippet from a source, max 200 chars, empty if none), "source" (site name, e.g. "Reddit", "G2", "App Store"), "url" (the source URL you took it from). Only complaints you can actually see in the sources; fewer than 5 is fine. Never invent quotes.
+Write free text in German. Return JSON: {"positioning","pricing","complaints":[{"text","quote","source","url"}]}",
+    "role": "system",
+  },
+  {
+    "content": "Competitor: RivalTool (https://rival.test)
+
+--- WEBSITE
+Website text
+
+--- SOURCE https://reddit.test/x
+viel zu teuer",
+    "role": "user",
+  },
+]
+`;
+
+exports[`analysis prompts (snapshots) > geo judge 1`] = `
+[
+  {
+    "content": "[task:geo-judge]
+You evaluate chatbot answers for brand visibility. Product: "Beispielwerk" (https://example.test). Known competitors: RivalTool.
+For EACH engine answer decide: "mentioned" - is the product named (name or domain, any spelling)? "position" - its rank among recommended tools in that answer (1 = first named), null if not mentioned or answer has no list. "competitorsMentioned" - which tools/brands are recommended (from the known list AND any other product names in the answer).
+Return JSON: {"results":[{"engine","mentioned","position","competitorsMentioned":[]}]} with exactly one entry per engine, same engine ids as given.",
+    "role": "system",
+  },
+  {
+    "content": "QUESTION: Bestes Tool?
+
+=== ENGINE m1
+RivalTool ist gut.",
+    "role": "user",
+  },
+]
+`;
+
+exports[`analysis prompts (snapshots) > geo questions 1`] = `
+[
+  {
+    "content": "[task:geo-questions]
+Generate 25 questions with BUYING INTENT that these personas would type into an AI chatbot (ChatGPT, Claude, Gemini, Perplexity) when looking for a tool like "Beispielwerk". Mix: "best tool for …", "X vs Y", "is there an app that …", "how do I … quickly", price questions, "alternatives to <competitor>". Use the personas' own wording and language. Do NOT mention "Beispielwerk" in the questions.
+Return JSON: {"questions":[{"question","persona","intent"}]} where intent is one of "discover","compare","price","alternative","howto".",
+    "role": "system",
+  },
+  {
+    "content": "Product: Erstellt Arbeitsblätter in Minuten.
+Category: worksheet generator for teachers
+Competitors known: (see personas)
+
+PERSONAS
+- Grundschullehrerin (de): Sonntagabend Vorbereitung | phrases: ich sitze jeden Sonntag",
+    "role": "user",
+  },
+]
+`;
+
+exports[`analysis prompts (snapshots) > personas 1`] = `
+[
+  {
+    "content": "[task:personas]
+Build 2-4 buyer personas for "Beispielwerk". Ground every persona in the material: the product's own audience description, competitor complaints (these reveal what people struggle with) and the pages.
+Per persona:
+- "name": short role label (e.g. "Grundschullehrerin mit Doppelbelastung"), "description": 2-3 sentences.
+- "language": ISO code they write in.
+- "phrases": 4-8 REAL formulations from the sources - how they describe the problem in their own words (verbatim or near-verbatim, not marketing copy).
+- "painPoints": 3-6 concrete pains. "objections": 2-4 reasons they hesitate to buy. "buyingTriggers": 2-4 moments that make them act.
+- "whereTheyHangOut": specific places - subreddits (r/...), forums, Discord servers, YouTube channels, hashtags, newsletters, Facebook groups. Name them concretely; mark guesses with "(vermutet)".
+- "evidence": 3-6 items {"claim","quote","url"} linking statements to the sources above.
+Write free text in German. Return JSON: {"personas":[{"name","description","language","phrases":[],"painPoints":[],"objections":[],"buyingTriggers":[],"whereTheyHangOut":[],"evidence":[{"claim","quote","url"}]}]}",
+    "role": "system",
+  },
+  {
+    "content": "BRIEF
+{
+ "productName": "Beispielwerk",
+ "oneLiner": "Erstellt Arbeitsblätter in Minuten.",
+ "category": "worksheet generator for teachers",
+ "language": "de",
+ "features": [
+  "Generator",
+  "Export als PDF"
+ ],
+ "pricing": [
+  {
+   "plan": "Free",
+   "price": "0 €",
+   "notes": "15 Credits"
+  }
+ ],
+ "usp": [
+  "Lehrplan-Bezug"
+ ],
+ "tone": "Du, freundlich",
+ "targetAudience": "Lehrkräfte an Grundschulen",
+ "keywords": [
+  "arbeitsblatt generator"
+ ],
+ "sources": [
+  "https://example.test/"
+ ]
+}
+
+COMPETITORS
+- RivalTool: Alles für alle.
+  complaints: "Zu teuer" (Reddit https://reddit.test/x)
+
+PAGES
+### home https://example.test/
+Hallo",
+    "role": "user",
+  },
+]
+`;

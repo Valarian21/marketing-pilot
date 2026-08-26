@@ -22,11 +22,12 @@ export function domainRoutes(app: FastifyInstance, db: Db): void {
 
   r.get("/api/mp/projects/:projectId/personas", { schema: { params: P, response: { 200: z.array(s.Persona) } } },
     async (req) => db.select().from(t.mpPersonas).where(eq(t.mpPersonas.projectId, req.params.projectId)).all()
-      .map((x) => ({ ...x, painPoints: arr(x.painPoints), whereTheyHangOut: arr(x.whereTheyHangOut) })));
+      .map((x) => ({ ...x, painPoints: arr(x.painPoints), whereTheyHangOut: arr(x.whereTheyHangOut), phrases: arr(x.phrases),
+        objections: arr(x.objections), buyingTriggers: arr(x.buyingTriggers), evidence: parseJson<s.Evidence[]>(x.evidence, []) })));
 
   r.get("/api/mp/projects/:projectId/channels", { schema: { params: P, response: { 200: z.array(s.Channel) } } },
     async (req) => db.select().from(t.mpChannels).where(eq(t.mpChannels.projectId, req.params.projectId))
-      .orderBy(t.mpChannels.priority).all());
+      .orderBy(t.mpChannels.priority).all().map((x) => ({ ...x, meta: s.ChannelMeta.parse(obj(x.meta)) })));
 
   r.get("/api/mp/projects/:projectId/tasks", { schema: { params: P, response: { 200: z.array(s.Task) } } },
     async (req) => db.select().from(t.mpTasks).where(eq(t.mpTasks.projectId, req.params.projectId))
@@ -61,7 +62,6 @@ export function domainRoutes(app: FastifyInstance, db: Db): void {
 
   // Write paths that later shots implement. Listed explicitly so nothing 404s by accident.
   const pending: [string, number][] = [
-    ["/api/mp/projects/:projectId/analysis/run", 1],
     ["/api/mp/projects/:projectId/strategy/run", 2],
     ["/api/mp/projects/:projectId/tasks", 2],
     ["/api/mp/projects/:projectId/content", 3],

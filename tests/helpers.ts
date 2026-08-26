@@ -20,7 +20,7 @@ export function fakeHost(opts: { token?: string } = {}): HostAdapter {
 }
 
 export async function testApp(): Promise<{ app: FastifyInstance; close: () => Promise<void>; auth: Record<string, string> }> {
-  const env = loadEnv({ MP_STANDALONE: "false", MP_DATA_DIR: "./data/test" });
+  const env = loadEnv({ MP_STANDALONE: "false", MP_DATA_DIR: "./data/test", OPENROUTER_API_KEY: "" });
   const built = await buildApp(env, { host: fakeHost(), dbFile: ":memory:", logger: false });
   return { app: built.app, close: built.close, auth: { authorization: "Bearer test-token" } };
 }

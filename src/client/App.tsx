@@ -5,6 +5,7 @@ import { Notice } from "./components/ui.js";
 import { LoginPage } from "./pages/Login.js";
 import { ProjectsPage } from "./pages/Projects.js";
 import { ProjectDetailPage } from "./pages/ProjectDetail.js";
+import { AnalysisPage } from "./pages/Analysis.js";
 import { ActivityPage } from "./pages/Activity.js";
 import { SettingsPage } from "./pages/Settings.js";
 import { CommunityPage, InsightsPage, ReviewPage, StudioPage, TasksPage, TimelinePage } from "./pages/Placeholders.js";
@@ -20,6 +21,7 @@ function Gate() {
         <Route element={<Shell />}>
           <Route index element={<ProjectsPage />} />
           <Route path="projects/:id" element={<ProjectDetailPage />} />
+          <Route path="projects/:id/analysis" element={<AnalysisPage />} />
           <Route path="timeline" element={<TimelinePage />} />
           <Route path="tasks" element={<TasksPage />} />
           <Route path="studio" element={<StudioPage />} />

@@ -77,6 +77,16 @@ docs/                   HOST.md, DECISIONS.md, PROGRESS.md
 data/                   mp.db, Session-Secret, Assets (gitignored)
 ```
 
+## Analyse (Shot 1)
+
+`POST /api/mp/projects/:id/analysis/run` startet die Pipeline Crawl → Brief → Wettbewerber →
+Personas → Attention Map → GEO-Baseline; `{ "from": "geo" }` wiederholt nur ab einem Schritt.
+Fortschritt und Ergebnis: `GET …/analysis`, UI unter `/mp/projects/:id/analysis`. Jeder Schritt
+ist ein Eintrag in `mp_agent_runs` (Seite „Aktivität“). Brief-Änderungen im UI werden als
+„vom Nutzer korrigiert“ gespeichert; „Brief bestätigen“ schaltet die Strategie-Stufe frei.
+Websuche: `MP_SEARCH_PROVIDER=brave|serper` + Key, sonst DuckDuckGo-HTML. GEO-Engines:
+`MP_GEO_MODELS` (Komma-Liste von OpenRouter-IDs).
+
 ## Freigabe-Stufen und Kennzeichnung
 
 Jede Aktion mit Außenwirkung trägt `auto | review | human_only` (Default `review`;

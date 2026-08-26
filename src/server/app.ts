@@ -13,6 +13,12 @@ import { createHostAdapter } from "../host-adapter.js";
 import { projectRoutes } from "./routes/projects.js";
 import { domainRoutes } from "./routes/domain.js";
 import { metaRoutes } from "./routes/meta.js";
+import { analysisRoutes } from "./routes/analysis.js";
+import { OpenRouterProvider } from "./providers/openrouter.js";
+import { createSearchProvider } from "./providers/search.js";
+import type { LlmProvider, SearchProvider } from "./providers/index.js";
+import type { Crawler } from "./agents/analysis/crawl.js";
+import { markStaleRuns, type PipelineContext } from "./agents/analysis/pipeline.js";
 
 declare module "fastify" {
   interface FastifyRequest { user: HostUser }
@@ -20,9 +26,11 @@ declare module "fastify" {
 
 const PUBLIC_API = ["/api/mp/health", "/api/mp/host"];
 
-export interface BuiltApp { app: FastifyInstance; db: Db; host: HostAdapter; close: () => Promise<void> }
+export interface BuiltApp { app: FastifyInstance; db: Db; host: HostAdapter; ctx: PipelineContext | null; close: () => Promise<void> }
 
-export async function buildApp(env: Env, opts: { host?: HostAdapter; dbFile?: string; logger?: boolean } = {}): Promise<BuiltApp> {
+export interface ServiceOverrides { llm?: LlmProvider; search?: SearchProvider; crawler?: Crawler; geoEngines?: readonly string[]; geoCount?: number }
+
+export async function buildApp(env: Env, opts: { host?: HostAdapter; dbFile?: string; logger?: boolean; services?: ServiceOverrides } = {}): Promise<BuiltApp> {
   const version = (JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8")) as { version: string }).version;
   const host = opts.host ?? await createHostAdapter(env);
   const { db, sqlite } = openDatabase(env.MP_DATA_DIR, opts.dbFile);
@@ -55,10 +63,23 @@ export async function buildApp(env: Env, opts: { host?: HostAdapter; dbFile?: st
     req.user = user;
   });
 
+  // Agent services. Without an OpenRouter key the pipeline endpoints answer 503 instead of failing late.
+  const llm = opts.services?.llm ?? (env.OPENROUTER_API_KEY ? new OpenRouterProvider(env.OPENROUTER_API_KEY, { referer: env.MP_PUBLIC_BASE }) : null);
+  const search = opts.services?.search ?? createSearchProvider(env).provider;
+  const ctx: PipelineContext | null = llm ? {
+    db, env, llm, search, dataDir: env.MP_DATA_DIR, log: (m) => app.log.info(m),
+    ...(opts.services?.crawler ? { crawler: opts.services.crawler } : {}),
+    ...(opts.services?.geoEngines ? { geoEngines: opts.services.geoEngines } : {}),
+    ...(opts.services?.geoCount ? { geoCount: opts.services.geoCount } : {}),
+  } : null;
+  const stale = markStaleRuns(db);
+  if (stale) app.log.warn(`${stale} Analyse-Lauf/Läufe nach Neustart als abgebrochen markiert`);
+
   await host.registerRoutes(app);
   metaRoutes(app, env, host, version);
   projectRoutes(app, db);
   domainRoutes(app, db);
+  analysisRoutes(app, db, () => ctx);
 
   // Client bundle under /mp/ (both host modes share the same URL space).
   const clientDir = path.join(ROOT, "dist/client");
@@ -78,7 +99,7 @@ export async function buildApp(env: Env, opts: { host?: HostAdapter; dbFile?: st
   });
 
   return {
-    app, db, host,
+    app, db, host, ctx,
     close: async () => { await app.close(); sqlite.close(); },
   };
 }
