@@ -49,14 +49,22 @@ export function normalizeUrl(raw: string, base?: string): string | null {
   } catch { return null; }
 }
 
-/** Click away cookie/consent banners so product screenshots stay clean (reject-type buttons first). */
+/** Click away cookie/consent banners and first-run tours so product screenshots/recordings stay clean (reject-type buttons first). */
 export async function dismissConsent(page: { getByRole: (role: "button", opts: { name: RegExp }) => { first: () => { click: (o: { timeout: number }) => Promise<void>; isVisible: () => Promise<boolean> } }; waitForTimeout: (ms: number) => Promise<void> }): Promise<void> {
-  const patterns = [/^(ablehnen|alle ablehnen|nur notwendige|nur erforderliche|reject all|reject|decline|nicht einverstanden)/i, /^(einverstanden|alle akzeptieren|akzeptieren|accept all|accept|zustimmen|ok|verstanden|got it)/i];
+  const patterns = [/^(ablehnen|alle ablehnen|nur notwendige|nur erforderliche|reject all|reject|decline|nicht einverstanden)/i, /^(einverstanden|alle akzeptieren|akzeptieren|accept all|accept|zustimmen|ok|verstanden|got it)$/i];
   for (const re of patterns) {
     try {
       const btn = page.getByRole("button", { name: re }).first();
-      if (await btn.isVisible()) { await btn.click({ timeout: 2000 }); await page.waitForTimeout(400); return; }
+      if (await btn.isVisible()) { await btn.click({ timeout: 2000 }); await page.waitForTimeout(400); break; }
     } catch { /* no such button */ }
+  }
+  // Product tours / onboarding overlays ("Überspringen", "Skip tour", "Später") - up to two layers.
+  for (let i = 0; i < 2; i++) {
+    try {
+      const skip = page.getByRole("button", { name: /^(überspringen|tour überspringen|skip|skip tour|später|nicht jetzt|schließen|close)$/i }).first();
+      if (!(await skip.isVisible())) break;
+      await skip.click({ timeout: 2000 }); await page.waitForTimeout(400);
+    } catch { break; }
   }
 }
 

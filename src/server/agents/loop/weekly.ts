@@ -64,7 +64,7 @@ export async function runWeeklyReport(ctx: AgentContext, projectId: string, week
   const facts = collectWeekFacts(ctx.db, projectId, weekStart);
   const model = modelFor("strategy");
   const { result } = await withRun(ctx.db, { task: "weekly.report", model, projectId }, (usage) =>
-    chatJson(ctx.llm, model, Out, weeklyReportPrompt({ brief: brief.data, plan: version.plan, facts, voiceProfile: voiceBlock(loadBrandKit(ctx.db, projectId)) }), usage, { maxTokens: 6000 }));
+    chatJson(ctx.llm, model, Out, weeklyReportPrompt({ brief: brief.data, plan: version.plan, facts, voiceProfile: voiceBlock(loadBrandKit(ctx.db, projectId)) }), usage, { maxTokens: 12000 }));
   const diff = planDiff(version.plan, result.plan);
   const row = { id: newId(), projectId, weekStart, report: result.report, proposedPlan: toJson({ ...result.plan, _focus: result.nextWeekFocus }), diff: toJson(diff), status: "proposed", createdAt: nowIso(), decidedAt: null };
   ctx.db.insert(t.mpReports).values(row).run();
@@ -90,7 +90,7 @@ export async function adoptReport(ctx: AgentContext, reportId: string, user: Hos
   const brief = s.Brief.parse(project.brief);
   const open = ctx.db.select().from(t.mpTasks).where(eq(t.mpTasks.projectId, row.projectId)).all().map(rowToTask).filter((x) => x.status === "todo" || x.status === "in_progress");
   const { result } = await withRun(ctx.db, { task: "weekly.tasks", model: modelFor("strategy"), projectId: row.projectId }, (usage) =>
-    chatJson(ctx.llm, modelFor("strategy"), TasksOut, nextWeekTasksPrompt({ brief, plan, week: weekNo, focus, openTasks: open.map((x) => ({ title: x.title, type: x.type })) }), usage, { maxTokens: 4000 }));
+    chatJson(ctx.llm, modelFor("strategy"), TasksOut, nextWeekTasksPrompt({ brief, plan, week: weekNo, focus, openTasks: open.map((x) => ({ title: x.title, type: x.type })) }), usage, { maxTokens: 8000 }));
   const ts = nowIso();
   let order = ctx.db.select().from(t.mpTasks).where(and(eq(t.mpTasks.projectId, row.projectId), eq(t.mpTasks.week, weekNo))).all().length;
   const tasks = result.tasks.map(enforceApproval);

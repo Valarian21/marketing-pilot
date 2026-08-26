@@ -87,12 +87,31 @@ async function redditAuthHeader(env: Env): Promise<Record<string, string>> {
 
 interface RedditListing { data?: { children?: { data: { id: string; title: string; selftext?: string; permalink: string; created_utc: number; subreddit: string; num_comments?: number; over_18?: boolean } }[] } }
 
+/** Reddit's Atom feeds stay reachable from server IPs when the JSON endpoints answer 403. */
+export function parseRedditFeed(xml: string, sub: string): Thread[] {
+  return parseFeed(xml, `https://www.reddit.com/r/${sub}/`).map((x) => ({
+    ...x, platform: "reddit", community: `r/${sub}`,
+    excerpt: x.excerpt.replace(/submitted by\s+\/u\/\S+.*$/is, "").replace(/\[link\]\s*\[comments\]/g, "").trim().slice(0, 1200),
+    externalId: `reddit:${x.url.replace(/\/$/, "").split("/").slice(-2, -1)[0] ?? x.url}`,
+  })).filter((x) => x.url.includes("/comments/"));
+}
+
 export const fetchReddit: Fetcher = async (source, env, log) => {
   const auth: Record<string, string> = await redditAuthHeader(env).catch((e: unknown) => { log(`reddit oauth: ${e instanceof Error ? e.message : String(e)}`); return {} as Record<string, string>; });
   const oauth = Boolean(auth["Authorization"]);
-  const base = oauth ? "https://oauth.reddit.com" : "https://www.reddit.com";
   const ua = env.REDDIT_USER_AGENT ?? "marketing-pilot/0.1 (read-only radar; +https://agi-empire.com/mp/)";
   const out: Thread[] = [];
+  if (!oauth) {
+    for (const feed of ["new.rss", ".rss"]) {
+      const res = await fetch(`https://www.reddit.com/r/${encodeURIComponent(source.value)}/${feed}?limit=50`, { headers: { "User-Agent": USER_AGENT, Accept: "application/atom+xml, application/rss+xml, */*" }, signal: AbortSignal.timeout(20_000) });
+      const body = res.ok ? await res.text() : "";
+      if (!res.ok || !/<feed/i.test(body)) { log(`reddit r/${source.value} feed: ${res.ok ? "blockiert (network policy) - REDDIT_CLIENT_ID/SECRET setzen" : `HTTP ${res.status}`}`); await sleep(2000); continue; }
+      out.push(...parseRedditFeed(body, source.value));
+      await sleep(2500);
+    }
+    return out.filter((x, i, arr) => arr.findIndex((y) => y.url === x.url) === i);
+  }
+  const base = "https://oauth.reddit.com";
   for (const sort of ["new", "hot"]) {
     const res = await fetch(`${base}/r/${encodeURIComponent(source.value)}/${sort}.json?limit=40&raw_json=1`, { headers: { ...auth, "User-Agent": ua, Accept: "application/json" }, signal: AbortSignal.timeout(20_000) });
     if (res.status === 429) { log(`reddit r/${source.value}: rate limited`); await sleep(5000); continue; }
@@ -103,7 +122,7 @@ export const fetchReddit: Fetcher = async (source, env, log) => {
       if (d.over_18) continue;
       out.push({ platform: "reddit", community: `r/${d.subreddit}`, url: `https://www.reddit.com${d.permalink}`, title: d.title, excerpt: (d.selftext ?? "").slice(0, 1200), externalId: `reddit:${d.id}`, createdAt: new Date(d.created_utc * 1000).toISOString() });
     }
-    await sleep(oauth ? 1000 : 2500);
+    await sleep(1000);
   }
   return out;
 };

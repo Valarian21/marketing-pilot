@@ -91,7 +91,7 @@ export async function generateTasks(ctx: AgentContext, projectId: string, versio
   const project = getProject(ctx.db, projectId);
   const brief = s.Brief.parse(project?.brief);
   const personas = listPersonas(ctx, projectId);
-  const out = await chatJson(ctx.llm, modelFor("strategy"), TasksOut, tasksPrompt({ brief, plan: version.plan, personas, weeks }), usage, { maxTokens: 6000 });
+  const out = await chatJson(ctx.llm, modelFor("strategy"), TasksOut, tasksPrompt({ brief, plan: version.plan, personas, weeks }), usage, { maxTokens: 14000 });
   // Untouched tasks are replaced; anything the human started or finished stays.
   ctx.db.delete(t.mpTasks).where(and(eq(t.mpTasks.projectId, projectId), eq(t.mpTasks.status, "todo"))).run();
   const ts = nowIso();
@@ -125,7 +125,7 @@ export function startStrategy(ctx: AgentContext, projectId: string, opts: { note
         chatJson(ctx.llm, modelFor("strategy"), s.StrategyPlan, strategyPrompt({
           brief, personas: listPersonas(ctx, projectId), channels: listChannels(ctx, projectId), competitors: listCompetitors(ctx, projectId),
           geo: geoSummary(ctx.db, projectId), startDate: prev?.plan.startDate ?? isoDate(), previousPlan: prev?.plan ?? null, ...(opts.note ? { note: opts.note } : {}),
-        }), usage, { maxTokens: 5000 }));
+        }), usage, { maxTokens: 9000 }));
       const row = { id: newId(), projectId, version: (prev?.version ?? 0) + 1, plan: toJson(plan), diff: toJson(planDiff(prev?.plan ?? null, plan)), createdBy: "agent", note: opts.note, createdAt: nowIso() };
       ctx.db.insert(t.mpStrategyPlans).values(row).run();
       version = toVersion(row);

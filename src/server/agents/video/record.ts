@@ -180,8 +180,10 @@ export const playwrightRecorder: Recorder = async (script, opts) => {
             case "press": await page.keyboard.press(a.text ?? "Enter"); await sleep(400); break;
           }
         } catch (e) {
-          rec.error = (rec.error ? rec.error + " | " : "") + (e instanceof Error ? e.message.split("\n")[0] : String(e));
-          warnings.push(`${scene.id}: ${rec.error}`);
+          const msg = e instanceof Error ? e.message.split("\n")[0] ?? "" : String(e);
+          rec.error = rec.error ? `${rec.error} | ${msg}` : msg;
+          const w = `${scene.id}: ${msg}`;
+          if (!warnings.includes(w)) warnings.push(w);
         }
       }
       const elapsed = Date.now() - t0 - rec.startMs;

@@ -72,3 +72,4 @@ Format: Datum · Entscheidung · Grund · Alternative, die verworfen wurde.
 - **Wochen-Report ist ein Vorschlag, kein Auto-Update**: der Plan ändert sich erst, wenn Marcel „Übernehmen“ klickt; dann entstehen Planversion und Aufgaben der Folgewoche in einem Schritt.
 - **Scheduler im Worker, nicht in der API**: der API-Prozess bleibt zustandslos; ein Neustart des Workers holt fällige Jobs sofort nach, Zeitstempel in `mp_settings` verhindern Doppelläufe.
 - **Stücke ↔ Signups über `utm_content` = Stück-ID**: kein zusätzliches Tracking nötig, jeder UTM-Link aus dem Publish-Paket trägt die ID.
+- **Reddit-Fallback über `new.rss`**: die JSON-Endpunkte antworten von der VPS-IP mit 403 („network policy“), der Atom-Feed `r/<sub>/new.rss` liefert mit Browser-User-Agent. Block-Seiten werden erkannt und im Job-Log genannt; `hot` bleibt gesperrt. Mit `REDDIT_CLIENT_ID/SECRET` läuft alles über `oauth.reddit.com` (inkl. Regeln).

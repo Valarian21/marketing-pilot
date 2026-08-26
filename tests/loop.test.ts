@@ -5,7 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { loadEnv } from "../src/server/env.js";
 import { buildApp } from "../src/server/app.js";
 import type { LlmMessage, LlmProvider, LlmResult } from "../src/server/providers/index.js";
-import { deriveSources, parseFeed, scanCommunity, type Fetcher } from "../src/server/agents/community/radar.js";
+import { deriveSources, parseFeed, parseRedditFeed, scanCommunity, type Fetcher } from "../src/server/agents/community/radar.js";
 import { landingSnippet, weekStartOf } from "../src/server/agents/insights/insights.js";
 import { dueJobs, enqueueDue } from "../src/server/scheduler.js";
 import { scoreThreadsPrompt, replyDraftPrompt, weeklyReportPrompt } from "../src/server/agents/prompts/community.js";
@@ -66,6 +66,13 @@ describe("pure helpers", () => {
     expect(rss).toEqual([{ platform: "forum", community: "f.test", url: "https://f.test/1", title: "Frage & Antwort", excerpt: "Hallo Welt", externalId: "rss:https://f.test/1", createdAt: "Mon, 25 Aug 2026 10:00:00 GMT" }]);
     const atom = parseFeed(`<feed><entry><title>A</title><link href="https://a.test/x"/><summary>S</summary><updated>2026-08-25T10:00:00Z</updated></entry></feed>`, "https://a.test/atom");
     expect(atom[0]).toMatchObject({ url: "https://a.test/x", excerpt: "S" });
+  });
+  it("parses Reddit Atom feeds (fallback when JSON answers 403)", () => {
+    const xml = `<feed xmlns="http://www.w3.org/2005/Atom"><entry><author><name>/u/x</name></author><content type="html">&lt;!-- SC_OFF --&gt;&lt;div class="md"&gt;&lt;p&gt;Ich suche ein Tool für Arbeitsblätter.&lt;/p&gt;&lt;/div&gt;&lt;!-- SC_ON --&gt; submitted by &lt;a href="https://www.reddit.com/user/x"&gt; /u/x &lt;/a&gt; &lt;a href="https://www.reddit.com/r/lehrerzimmer/comments/abc12/welches_tool/"&gt;[link]&lt;/a&gt; &lt;a href="https://www.reddit.com/r/lehrerzimmer/comments/abc12/welches_tool/"&gt;[comments]&lt;/a&gt;</content><id>t3_abc12</id><link href="https://www.reddit.com/r/lehrerzimmer/comments/abc12/welches_tool/" /><updated>2026-08-25T10:00:00+00:00</updated><title>Welches Tool für Arbeitsblätter?</title></entry></feed>`;
+    const th = parseRedditFeed(xml, "lehrerzimmer");
+    expect(th).toHaveLength(1);
+    expect(th[0]).toMatchObject({ platform: "reddit", community: "r/lehrerzimmer", url: "https://www.reddit.com/r/lehrerzimmer/comments/abc12/welches_tool/", title: "Welches Tool für Arbeitsblätter?", externalId: "reddit:abc12" });
+    expect(th[0]!.excerpt).toBe("Ich suche ein Tool für Arbeitsblätter.");
   });
   it("week start is Monday, snippet is small and carries the webhook", () => {
     expect(weekStartOf("2026-08-26T12:00:00.000Z")).toBe("2026-08-24");
