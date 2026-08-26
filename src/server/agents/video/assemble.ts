@@ -174,8 +174,10 @@ export function buildComposeArgs(i: ComposeInput): { args: string[]; totalMs: nu
   f.push(`anullsrc=r=44100:cl=stereo,atrim=duration=${s3(i.hookMs)}[sahook]`, `anullsrc=r=44100:cl=stereo,atrim=duration=${s3(i.endMs)}[saend]`);
   f.push(`[sahook]${i.plans.map((_, k) => `[sa${k}]`).join("")}[saend]concat=n=${i.plans.length + 2}:v=0:a=1[voice]`);
   // music bed with ducking: the voice drives a sidechain compressor on the music, so it sits low under speech and fills the pauses
-  if (MUSIC >= 0) f.push(`[voice]asplit=2[voice_a][voice_sc]`, `[${MUSIC}:a]aresample=44100,aformat=channel_layouts=stereo,volume=0.30,atrim=duration=${s3(totalMs)},afade=t=in:st=0:d=1,afade=t=out:st=${s3(Math.max(0, totalMs - 2500))}:d=2.5[musicraw]`, `[musicraw][voice_sc]sidechaincompress=threshold=0.012:ratio=10:attack=40:release=700:level_sc=1.5[musicd]`, `[voice_a][musicd]amix=inputs=2:duration=first:normalize=0[aout]`);
-  else f.push(`[voice]acopy[aout]`);
+  // the bed is normalised first (tracks arrive at any level), sits ~18 dB under the voice and ducks further while she speaks;
+  // the final mix is brought to -14 LUFS (Instagram/TikTok/YouTube reference) so reels are not quieter than the feed
+  if (MUSIC >= 0) f.push(`[voice]asplit=2[voice_a][voice_sc]`, `[${MUSIC}:a]aresample=44100,aformat=channel_layouts=stereo,loudnorm=I=-30:TP=-6:LRA=9,atrim=duration=${s3(totalMs)},afade=t=in:st=0:d=0.8,afade=t=out:st=${s3(Math.max(0, totalMs - 2500))}:d=2.5[musicraw]`, `[musicraw][voice_sc]sidechaincompress=threshold=0.012:ratio=10:attack=40:release=700:level_sc=1.5[musicd]`, `[voice_a][musicd]amix=inputs=2:duration=first:normalize=0,loudnorm=I=-14:TP=-1.5:LRA=11[aout]`);
+  else f.push(`[voice]loudnorm=I=-14:TP=-1.5:LRA=11[aout]`);
 
   const args = [...inputs, "-filter_complex", f.join(";"), "-map", "[vout]", "-map", "[aout]", "-r", String(fps), "-t", s3(totalMs),
     "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart",
