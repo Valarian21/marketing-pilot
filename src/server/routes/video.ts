@@ -52,8 +52,8 @@ export function videoRoutes(app: FastifyInstance, db: Db, getCtx: () => FullCont
     if (!got) return reply.code(404).send({ detail: "Kein Video-Skript an diesem Stück." });
     if (hasActiveJob(db, got.piece.projectId, "video.render")) return reply.code(409).send({ detail: "Für dieses Projekt läuft bereits ein Render." });
     if (!workerAlive(db)) return reply.code(400).send({ detail: "Der Worker läuft nicht (app-marketing-pilot-worker) - Job wurde nicht gestartet." });
-    const job = enqueueJob(db, { projectId: got.piece.projectId, kind: "video.render", payload: { pieceId: got.piece.id, variants: req.body.variants, landscape: req.body.landscape }, steps: VIDEO_STEPS });
-    writeAudit(db, { user: req.user, action: "video.render", entityType: "content_piece", entityId: got.piece.id, projectId: got.piece.projectId, content: { job: job.id, variants: req.body.variants, landscape: req.body.landscape } });
+    const job = enqueueJob(db, { projectId: got.piece.projectId, kind: "video.render", payload: { pieceId: got.piece.id, variants: req.body.variants, landscape: req.body.landscape, reuseRecording: req.body.reuseRecording }, steps: VIDEO_STEPS });
+    writeAudit(db, { user: req.user, action: "video.render", entityType: "content_piece", entityId: got.piece.id, projectId: got.piece.projectId, content: { job: job.id, variants: req.body.variants, landscape: req.body.landscape, reuseRecording: req.body.reuseRecording } });
     return reply.code(202).send(job);
   });
 

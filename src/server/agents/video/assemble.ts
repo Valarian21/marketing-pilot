@@ -177,7 +177,7 @@ export interface AssembleInput {
 export async function assemble(i: AssembleInput, run: FfmpegRunner = runFfmpeg): Promise<{ file: string; durationMs: number }> {
   const dir = path.dirname(i.out);
   fs.mkdirSync(dir, { recursive: true });
-  const fps = i.fps ?? 30;
+  const fps = i.fps ?? OUTPUT_FPS;
   const cacheKey = `${i.recording.file}|${i.layout.inner.w}x${i.layout.inner.h}`;
   let body = i.segmentCache?.get(cacheKey);
   if (!body) {

@@ -197,12 +197,13 @@ export const playwrightRecorder: Recorder = async (script, opts) => {
       const rec: RecordedScene = { id: scene.id, startMs: Date.now() - t0, endMs: 0, clicks: [], error: null, idle: [] };
       opts.log(`record ${opts.device} ${scene.id}`);
       for (const raw of scene.actions) {
+        const tA = Date.now();
         const a: VideoAction = { ...raw, url: raw.url ? substitute(raw.url, vars) : undefined, text: raw.text ? substitute(raw.text, vars) : undefined, target: raw.target ? substitute(raw.target, vars) : undefined } as VideoAction;
         try {
           switch (a.type) {
             case "goto": {
               await page.goto(resolveUrl(a.url ?? "/", opts.baseUrl), { waitUntil: "domcontentloaded", timeout: 25_000 });
-              await page.waitForLoadState("networkidle", { timeout: 8_000 }).catch(() => undefined);
+              await page.waitForLoadState("networkidle", { timeout: 4_000 }).catch(() => undefined);
               await sleep(600);
               await dismissConsent(page);
               await sleep(300); break;
@@ -226,7 +227,7 @@ export const playwrightRecorder: Recorder = async (script, opts) => {
               rec.clicks.push({ tMs: Date.now() - t0, x: to.x, y: to.y });
               await page.mouse.down(); await sleep(70); await page.mouse.up();
               if (a.type === "type") { await sleep(250); await page.keyboard.type(a.text ?? "", { delay: 55 }); }
-              await page.waitForLoadState("networkidle", { timeout: 6_000 }).catch(() => undefined);
+              await page.waitForLoadState("networkidle", { timeout: 3_000 }).catch(() => undefined);
               await sleep(400); break;
             }
             case "scroll": {
@@ -267,6 +268,8 @@ export const playwrightRecorder: Recorder = async (script, opts) => {
           rec.error = rec.error ? `${rec.error} | ${msg}` : msg;
           const w = `${scene.id}: ${msg}`;
           if (!warnings.includes(w)) warnings.push(w);
+        } finally {
+          opts.log(`[rec ${opts.device}] ${scene.id} ${a.type} ${JSON.stringify(a.target ?? a.url ?? a.text ?? a.y ?? a.ms ?? "")} ${Date.now() - tA} ms`);
         }
       }
       for (const l of await collectUiLabels(page)) uiLabels.add(l);

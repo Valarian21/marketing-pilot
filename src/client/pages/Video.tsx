@@ -20,6 +20,7 @@ export function VideoPage() {
   const [topic, setTopic] = useState("Onboarding-Demo");
   const [script, setScript] = useState<VideoScript | null>(null);
   const [dirty, setDirty] = useState(false);
+  const [opts, setOpts] = useState({ variants: 2, landscape: true, reuseRecording: false });
   const timer = useRef<number | null>(null);
 
   const load = useCallback(async () => { try { setView(await api<VideoView>(`/projects/${id}/video`)); setError(null); } catch (e) { setError(e instanceof Error ? e.message : "Fehler"); } }, [id]);
@@ -40,7 +41,7 @@ export function VideoPage() {
   const run = async (fn: () => Promise<unknown>) => { setBusy(true); setError(null); try { await fn(); await load(); } catch (e) { setError(e instanceof Error ? e.message : "Fehler"); } finally { setBusy(false); } };
   const createScript = () => run(async () => { const p = await api<ContentPiece>(`/projects/${id}/video/script`, { method: "POST", json: { topic, hint: "" } }); setDirty(false); setParams({ piece: p.id }); });
   const saveScript = () => run(async () => { if (!piece || !script) return; await api(`/content/${piece.id}/script`, { method: "PUT", json: script }); setDirty(false); });
-  const render = () => run(async () => { if (!piece) return; if (dirty && script) await api(`/content/${piece.id}/script`, { method: "PUT", json: script }); setDirty(false); await api(`/content/${piece.id}/video/render`, { method: "POST", json: { variants: 3, landscape: true } }); });
+  const render = () => run(async () => { if (!piece) return; if (dirty && script) await api(`/content/${piece.id}/script`, { method: "PUT", json: script }); setDirty(false); await api(`/content/${piece.id}/video/render`, { method: "POST", json: opts }); });
 
   const edit = (fn: (sc: VideoScript) => VideoScript) => { if (script) { setScript(fn(script)); setDirty(true); } };
   const renders = (piece?.meta["variants"] as { variant: string; hook: string; durationMs: number }[] | undefined) ?? [];
@@ -74,7 +75,10 @@ export function VideoPage() {
           <Card>
             <div className="mp-card-head">
               <div><div className="mp-label">Skript · {script.devices.join(" + ")} · {script.scenes.length} Szenen</div><h2>{script.title}</h2></div>
-              <div className="mp-inline">{dirty && <Pill kind="review">ungespeichert</Pill>}<Button disabled={busy || !dirty} onClick={() => void saveScript()}>Speichern</Button><Button variant="primary" disabled={busy || Boolean(activeJob) || !view.workerAlive} onClick={() => void render()}>{activeJob ? "läuft …" : "Aufnehmen und rendern"}</Button></div>
+              <div className="mp-inline">{dirty && <Pill kind="review">ungespeichert</Pill>}<Button disabled={busy || !dirty} onClick={() => void saveScript()}>Speichern</Button><label className="mp-small mp-inline" title="Zahl der Reel-Varianten (je ein Hook)">Reels <select value={opts.variants} onChange={(e) => setOpts({ ...opts, variants: Number(e.target.value) })}>{[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n}</option>)}</select></label>
+                <label className="mp-small mp-inline" title="Landscape braucht eine zweite (Desktop-)Aufnahme - bei Demo-Konten mit Credits kostet das doppelt"><input type="checkbox" checked={opts.landscape} onChange={(e) => setOpts({ ...opts, landscape: e.target.checked })} /> Landscape</label>
+                <label className="mp-small mp-inline" title="Nur Stimme, Untertitel und Schnitt neu - ohne Browser-Aufnahme"><input type="checkbox" disabled={!piece?.meta["recordings"]} checked={opts.reuseRecording} onChange={(e) => setOpts({ ...opts, reuseRecording: e.target.checked })} /> Aufnahme wiederverwenden</label>
+                <Button variant="primary" disabled={busy || Boolean(activeJob) || !view.workerAlive} onClick={() => void render()}>{activeJob ? "läuft …" : "Aufnehmen und rendern"}</Button></div>
             </div>
             <label className="mp-field"><span>Ziel</span><input value={script.goal} onChange={(e) => edit((sc) => ({ ...sc, goal: e.target.value }))} /></label>
             <div className="mp-form mp-form--row">

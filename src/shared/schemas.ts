@@ -416,7 +416,7 @@ export const VideoScript = z.object({
   language: z.string().default("de"),
 });
 export const VideoScriptRequest = z.object({ topic: z.string().default(""), hint: z.string().default(""), taskId: Id.nullable().optional(), devices: z.array(VideoDevice).optional() });
-export const VideoRenderRequest = z.object({ variants: z.number().int().min(1).max(5).default(3), landscape: z.boolean().default(true) });
+export const VideoRenderRequest = z.object({ variants: z.number().int().min(1).max(5).default(3), landscape: z.boolean().default(true), /** keep the existing recording, only voice/captions/cut are redone (no browser session, no demo credits) */ reuseRecording: z.boolean().default(false) });
 
 export const JobStatus = z.enum(["queued", "running", "done", "failed", "cancelled"]);
 export const JobStep = z.object({ name: z.string(), status: z.enum(["pending", "running", "done", "failed", "skipped"]), detail: z.string().default(""), startedAt: Iso.nullable().default(null), finishedAt: Iso.nullable().default(null) });
