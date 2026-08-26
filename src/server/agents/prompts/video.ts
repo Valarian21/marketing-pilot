@@ -16,7 +16,7 @@ Write a screen-recording DEMO SCRIPT for a ${input.targetSeconds}-second vertica
 SCENES (4-7): each has
 - "voiceover": max 2 short sentences, first person, ${lang(input.brief.language)}, spoken in 3-6 seconds.
 - "caption": 2-6 words shown on screen (may be empty).
-- "actions": what the browser does during the scene, in order. Types: goto {url}, click {target}, type {target, text}, scroll {y}, hover {target}, wait {ms}, press {text = key name}. "target" is the visible text of a button/link, a placeholder/label of an input, or a CSS selector. Prefer visible text. Keep 1-3 actions per scene.
+- "actions": what the browser does during the scene, in order. Types: goto {url}, click {target}, type {target, text}, scroll {y}, hover {target}, wait {ms}, press {text = key name}. "target" is the visible text of a button/link or the placeholder/label of an input, exactly as shown on the page. Never invent CSS selectors or field names - the recorder resolves targets by visible text only. Keep 1-3 actions per scene.
 - "durationMs": minimum dwell (2500-6000).
 ${input.hasLogin ? `The recording starts already LOGGED IN at ${input.demoBaseUrl} (a demo account). Do not script the login.` : `There is NO demo instance/login: use only the public pages listed below (start with a goto of the first one). Never script login or signup.`}
 HOOKS: exactly 5 alternative opening lines for the first 2 seconds (max 8 words each, ${lang(input.brief.language)}), each a different angle: pain, number, contrast, question-free statement, outcome. No clickbait.

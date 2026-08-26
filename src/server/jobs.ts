@@ -108,9 +108,14 @@ export async function processNextJob<C extends { db: Db; log: (m: string) => voi
 
 export async function runWorkerLoop<C extends { db: Db; log: (m: string) => void }>(ctx: C, handlers: Record<string, JobHandler<C>>, opts: { pollMs?: number; signal?: AbortSignal } = {}): Promise<void> {
   const poll = opts.pollMs ?? 2000;
-  while (!opts.signal?.aborted) {
-    writeHeartbeat(ctx.db);
-    const did = await processNextJob(ctx, handlers);
-    if (!did) await new Promise((r) => setTimeout(r, poll));
-  }
+  // heartbeat also during long jobs (a render takes minutes) - otherwise the UI reports the worker as dead
+  const hb = setInterval(() => { try { writeHeartbeat(ctx.db); } catch { /* db closing */ } }, 5000);
+  hb.unref();
+  try {
+    while (!opts.signal?.aborted) {
+      writeHeartbeat(ctx.db);
+      const did = await processNextJob(ctx, handlers);
+      if (!did) await new Promise((r) => setTimeout(r, poll));
+    }
+  } finally { clearInterval(hb); }
 }

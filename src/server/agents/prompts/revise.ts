@@ -24,7 +24,7 @@ export function reviseScriptPrompt(input: { brief: Brief; script: VideoScript; t
   return [
     { role: "system", content: `[task:revise-script]
 You revise a screen-recording script for "${input.brief.productName}" following ONE instruction from the founder. Timecodes in the instruction refer to the rendered video (hook card ${input.hookMs / 1000} s, then scenes: ${tl || "unknown"}). Map them to scene ids.
-Rules: change only the scenes the instruction concerns; keep ids of unchanged scenes; keep voiceover to max 2 short sentences; "Untertitel/Captions" means the voiceover text (captions are generated from it); actions use the same types as before (goto/click/type/scroll/hover/wait/press; target = visible text or CSS selector).
+Rules: change only the scenes the instruction concerns; keep ids of unchanged scenes; keep voiceover to max 2 short sentences; "Untertitel/Captions" means the voiceover text (captions are generated from it); actions use the same types as before (goto/click/type/scroll/hover/wait/press; target = the visible button text or the label/placeholder of a field, exactly as it appears on the page - never an invented CSS selector or field name; when the instruction names a field like „Thema / Auftrag“, use that label as target).
 Set "needsRecording": true only if any scene's actions, durations, order or device list changed; false if only voiceover/captions/hooks/CTA changed.
 ${writingRules({ language: input.brief.language })}
 Return JSON: {"script": {<full VideoScript with the same schema>}, "needsRecording": true|false, "changed": "<one sentence in ${lang(input.brief.language)}>"}` },

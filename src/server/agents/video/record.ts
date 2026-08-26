@@ -161,7 +161,12 @@ export const playwrightRecorder: Recorder = async (script, opts) => {
               await sleep(300); break;
             }
             case "click": case "hover": case "type": {
-              const loc = a.target ? await findTarget(page, a.target) : null;
+              let loc = a.target ? await findTarget(page, a.target) : null;
+              if (!loc && a.type === "type") {
+                // the script author guessed a label/selector that does not exist - the first visible empty text field is the best bet
+                const fallback = page.locator('textarea:visible, input[type="text"]:visible, input[type="search"]:visible, input:not([type]):visible, [contenteditable="true"]:visible').first();
+                if (await fallback.count() > 0) { loc = fallback; warnings.push(`Szene ${scene.id}: Ziel „${a.target ?? ""}“ nicht gefunden – erstes sichtbares Textfeld genutzt`); }
+              }
               if (!loc) throw new Error(`Ziel nicht gefunden: ${a.target ?? "(leer)"}`);
               await loc.scrollIntoViewIfNeeded().catch(() => undefined);
               const box = await loc.boundingBox();
