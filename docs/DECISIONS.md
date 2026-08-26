@@ -80,3 +80,11 @@ Format: Datum · Entscheidung · Grund · Alternative, die verworfen wurde.
 - **Änderungswünsche editieren statt neu erzeugen**: ein „Kürzer“ darf nicht den ganzen Text neu würfeln – der Edit-Prompt ändert nur das Genannte. Bei Videos entscheidet ein Diff der Aktionen (nicht nur das Modell), ob neu aufgenommen werden muss.
 - **Aufnahmen bleiben, Zwischendateien nicht**: `.webm`-Aufnahmen ermöglichen billige Re-Renders; Segmente/Bodies/Overlays sind reproduzierbar und werden sofort gelöscht. Löschen ist bewusst manuell (Speicher-Tab), damit nie ein fertiges Video ohne Marcel verschwindet.
 - **Szenen-Check per Vision-Modell** (günstiges Modell, ~0,001 $/Szene): billiger als jede Heuristik und erklärt dem Menschen in einem Satz, was das Bild zeigt.
+
+## Szenenbilder für den Szenen-Check kommen aus der fertigen Aufnahme, nicht aus `page.screenshot()` (2026-08-26)
+
+`page.screenshot()` während der Playwright-Aufnahme setzt in Chromium für ~1 s die erzwungene
+Geräte-Skalierung zurück – im Screencast erscheint die Seite dann als Miniatur in der Ecke
+(sichtbar am Start jeder Szene). Die Standbilder werden deshalb nachträglich per ffmpeg aus dem
+webm gezogen (0,4 s vor Szenenende, auf 600 px Breite verkleinert). Nebeneffekt: die Aufnahme
+läuft ohne Unterbrechung, und das Bild entspricht exakt dem, was im Video zu sehen ist.

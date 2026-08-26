@@ -12,7 +12,7 @@ import { USER_AGENT, sleep } from "../../providers/html.js";
 import { dismissConsent } from "../analysis/crawl.js";
 
 export interface RecordedClick { tMs: number; x: number; y: number }
-export interface RecordedScene { id: string; startMs: number; endMs: number; clicks: RecordedClick[]; error: string | null; /** screenshot taken after the scene's actions (for the scene check) */ shot?: string }
+export interface RecordedScene { id: string; startMs: number; endMs: number; clicks: RecordedClick[]; error: string | null; /** still image after the scene's actions (for the scene check) - extracted from the recording by the pipeline */ shot?: string }
 export interface Recording { file: string; device: VideoDevice; width: number; height: number; viewportWidth: number; viewportHeight: number; scenes: RecordedScene[]; durationMs: number; warnings: string[] }
 export interface RecordOptions {
   device: VideoDevice; outDir: string; baseUrl: string | null;
@@ -61,11 +61,18 @@ export const CURSOR_SCRIPT = `(() => {
 
 
 
-async function findTarget(page: Page, target: string): Promise<Locator | null> {
+const FIELD_XPATH = 'xpath=following::*[self::textarea or self::input[not(@type="hidden")] or @contenteditable="true"][1]';
+
+async function findTarget(page: Page, target: string, kind: "click" | "type" = "click"): Promise<Locator | null> {
   const candidates: Locator[] = [];
   if (isSelector(target)) candidates.push(page.locator(target).first());
   else {
     const re = new RegExp(target.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+    if (kind === "type") {
+      // typing must land in a field: label/placeholder first, then the first field that follows the matching text
+      // (many forms show the field name as plain text above the textarea, without a <label for>)
+      candidates.push(page.getByLabel(re).first(), page.getByPlaceholder(re).first(), page.locator(`[aria-label*="${target}" i]`).first(), page.getByText(re).first().locator(FIELD_XPATH).first(), page.getByRole("textbox", { name: re }).first());
+    }
     candidates.push(page.getByRole("button", { name: re }).first(), page.getByRole("link", { name: re }).first(), page.getByPlaceholder(re).first(), page.getByLabel(re).first(), page.getByText(re).first(), page.locator(`[aria-label*="${target}" i], [title*="${target}" i]`).first());
   }
   for (const c of candidates) {
@@ -161,7 +168,7 @@ export const playwrightRecorder: Recorder = async (script, opts) => {
               await sleep(300); break;
             }
             case "click": case "hover": case "type": {
-              let loc = a.target ? await findTarget(page, a.target) : null;
+              let loc = a.target ? await findTarget(page, a.target, a.type === "type" ? "type" : "click") : null;
               if (!loc && a.type === "type") {
                 // the script author guessed a label/selector that does not exist - the first visible empty text field is the best bet
                 const fallback = page.locator('textarea:visible, input[type="text"]:visible, input[type="search"]:visible, input:not([type]):visible, [contenteditable="true"]:visible').first();
@@ -200,7 +207,8 @@ export const playwrightRecorder: Recorder = async (script, opts) => {
       }
       const elapsed = Date.now() - t0 - rec.startMs;
       if (elapsed < scene.durationMs) await sleep(scene.durationMs - elapsed);
-      try { const shot = path.join(opts.outDir, `scene-${opts.device}-${scene.id}.png`); await page.screenshot({ path: shot, scale: "css" }); rec.shot = shot; } catch { /* optional */ }
+      // no page.screenshot() here: it resets Chromium's device scale for ~1 s and the screencast shows the page as a thumbnail in the corner.
+      // Scene stills for the check are extracted from the finished webm by the pipeline instead.
       rec.endMs = Date.now() - t0;
       scenes.push(rec);
     }

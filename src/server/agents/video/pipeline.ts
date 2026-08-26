@@ -108,7 +108,13 @@ export const renderVideoJob: JobHandler<VideoContext> = async (ctx, job, progres
     try {
       for (const sc of script.scenes) {
         const r = rec.scenes.find((x) => x.id === sc.id);
-        const img = r?.shot ? dataUrlFor(r.shot) : null;
+        if (r && !r.shot && !r.error) {
+          // still from the recording ~0.4 s before the scene ends (after its actions settled), downscaled for the vision model
+          const shot = path.join(outDir, `scene-${rec.device}-${sc.id}.png`);
+          const at = Math.max(r.startMs, r.endMs - 400) / 1000;
+          try { await ffmpeg(["-y", "-ss", at.toFixed(3), "-i", rec.file, "-frames:v", "1", "-vf", "scale=600:-2", shot]); if (fs.existsSync(shot)) r.shot = shot; } catch (e) { ctx.log(`scene-still ${sc.id}: ${e instanceof Error ? e.message : String(e)}`); }
+        }
+        const img = r?.shot && fs.existsSync(r.shot) ? dataUrlFor(r.shot) : null;
         if (!img) continue;
         try {
           const res = await llm.chat(checkModel, sceneCheckPrompt({ sceneId: sc.id, voiceover: sc.voiceover, caption: sc.caption, actions: sc.actions.map((a) => `${a.type} ${a.target ?? a.url ?? a.text ?? ""}`).join(", "), language: script.language, image: img }), { json: true, temperature: 0, maxTokens: 300 });

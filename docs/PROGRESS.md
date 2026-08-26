@@ -93,3 +93,15 @@ Erledigt:
 - **Änderungswunsch per Prompt** (`POST /content/:id/revise`, Box auf Freigabe- und Video-Seite): Text-Stücke werden gezielt editiert (nur das Genannte ändert sich), bei Videos wird das Skript angepasst – Zeitangaben („Sekunde 12–20“) werden über die gespeicherte Szenen-Zeitleiste auf Szenen gemappt; nur Text/Untertitel geändert → Re-Render **ohne neue Aufnahme** (Aufnahmen bleiben am Stück), Aktionen geändert → neue Aufnahme.
 - **Szenen-Check** (neuer Job-Schritt `check`): pro Szene ein Screenshot an ein Vision-Modell – „passt das Bild zum Voiceover?“; Abweichungen (z. B. Tour über der App) landen in den Render-Hinweisen und im Skript-Editor, und fließen in Änderungswünsche ein. Willkommenstouren werden zusätzlich schon beim Login-Besuch weggeklickt; Scrollen läuft jetzt mit Easing in 40 kleinen Schritten.
 - **Speicher-Tab** (`/storage`): freier Platz, Belegung von `data/`, Dateien je Projekt/Stück (Videos, Aufnahmen, Bilder) mit Größe; Löschen je Stück (Zwischendateien / Aufnahmen / alles), einzelne Assets, verwaiste Ordner. Zwischendateien (Segmente, Overlays) werden nach jedem Render automatisch entfernt.
+
+### Nachbesserungen nach dem Live-Test (26.08., abends)
+
+- Alte Render-Assets löschten die frisch gerenderten Dateien gleichen Pfads (Fix: nur Pfade
+  entfernen, die kein neues Asset belegt).
+- Worker-Heartbeat lief nur zwischen Jobs → UI meldete den Worker mitten im Render als tot.
+- Recorder: fehlgeschlagenes `type`-Ziel fällt auf das erste sichtbare Textfeld zurück;
+  Prompts verbieten erfundene CSS-Selektoren (der Agent hatte `input[name='topic']` erfunden).
+- Szenenbilder aus dem webm statt `page.screenshot()` (Miniatur-Artefakt, s. DECISIONS).
+- Live-Beispiel Änderungswunsch: „Es gibt keinen Button ‚Neu‘ – der Button heißt ‚Material
+  erstellen‘ …“ → Skript in 23 s angepasst, Neuaufnahme automatisch, Szenen-Check danach 2/5
+  statt 5/5 Abweichungen; zweite Anweisung korrigierte Szene 3.
