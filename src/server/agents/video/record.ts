@@ -147,7 +147,7 @@ async function focusedField(page: Page): Promise<Locator | null> {
   const loc = page.locator(":focus").first();
   try {
     if (!(await loc.count())) return null;
-    const ok = await loc.evaluate((e) => ["TEXTAREA", "INPUT"].includes(e.tagName) || (e as HTMLElement).isContentEditable);
+    const ok = await loc.evaluate((e) => ["TEXTAREA", "INPUT", "SELECT"].includes(e.tagName) || (e as HTMLElement).isContentEditable);
     return ok ? loc : null;
   } catch { return null; }
 }
@@ -307,6 +307,7 @@ export const playwrightRecorder: Recorder = async (script, opts) => {
               const waited = Date.now() - t0 - started;
               if (waited > 1500) (rec.idle ??= []).push({ startMs: started, endMs: Date.now() - t0 });
               if (!found) throw new Error(`waitFor: „${a.target ?? ""}“ ist nach ${Math.round(waited / 1000)} s nicht erschienen`);
+              await dismissTips(page);
               await sleep(600); break;
             }
             case "press": await page.keyboard.press(a.text ?? "Enter"); await sleep(400); break;
@@ -320,6 +321,7 @@ export const playwrightRecorder: Recorder = async (script, opts) => {
           opts.log(`[rec ${opts.device}] ${scene.id} ${a.type} ${JSON.stringify(a.target ?? a.url ?? a.text ?? a.y ?? a.ms ?? "")} ${Date.now() - tA} ms`);
         }
       }
+      await dismissTips(page);   // tips/toasts that popped up late in the scene
       for (const l of await collectUiLabels(page)) uiLabels.add(l);
       const elapsed = Date.now() - t0 - rec.startMs;
       if (elapsed < scene.durationMs) await sleep(scene.durationMs - elapsed);

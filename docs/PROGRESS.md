@@ -138,3 +138,13 @@ Erledigt:
 - Offen/Ideen: Demo-Skript setzt Fach/Klasse nicht (Blatt wird „Deutsch Klasse 5“ statt Mathe 3); Lehreule-Tipp-
   Overlay im Editor („Alles auf dem Blatt lässt sich anpassen“) könnte per dismiss-Regel weg; Landscape
   kostet doppelte Credits (Schalter vorhanden).
+
+### Design „Werkbank“ + Recorder-Feinschliff (26.08., Nacht)
+
+- Design A aus dem Konzept-Artifact umgesetzt: `tokens.css` komplett neu (Palette, Schriften, Radien, keine
+  Kartenschatten, Basisregeln am Dateiende), Sidebar mit Projektblock (aktuelles Projekt, Wechsler, „Alle“),
+  gruppierte Navigation, Pills nur für Status, eckige Knöpfe. Screenshots geprüft: Projekt, Medien, Freigaben, Speicher.
+- Recorder: Tipp-Overlays schließen, Klick-Pausen kürzer, Select per Option, Textfelder ersetzen statt anhängen,
+  Zielsuche nur sichtbare Treffer + exakt vor lose (Probe: Fach → select#g-subject, Klasse → input#g-grade).
+- Demo-Skript setzt Fach Mathematik / Klasse 3 / Thema „Einmaleins üben“ → Lehreule liefert ein 2-seitiges
+  Mathe-Blatt (vorher: Mathe-Thema im Deutsch-Blatt, ⅓ Seite).
