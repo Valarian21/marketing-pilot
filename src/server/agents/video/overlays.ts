@@ -14,7 +14,7 @@ h1{font-family:var(--f-display);font-weight:700;line-height:1.06;letter-spacing:
 .meta{font-family:var(--f-mono);font-size:${Math.round(w * 0.024)}px;letter-spacing:.08em;text-transform:uppercase;opacity:.8}
 </style></head><body>${body}</body></html>`;
 
-export interface Layout { w: number; h: number; inner: { x: number; y: number; w: number; h: number }; radius: number; captionY: number; captionH: number }
+export interface Layout { w: number; h: number; inner: { x: number; y: number; w: number; h: number }; radius: number; /** dark screen margin between the recording and the bezel ring (px) */ pad: number; captionY: number; captionH: number }
 
 /** Where the recording sits inside the output frame. */
 export function layoutFor(device: VideoDevice, landscape: boolean, rec: { width: number; height: number }): Layout {
@@ -24,7 +24,8 @@ export function layoutFor(device: VideoDevice, landscape: boolean, rec: { width:
   const s = Math.min(maxW / rec.width, maxH / rec.height);
   const iw = Math.round(rec.width * s / 2) * 2, ih = Math.round(rec.height * s / 2) * 2;
   const x = Math.round((w - iw) / 2), y = landscape ? Math.round((h - ih) / 2) - 20 : Math.round((h - ih) / 2) - 60;
-  return { w, h, inner: { x, y, w: iw, h: ih }, radius: device === "mobile" ? 56 : 18, captionY: landscape ? h - 190 : h - 330, captionH: landscape ? 130 : 150 };
+  // the recording itself is only lightly rounded (nothing of the page gets cut); the ring outside carries the phone look
+  return { w, h, inner: { x, y, w: iw, h: ih }, radius: device === "mobile" ? 28 : 12, pad: device === "mobile" ? 16 : 12, captionY: landscape ? h - 190 : h - 330, captionH: landscape ? 130 : 150 };
 }
 
 export function hookCardHtml(kit: BrandKit, hook: string, brand: string, w: number, h: number): string {
@@ -38,8 +39,10 @@ export function backgroundHtml(kit: BrandKit, w: number, h: number, brand: strin
 }
 /** Transparent frame with a rounded cut-out where the recording goes (drawn on top of the video). */
 export function deviceFrameHtml(kit: BrandKit, lay: Layout): string {
-  const { inner: r, radius } = lay;
-  return base(kit, lay.w, lay.h, `<svg width="${lay.w}" height="${lay.h}" viewBox="0 0 ${lay.w} ${lay.h}"><defs><mask id="m"><rect width="100%" height="100%" fill="#fff"/><rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" rx="${radius}" fill="#000"/></mask></defs><rect width="100%" height="100%" fill="rgba(0,0,0,0)" mask="url(#m)"/><rect x="${r.x - 22}" y="${r.y - 22}" width="${r.w + 44}" height="${r.h + 44}" rx="${radius + 22}" fill="none" stroke="rgba(20,20,20,.96)" stroke-width="44" mask="url(#m)"/><rect x="${r.x - 44}" y="${r.y - 44}" width="${r.w + 88}" height="${r.h + 88}" rx="${radius + 44}" fill="none" stroke="rgba(255,255,255,.14)" stroke-width="2"/></svg>`, true);
+  const { inner: r, radius, pad } = lay;
+  const ring = 12;   // bezel thickness - starts OUTSIDE the dark margin, never over the recording
+  const R1 = radius + pad, R2 = R1 + ring;
+  return base(kit, lay.w, lay.h, `<svg width="${lay.w}" height="${lay.h}" viewBox="0 0 ${lay.w} ${lay.h}"><defs><mask id="m"><rect width="100%" height="100%" fill="#fff"/><rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" rx="${radius}" fill="#000"/></mask></defs><rect x="${r.x - pad}" y="${r.y - pad}" width="${r.w + 2 * pad}" height="${r.h + 2 * pad}" rx="${R1}" fill="rgba(8,8,10,1)" mask="url(#m)"/><rect x="${r.x - pad - ring / 2}" y="${r.y - pad - ring / 2}" width="${r.w + 2 * pad + ring}" height="${r.h + 2 * pad + ring}" rx="${R1 + ring / 2}" fill="none" stroke="rgba(28,28,30,.96)" stroke-width="${ring}"/><rect x="${r.x - pad - ring - 1}" y="${r.y - pad - ring - 1}" width="${r.w + 2 * pad + 2 * ring + 2}" height="${r.h + 2 * pad + 2 * ring + 2}" rx="${R2 + 1}" fill="none" stroke="rgba(255,255,255,.16)" stroke-width="2"/></svg>`, true);
 }
 /** Alpha mask for the recording itself: white rounded rectangle (screen shape) on black - the square video corners must not poke past the bezel. */
 export function screenMaskHtml(lay: Layout): string {
