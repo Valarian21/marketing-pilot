@@ -112,6 +112,16 @@ export async function collectUiLabels(page: Page): Promise<string[]> {
   } catch { return []; }
 }
 
+/** Contextual tips/toasts ("Tipp: …" with a × button) that products show on first use - close them, they hide the UI on tape. */
+async function dismissTips(page: Page): Promise<void> {
+  try {
+    const tip = page.locator(':is(div, section, aside, p)').filter({ hasText: /^\s*(💡\s*)?Tipp:/ }).last();
+    if (!(await tip.count()) || !(await tip.isVisible())) return;
+    const close = tip.locator('button, [role="button"], a').filter({ hasText: /^\s*[×✕✖x]\s*$/i }).first();
+    if (await close.count()) { await close.click({ timeout: 1500 }).catch(() => undefined); await sleep(250); }
+  } catch { /* no tip */ }
+}
+
 /** Is the element actually on top at its centre (not behind a modal/overlay)? */
 async function isOnTop(loc: Locator): Promise<boolean> {
   try {
@@ -238,14 +248,21 @@ export const playwrightRecorder: Recorder = async (script, opts) => {
               const box = await loc.boundingBox();
               if (!box) throw new Error(`Ziel unsichtbar: ${a.target}`);
               const to = { x: box.x + box.width / 2, y: box.y + Math.min(box.height / 2, 24) };
-              await glide(page, cur, to);
-              await sleep(180);
-              if (a.type === "hover") { await sleep(600); break; }
+              await glide(page, cur, to, 450);
+              await sleep(120);
+              if (a.type === "hover") { await sleep(450); break; }
               rec.clicks.push({ tMs: Date.now() - t0, x: to.x, y: to.y });
               await page.mouse.down(); await sleep(70); await page.mouse.up();
-              if (a.type === "type") { await sleep(250); await page.keyboard.type(a.text ?? "", { delay: 55 }); }
+              if (a.type === "type") {
+                await sleep(200);
+                // <select>: pick the option by its visible text (typing would only be Chrome's type-ahead); text fields: replace, don't append
+                const tag = await loc.evaluate((el) => el.tagName.toLowerCase()).catch(() => "");
+                if (tag === "select") { await loc.selectOption({ label: a.text ?? "" }).catch(async () => { await loc.selectOption(a.text ?? "").catch(() => undefined); }); }
+                else { await loc.evaluate((el) => { const f = el as HTMLInputElement; if (typeof f.select === "function" && f.value) f.select(); }).catch(() => undefined); await page.keyboard.type(a.text ?? "", { delay: 55 }); }
+              }
               await page.waitForLoadState("networkidle", { timeout: 1_500 }).catch(() => undefined);
-              await sleep(400); break;
+              await dismissTips(page);
+              await sleep(250); break;
             }
             case "scroll": {
               // rAF-driven eased scroll of the scrollable container under the cursor (dialogs scroll inside themselves),

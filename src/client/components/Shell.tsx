@@ -1,8 +1,12 @@
-/** Sidebar + main area. The sidebar is the module's own; the host adds only a back link. */
-import { NavLink, Outlet } from "react-router";
+/** Sidebar + main area. The sidebar is the module's own; the host adds only a back link.
+ *  Top of the sidebar: the project you are working in (from the URL or the last one used) with a quick switcher. */
+import { useEffect, useState } from "react";
+import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router";
 import { useHost } from "../host.js";
+import { api } from "../api.js";
 import { Icons, type IconName } from "./icons.js";
 import { Button } from "./ui.js";
+import { lastProject, rememberProject } from "./ProjectNav.js";
 
 const NAV: { group: string; to: string; label: string; icon: IconName; end?: boolean }[] = [
   { group: "Planung", to: "/", label: "Projekte", icon: "projects", end: true },
@@ -19,8 +23,58 @@ const NAV: { group: string; to: string; label: string; icon: IconName; end?: boo
 ];
 const GROUPS = Array.from(new Set(NAV.map((n) => n.group)));
 
+interface ProjectLite { id: string; name: string; url: string }
+
+/** Current project: the one in the URL, else the last one used. */
+function useCurrentProject(projects: ProjectLite[]): ProjectLite | null {
+  const { pathname } = useLocation();
+  const fromUrl = /^\/projects\/([^/]+)/.exec(pathname)?.[1] ?? null;
+  const id = fromUrl ?? lastProject();
+  useEffect(() => { if (fromUrl) rememberProject(fromUrl); }, [fromUrl]);
+  // nothing remembered yet (fresh browser): the first project is the sensible default
+  return projects.find((p) => p.id === id) ?? projects[0] ?? null;
+}
+
+function ProjectBox({ projects }: { projects: ProjectLite[] }) {
+  const current = useCurrentProject(projects);
+  const { pathname } = useLocation();
+  const navigate = useNavigate();
+  const switchTo = (id: string) => {
+    if (!id) return;
+    rememberProject(id);
+    // stay in the same section when the page is project-scoped, otherwise open the project overview
+    const m = /^\/projects\/[^/]+(\/[a-z]+)?/.exec(pathname);
+    void navigate(m ? `/projects/${id}${m[1] ?? ""}` : `/projects/${id}`);
+  };
+  if (!current) {
+    return (
+      <div className="mp-project-box mp-project-box--none">
+        <span className="mp-label">Projekt</span>
+        <span className="mp-small mp-muted">Kein Projekt gewählt</span>
+        <div className="mp-project-switch">
+          <select value="" onChange={(e) => switchTo(e.target.value)} aria-label="Projekt wählen"><option value="">Wählen …</option>{projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="mp-project-box">
+      <span className="mp-label">Aktuelles Projekt</span>
+      <Link className="mp-project-name" to={`/projects/${current.id}`} title={current.url}>{current.name}</Link>
+      <div className="mp-project-switch">
+        <select value={current.id} onChange={(e) => switchTo(e.target.value)} aria-label="Projekt wechseln">{projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
+        <Link to="/">Alle</Link>
+      </div>
+    </div>
+  );
+}
+
 export function Shell() {
   const { info, logout } = useHost();
+  const [projects, setProjects] = useState<ProjectLite[]>([]);
+  const { pathname } = useLocation();
+  const reloadKey = pathname.startsWith("/projects/") ? "" : pathname;   // project list changes only via the projects page
+  useEffect(() => { api<ProjectLite[]>("/projects").then(setProjects).catch(() => setProjects([])); }, [reloadKey]);
   return (
     <div className="mp-shell">
       <aside className="mp-sidebar">
@@ -28,6 +82,7 @@ export function Shell() {
           <span className="mp-brand-icon"><Icons.leaf /></span>
           <span className="mp-brand-name mp-display">Marketing Pilot</span>
         </div>
+        <ProjectBox projects={projects} />
         <nav className="mp-nav" aria-label="Hauptnavigation">
           {GROUPS.map((g) => (
             <div key={g} className="mp-nav-group">

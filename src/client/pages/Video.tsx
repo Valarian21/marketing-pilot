@@ -60,7 +60,7 @@ export function VideoPage() {
       {!view.workerAlive && <Notice kind="bad">Der Render-Worker läuft nicht (<code className="mp-code">app-marketing-pilot-worker</code>) – Skripte gehen, Renders nicht.</Notice>}
       {!view.demoConfigured && <Notice kind="warn">Keine Demo-Instanz konfiguriert (<code className="mp-code">MP_DEMO_BASE_URL</code>, <code className="mp-code">MP_DEMO_USER</code>, <code className="mp-code">MP_DEMO_PASSWORD</code>) – die Aufnahme läuft dann nur über öffentliche Seiten.</Notice>}
       {!view.voiceConfigured && <Notice kind="warn">Kein ElevenLabs-Key (<code className="mp-code">ELEVENLABS_API_KEY</code>, <code className="mp-code">ELEVENLABS_VOICE_ID</code>) – Videos werden ohne Sprache gerendert, Captions kommen aus dem Skript-Timing.</Notice>}
-      {view.musicTracks === 0 && <Notice kind="info">Keine Musik in <code className="mp-code">marketing-pilot/assets/music/</code> – Renders laufen ohne Musikbett.</Notice>}
+      {view.musicTracks === 0 && <p className="mp-small mp-muted mp-note">Ohne Musikbett – Tracks nach <code className="mp-code">marketing-pilot/assets/music/</code> legen, wenn gewünscht.</p>}
 
       {view.pieces.length > 1 && (
         <Card className="mp-form-card"><label className="mp-field mp-field--inline"><span>Skript</span>

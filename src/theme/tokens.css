@@ -1,144 +1,149 @@
-/* Marketing Pilot – Theme "Gewächshaus"
+/* Marketing Pilot – Theme "Werkbank" (Designkonzept 26.08.2026, Vorschlag A)
+   Neutral, präzise, werkzeughaft: warmgrauer Grund, weiße Flächen, ein Petrol-Akzent, Hairlines statt Schatten.
    Alle UI-Farben, Schriften, Radien und Abstände kommen aus dieser Datei.
    Light ist der Standard, Dark greift bei prefers-color-scheme: dark oder [data-theme="dark"]. */
 
-@import url("https://fonts.googleapis.com/css2?family=Gabarito:wght@500;600;700&family=Nunito+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@500;600;700&family=Source+Sans+3:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap");
 
 :root {
   /* Schrift */
-  --mp-font-display: "Gabarito", system-ui, -apple-system, "Segoe UI", sans-serif;
-  --mp-font-body: "Nunito Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
-  --mp-font-mono: "DM Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --mp-font-display: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mp-font-body: "Source Sans 3", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mp-font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 
   --mp-text-xs: 11px;
-  --mp-text-sm: 12.5px;
-  --mp-text-base: 13.5px;
-  --mp-text-md: 15px;
-  --mp-text-h2: 17px;
-  --mp-text-h1: 36px;
-  --mp-text-num: 32px;
-  --mp-tracking-label: 0.08em;
+  --mp-text-sm: 13px;
+  --mp-text-base: 14px;
+  --mp-text-md: 15.5px;
+  --mp-text-h2: 16px;
+  --mp-text-h1: 30px;
+  --mp-text-num: 28px;
+  --mp-tracking-label: 0.1em;
 
   /* Flächen und Text */
-  --mp-bg: #EEF2EA;
+  --mp-bg: #F6F5F2;
   --mp-surface: #FFFFFF;
-  --mp-sidebar: #E2E9DC;
-  --mp-ink: #1E2A20;
-  --mp-ink-2: #5F6F62;
-  --mp-line: #D3DCCD;
-  --mp-grid-line: #E4EAE0;
-  --mp-track: #E4EAE0;
-  --mp-today: #EAF3E6;
+  --mp-sidebar: #F6F5F2;
+  --mp-ink: #1F2328;
+  --mp-ink-2: #6B7079;
+  --mp-ink-3: #8C9098;
+  --mp-line: #E2E1DC;
+  --mp-grid-line: #ECEBE7;
+  --mp-track: #ECEBE7;
+  --mp-today: #E3EEF0;
   --mp-nav-active: #FFFFFF;
-  --mp-tile-hi: #E3F0E1;
+  --mp-tile-hi: #E3EEF0;
 
   /* Akzent (einziger Markenton) */
-  --mp-accent: #3D7A4E;
-  --mp-accent-hover: #336842;
-  --mp-accent-soft: #DCEBDD;
+  --mp-accent: #1F5F6B;
+  --mp-accent-hover: #184C56;
+  --mp-accent-soft: #E3EEF0;
   --mp-on-accent: #FFFFFF;
 
   /* Semantik, getrennt vom Akzent */
-  --mp-warn: #8A5A0C;
-  --mp-warn-soft: #F6E9CF;
-  --mp-bad: #A83232;
-  --mp-bad-soft: #F5DEDE;
-  --mp-info: #2B5A80;
-  --mp-info-soft: #DCE8F2;
+  --mp-warn: #7A5210;
+  --mp-warn-soft: #F7EBD4;
+  --mp-bad: #A13A32;
+  --mp-bad-soft: #F6E1DF;
+  --mp-info: #2E5170;
+  --mp-info-soft: #E2EAF2;
 
   /* Statuspillen: Hintergrund / Text */
-  --mp-pill-done-bg: #DCEBDD;   --mp-pill-done-fg: #2F6A3F;
-  --mp-pill-review-bg: #F6E9CF; --mp-pill-review-fg: #8A5A0C;
-  --mp-pill-todo-bg: #EEF2EA;   --mp-pill-todo-fg: #5F6F62;
-  --mp-pill-progress-bg: #DCE8F2; --mp-pill-progress-fg: #2B5A80;
-  --mp-pill-kind-bg: #EEF2EA;   --mp-pill-kind-fg: #3C4A3F;
+  --mp-pill-done-bg: #E1EFE6;   --mp-pill-done-fg: #1F5E3A;
+  --mp-pill-review-bg: #F7EBD4; --mp-pill-review-fg: #7A5210;
+  --mp-pill-todo-bg: #EDEDEA;   --mp-pill-todo-fg: #3D4248;
+  --mp-pill-progress-bg: #E2EAF2; --mp-pill-progress-fg: #2E5170;
+  --mp-pill-kind-bg: transparent; --mp-pill-kind-fg: #6B7079;
 
   /* Form */
-  --mp-radius: 14px;
-  --mp-radius-sm: 8px;
+  --mp-radius: 8px;
+  --mp-radius-sm: 6px;
   --mp-radius-pill: 999px;
   --mp-border: 1px solid var(--mp-line);
-  --mp-shadow: 0 1px 2px rgba(30, 42, 32, 0.04), 0 4px 16px rgba(30, 42, 32, 0.05);
+  --mp-shadow: none;
+  --mp-shadow-float: 0 4px 16px rgba(31, 35, 40, 0.10), 0 1px 3px rgba(31, 35, 40, 0.08);
 
-  /* Raum */
+  /* Raum (8-px-Raster) */
   --mp-gap: 16px;
   --mp-gap-sm: 8px;
-  --mp-pad-card: 14px;
-  --mp-pad-tile: 16px 18px;
-  --mp-pad-main: 26px 32px;
-  --mp-sidebar-w: 228px;
+  --mp-pad-card: 16px;
+  --mp-pad-tile: 14px 16px;
+  --mp-pad-main: 24px 32px;
+  --mp-sidebar-w: 232px;
   --mp-row-h: 32px;
-  --mp-control-h: 36px;
+  --mp-control-h: 34px;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --mp-bg: #121A14;
-    --mp-surface: #19231B;
-    --mp-sidebar: #151E17;
-    --mp-ink: #E6EEE7;
-    --mp-ink-2: #97A89A;
-    --mp-line: #2A3A2D;
-    --mp-grid-line: #223025;
-    --mp-track: #223025;
-    --mp-today: #1D3122;
-    --mp-nav-active: #22302A;
-    --mp-tile-hi: #1D3122;
+    --mp-bg: #17191C;
+    --mp-surface: #1F2226;
+    --mp-sidebar: #17191C;
+    --mp-ink: #E8E8E4;
+    --mp-ink-2: #A3A7AD;
+    --mp-ink-3: #7C8087;
+    --mp-line: #2E3237;
+    --mp-grid-line: #272B30;
+    --mp-track: #272B30;
+    --mp-today: #1F3236;
+    --mp-nav-active: #262A2F;
+    --mp-tile-hi: #1F3236;
 
-    --mp-accent: #6FC285;
-    --mp-accent-hover: #83D097;
-    --mp-accent-soft: #1F3A26;
-    --mp-on-accent: #0B1A0F;
+    --mp-accent: #7FB6C2;
+    --mp-accent-hover: #95C6D0;
+    --mp-accent-soft: #1F3236;
+    --mp-on-accent: #0F1F23;
 
-    --mp-warn: #E8B45A;
-    --mp-warn-soft: #3A2C10;
-    --mp-bad: #F08A8A;
-    --mp-bad-soft: #3B1C1C;
-    --mp-info: #7FB6E6;
-    --mp-info-soft: #16283A;
+    --mp-warn: #E4B466;
+    --mp-warn-soft: #3A2E15;
+    --mp-bad: #EF9086;
+    --mp-bad-soft: #3B1F1D;
+    --mp-info: #8FB4D8;
+    --mp-info-soft: #1D2C3B;
 
-    --mp-pill-done-bg: #1F3A26;   --mp-pill-done-fg: #8ED2A0;
-    --mp-pill-review-bg: #3A2C10; --mp-pill-review-fg: #E8B45A;
-    --mp-pill-todo-bg: #22302A;   --mp-pill-todo-fg: #A9B9AC;
-    --mp-pill-progress-bg: #16283A; --mp-pill-progress-fg: #7FB6E6;
-    --mp-pill-kind-bg: #22302A;   --mp-pill-kind-fg: #C2D0C4;
+    --mp-pill-done-bg: #1E3528;   --mp-pill-done-fg: #8ED2A0;
+    --mp-pill-review-bg: #3A2E15; --mp-pill-review-fg: #E4B466;
+    --mp-pill-todo-bg: #262A2F;   --mp-pill-todo-fg: #B5B9BF;
+    --mp-pill-progress-bg: #1D2C3B; --mp-pill-progress-fg: #8FB4D8;
+    --mp-pill-kind-bg: transparent; --mp-pill-kind-fg: #A3A7AD;
 
-    --mp-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 16px rgba(0, 0, 0, 0.25);
+    --mp-shadow-float: 0 4px 16px rgba(0, 0, 0, 0.45), 0 1px 3px rgba(0, 0, 0, 0.35);
   }
 }
 
 :root[data-theme="dark"] {
-  --mp-bg: #121A14;
-  --mp-surface: #19231B;
-  --mp-sidebar: #151E17;
-  --mp-ink: #E6EEE7;
-  --mp-ink-2: #97A89A;
-  --mp-line: #2A3A2D;
-  --mp-grid-line: #223025;
-  --mp-track: #223025;
-  --mp-today: #1D3122;
-  --mp-nav-active: #22302A;
-  --mp-tile-hi: #1D3122;
+  --mp-bg: #17191C;
+  --mp-surface: #1F2226;
+  --mp-sidebar: #17191C;
+  --mp-ink: #E8E8E4;
+  --mp-ink-2: #A3A7AD;
+  --mp-ink-3: #7C8087;
+  --mp-line: #2E3237;
+  --mp-grid-line: #272B30;
+  --mp-track: #272B30;
+  --mp-today: #1F3236;
+  --mp-nav-active: #262A2F;
+  --mp-tile-hi: #1F3236;
 
-  --mp-accent: #6FC285;
-  --mp-accent-hover: #83D097;
-  --mp-accent-soft: #1F3A26;
-  --mp-on-accent: #0B1A0F;
+  --mp-accent: #7FB6C2;
+  --mp-accent-hover: #95C6D0;
+  --mp-accent-soft: #1F3236;
+  --mp-on-accent: #0F1F23;
 
-  --mp-warn: #E8B45A;
-  --mp-warn-soft: #3A2C10;
-  --mp-bad: #F08A8A;
-  --mp-bad-soft: #3B1C1C;
-  --mp-info: #7FB6E6;
-  --mp-info-soft: #16283A;
+  --mp-warn: #E4B466;
+  --mp-warn-soft: #3A2E15;
+  --mp-bad: #EF9086;
+  --mp-bad-soft: #3B1F1D;
+  --mp-info: #8FB4D8;
+  --mp-info-soft: #1D2C3B;
 
-  --mp-pill-done-bg: #1F3A26;   --mp-pill-done-fg: #8ED2A0;
-  --mp-pill-review-bg: #3A2C10; --mp-pill-review-fg: #E8B45A;
-  --mp-pill-todo-bg: #22302A;   --mp-pill-todo-fg: #A9B9AC;
-  --mp-pill-progress-bg: #16283A; --mp-pill-progress-fg: #7FB6E6;
-  --mp-pill-kind-bg: #22302A;   --mp-pill-kind-fg: #C2D0C4;
+  --mp-pill-done-bg: #1E3528;   --mp-pill-done-fg: #8ED2A0;
+  --mp-pill-review-bg: #3A2E15; --mp-pill-review-fg: #E4B466;
+  --mp-pill-todo-bg: #262A2F;   --mp-pill-todo-fg: #B5B9BF;
+  --mp-pill-progress-bg: #1D2C3B; --mp-pill-progress-fg: #8FB4D8;
+  --mp-pill-kind-bg: transparent; --mp-pill-kind-fg: #A3A7AD;
 
-  --mp-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 16px rgba(0, 0, 0, 0.25);
+  --mp-shadow-float: 0 4px 16px rgba(0, 0, 0, 0.45), 0 1px 3px rgba(0, 0, 0, 0.35);
 }
 
 /* Basis-Regeln für das Modul (scoped auf den Modul-Wrapper) */
@@ -151,7 +156,7 @@
   -webkit-font-smoothing: antialiased;
 }
 .mp-root h1, .mp-root h2, .mp-root h3, .mp-root .mp-display { font-family: var(--mp-font-display); letter-spacing: -0.01em; text-wrap: balance; }
-.mp-root .mp-label { font-family: var(--mp-font-mono); font-size: var(--mp-text-xs); letter-spacing: var(--mp-tracking-label); text-transform: uppercase; color: var(--mp-ink-2); }
+.mp-root .mp-label { font-family: var(--mp-font-body); font-size: var(--mp-text-xs); font-weight: 600; letter-spacing: var(--mp-tracking-label); text-transform: uppercase; color: var(--mp-ink-2); }
 .mp-root .mp-num { font-family: var(--mp-font-display); font-variant-numeric: tabular-nums; font-weight: 700; }
 .mp-root a { color: var(--mp-accent); }
 .mp-root a:hover { color: var(--mp-accent-hover); }
