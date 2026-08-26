@@ -11,7 +11,7 @@ import type { Db } from "../db/index.js";
 import { parseJson } from "../db/index.js";
 import * as t from "../db/schema.js";
 import * as s from "../../shared/schemas.js";
-import { listAudit, listRuns } from "../audit.js";
+import { listAudit, listRuns, pieceCosts } from "../audit.js";
 
 const arr = (raw: string) => parseJson<string[]>(raw, []);
 const obj = (raw: string) => parseJson<Record<string, unknown>>(raw, {});
@@ -40,7 +40,8 @@ export function domainRoutes(app: FastifyInstance, db: Db): void {
     async (req) => db.select().from(t.mpContentPieces).where(eq(t.mpContentPieces.projectId, req.params.projectId))
       .orderBy(desc(t.mpContentPieces.createdAt)).all()
       .map((x) => ({ ...x, format: x.format as s.ContentPiece["format"], status: x.status as s.ContentPiece["status"],
-        assets: arr(x.assets), utm: obj(x.utm), meta: obj(x.meta) })));
+        assets: arr(x.assets), utm: obj(x.utm), meta: obj(x.meta), costUsd: 0 }))
+      .map((x, _i, all) => { const c = pieceCosts(db, all.map((y) => y.id)); return { ...x, costUsd: Math.round((c.get(x.id) ?? 0) * 10000) / 10000 }; }));
 
   r.get("/api/mp/projects/:projectId/geo", { schema: { params: P, response: { 200: z.array(s.GeoSnapshot) } } },
     async (req) => db.select().from(t.mpGeoSnapshots).where(eq(t.mpGeoSnapshots.projectId, req.params.projectId))

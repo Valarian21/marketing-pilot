@@ -14,7 +14,7 @@ import { currentVersion, dueAtFor, enforceApproval, geoSummary, isoDate } from "
 import { briefConfirmed } from "./strategy.js";
 import { latestReport } from "../agents/loop/weekly.js";
 
-import { pieceOf } from "../agents/studio/generate.js";
+import { pieceOf, withCosts } from "../agents/studio/generate.js";
 
 export function weekOf(startDate: string, iso: string | null): number | null {
   if (!iso) return null;
@@ -124,12 +124,12 @@ export function taskRoutes(app: FastifyInstance, db: Db, getCtx: () => AgentCont
 
   r.get("/api/mp/content/:id", { schema: { params: s.IdParams, response: { 200: s.ContentPiece, 404: s.ErrorBody } } }, async (req, reply) => {
     const row = db.select().from(t.mpContentPieces).where(eq(t.mpContentPieces.id, req.params.id)).get();
-    return row ? pieceOf(row) : reply.code(404).send({ detail: "Stück nicht gefunden." });
+    return row ? withCosts(db, [pieceOf(row)])[0]! : reply.code(404).send({ detail: "Stück nicht gefunden." });
   });
 
   r.get("/api/mp/content", { schema: { querystring: z.object({ status: s.ContentStatus.optional(), limit: z.coerce.number().int().min(1).max(500).default(200) }), response: { 200: z.array(s.ContentPiece) } } }, async (req) => {
     const q = db.select().from(t.mpContentPieces);
-    return (req.query.status ? q.where(eq(t.mpContentPieces.status, req.query.status)) : q).orderBy(desc(t.mpContentPieces.createdAt)).limit(req.query.limit).all().map(pieceOf);
+    return withCosts(db, (req.query.status ? q.where(eq(t.mpContentPieces.status, req.query.status)) : q).orderBy(desc(t.mpContentPieces.createdAt)).limit(req.query.limit).all().map(pieceOf));
   });
 
   r.patch("/api/mp/content/:id", { schema: { params: s.IdParams, body: s.ContentPatch, response: { 200: s.ContentPiece, 404: s.ErrorBody } } }, async (req, reply) => {
@@ -151,6 +151,6 @@ export function taskRoutes(app: FastifyInstance, db: Db, getCtx: () => AgentCont
       }
     }
     db.update(t.mpContentPieces).set(set).where(eq(t.mpContentPieces.id, row.id)).run();
-    return pieceOf(db.select().from(t.mpContentPieces).where(eq(t.mpContentPieces.id, row.id)).get()!);
+    return withCosts(db, [pieceOf(db.select().from(t.mpContentPieces).where(eq(t.mpContentPieces.id, row.id)).get()!)])[0]!;
   });
 }

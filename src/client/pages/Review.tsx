@@ -7,6 +7,7 @@ import { Button, Card, Notice, PageHeader, Pill, type PillKind } from "../compon
 import { ProjectNav } from "../components/ProjectNav.js";
 import { markdownToHtml } from "../../shared/markdown.js";
 import { VideoGallery } from "./Video.js";
+import { ReviseBox, fmtUsd } from "../components/Revise.js";
 
 const STATUS: Record<ContentPiece["status"], { label: string; kind: PillKind }> = { draft: { label: "Entwurf", kind: "todo" }, review: { label: "in Freigabe", kind: "review" }, approved: { label: "freigegeben", kind: "done" }, published: { label: "veröffentlicht", kind: "done" }, rejected: { label: "abgelehnt", kind: "kind" } };
 
@@ -59,7 +60,7 @@ export function ReviewPage() {
           <Card className="mp-review-main">
             <div className="mp-card-head">
               <div>
-                <div className="mp-label">{current.format} · {current.channel || "–"}{current.aiTellScore !== null && <> · AI-Tell {current.aiTellScore}/10</>}</div>
+                <div className="mp-label">{current.format} · {current.channel || "–"}{current.aiTellScore !== null && <> · AI-Tell {current.aiTellScore}/10</>} · Kosten {fmtUsd(current.costUsd)}</div>
                 <h2>{current.title || "(ohne Titel)"}</h2>
               </div>
               <div className="mp-inline">
@@ -79,7 +80,8 @@ export function ReviewPage() {
               {(current.status === "approved" || current.status === "published") && <Link className="mp-btn mp-btn--primary" to={`/projects/${id}/publish/${current.id}`}>Publish-Paket</Link>}
               {queue.length > 1 && <span className="mp-inline"><Button disabled={idx <= 0} onClick={() => go(queue[idx - 1])}>← zurück</Button><Button disabled={idx < 0 || idx >= queue.length - 1} onClick={() => go(queue[idx + 1])}>weiter →</Button></span>}
             </div>
-            {current.aiTellNotes && <details className="mp-details mp-small"><summary className="mp-label">AI-Tell-Prüfer</summary><pre className="mp-pre">{current.aiTellNotes}</pre></details>}
+            <ReviseBox piece={current} onDone={load} />
+            {current.aiTellNotes && <details className="mp-details mp-small"><summary className="mp-label">{current.format === "video" ? "Render-Hinweise" : "AI-Tell-Prüfer"}</summary><pre className="mp-pre">{current.aiTellNotes}</pre></details>}
             {current.rejectionReason && <Notice kind="warn">Abgelehnt: {current.rejectionReason}</Notice>}
           </Card>
           <aside>

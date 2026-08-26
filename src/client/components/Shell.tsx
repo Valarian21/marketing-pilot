@@ -13,6 +13,7 @@ const NAV: { to: string; label: string; icon: IconName; end?: boolean }[] = [
   { to: "/community", label: "Community", icon: "community" },
   { to: "/insights", label: "Insights", icon: "insights" },
   { to: "/activity", label: "Aktivität", icon: "activity" },
+  { to: "/storage", label: "Speicher", icon: "storage" },
   { to: "/settings", label: "Einstellungen", icon: "settings" },
 ];
 

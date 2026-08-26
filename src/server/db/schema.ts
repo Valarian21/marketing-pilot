@@ -143,6 +143,10 @@ export const mpCommunityLeads = sqliteTable("mp_community_leads", {
 export const mpAgentRuns = sqliteTable("mp_agent_runs", {
   id: id(),
   projectId: text("project_id").references(() => mpProjects.id, { onDelete: "set null" }),
+  /** Content piece this spend belongs to (null for project-level work like analysis). */
+  pieceId: text("piece_id"),
+  /** openrouter | elevenlabs | ... - lets the cost view split by provider. */
+  provider: text("provider").notNull().default("openrouter"),
   task: text("task").notNull(),
   model: text("model"),
   tokensIn: integer("tokens_in").notNull().default(0),
@@ -154,7 +158,7 @@ export const mpAgentRuns = sqliteTable("mp_agent_runs", {
   status: text("status").notNull().default("running"),
   startedAt: text("started_at").notNull(),
   finishedAt: text("finished_at"),
-}, (t) => [index("mp_runs_project").on(t.projectId), index("mp_runs_started").on(t.startedAt)]);
+}, (t) => [index("mp_runs_project").on(t.projectId), index("mp_runs_started").on(t.startedAt), index("mp_runs_piece").on(t.pieceId)]);
 
 export const mpAuditLog = sqliteTable("mp_audit_log", {
   id: id(),

@@ -12,7 +12,7 @@ import { getProject } from "../repo/projects.js";
 import { cancelJob, enqueueJob, getJob, hasActiveJob, listJobs, workerAlive } from "../jobs.js";
 import { generateVideoScript, updateVideoScript } from "../agents/video/script.js";
 import { getScript, VIDEO_STEPS } from "../agents/video/pipeline.js";
-import { pieceOf } from "../agents/studio/generate.js";
+import { pieceOf, withCosts } from "../agents/studio/generate.js";
 import type { FullContext } from "../services.js";
 import { ROOT } from "../env.js";
 
@@ -27,7 +27,7 @@ export function videoRoutes(app: FastifyInstance, db: Db, getCtx: () => FullCont
     let musicTracks = 0;
     try { musicTracks = fs.readdirSync(path.join(ROOT, "assets", "music")).filter((f) => /\.(mp3|wav|m4a|ogg)$/i.test(f)).length; } catch { /* none */ }
     return {
-      pieces: db.select().from(t.mpContentPieces).where(eq(t.mpContentPieces.projectId, req.params.projectId)).all().map(pieceOf).filter((p) => p.format === "video").sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+      pieces: withCosts(db, db.select().from(t.mpContentPieces).where(eq(t.mpContentPieces.projectId, req.params.projectId)).all().map(pieceOf).filter((p) => p.format === "video")).sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
       jobs: listJobs(db, req.params.projectId, 10),
       demoConfigured: Boolean(env?.MP_DEMO_BASE_URL),
       voiceConfigured: Boolean(ctx?.voice),

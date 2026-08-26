@@ -24,7 +24,9 @@ export class OpenRouterProvider implements LlmProvider {
     const fetchImpl = this.opts.fetchImpl ?? fetch;
     const body: Record<string, unknown> = {
       model,
-      messages,
+      messages: messages.map((m) => (m.images?.length
+        ? { role: m.role, content: [{ type: "text", text: m.content }, ...m.images.map((url) => ({ type: "image_url", image_url: { url } }))] }
+        : { role: m.role, content: m.content })),
       temperature: opts.temperature ?? 0.2,
       usage: { include: true },
     };

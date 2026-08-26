@@ -25,7 +25,7 @@ export interface AgentContext {
 
 export async function withRun<T>(
   db: Db,
-  meta: { task: string; model?: string | null; projectId?: string | null },
+  meta: { task: string; model?: string | null; projectId?: string | null; pieceId?: string | null; provider?: string },
   fn: (usage: UsageCollector) => Promise<T>,
 ): Promise<{ result: T; runId: string; usage: UsageCollector }> {
   const runId = startRun(db, meta);

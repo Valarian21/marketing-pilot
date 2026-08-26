@@ -111,6 +111,8 @@ export const ContentPiece = z.object({
   status: ContentStatus, humanEdited: z.boolean(),
   publishedAt: Iso.nullable(), externalUrl: z.string().nullable(), utm: Json,
   meta: Json, aiTellScore: z.number().int().nullable(), aiTellNotes: z.string(), rejectionReason: z.string(),
+  /** Sum of all agent runs booked on this piece (OpenRouter + ElevenLabs + …), USD. */
+  costUsd: z.number().default(0),
   createdAt: Iso, updatedAt: Iso,
 });
 
@@ -137,7 +139,7 @@ export const CommunityLead = z.object({
 });
 
 export const AgentRun = z.object({
-  id: Id, projectId: Id.nullable(),
+  id: Id, projectId: Id.nullable(), pieceId: Id.nullable().default(null), provider: z.string().default("openrouter"),
   task: z.string(), model: z.string().nullable(),
   tokensIn: z.number().int(), tokensOut: z.number().int(), costUsd: z.number(),
   durationMs: z.number().int().nullable(), resultRef: z.string().nullable(),

@@ -5,8 +5,9 @@ import type { ContentPiece, Job, VideoAction, VideoScript, VideoView } from "../
 import { api } from "../api.js";
 import { Button, Card, Notice, PageHeader, Pill, type PillKind } from "../components/ui.js";
 import { ProjectNav } from "../components/ProjectNav.js";
+import { ReviseBox, fmtUsd } from "../components/Revise.js";
 
-const STEP_LABEL: Record<string, string> = { record: "Aufnehmen", voice: "Voiceover", overlays: "Overlays", reels: "Reels rendern", landscape: "Landscape rendern", assets: "Assets speichern" };
+const STEP_LABEL: Record<string, string> = { record: "Aufnehmen", check: "Szenen-Check", voice: "Voiceover", overlays: "Overlays", reels: "Reels rendern", landscape: "Landscape rendern", assets: "Assets speichern" };
 const STEP_PILL: Record<string, PillKind> = { pending: "todo", running: "progress", done: "done", failed: "review", skipped: "kind" };
 const ACTION_TYPES: VideoAction["type"][] = ["goto", "click", "type", "scroll", "wait", "hover", "press"];
 
@@ -112,8 +113,14 @@ export function VideoPage() {
           <div>
             {(activeJob ?? lastJob) && <JobCard job={activeJob ?? lastJob!} />}
             <Card>
-              <div className="mp-card-head"><h2>Fertige Varianten</h2>{piece.status !== "draft" && <Link className="mp-btn" to={`/projects/${id}/review?piece=${piece.id}`}>Zur Freigabe</Link>}</div>
+              <div className="mp-card-head"><h2>Fertige Varianten <span className="mp-muted mp-small">Kosten {fmtUsd(piece.costUsd)}</span></h2>{piece.status !== "draft" && <Link className="mp-btn" to={`/projects/${id}/review?piece=${piece.id}`}>Zur Freigabe</Link>}</div>
               {renders.length === 0 ? <p className="mp-muted">Noch nichts gerendert.</p> : <VideoGallery piece={piece} />}
+              {Array.isArray(piece.meta["sceneNotes"]) && (piece.meta["sceneNotes"] as { id: string; match: boolean; seen: string; issue: string }[]).length > 0 && (
+                <details className="mp-details mp-small" open={(piece.meta["sceneNotes"] as { match: boolean }[]).some((n) => !n.match)}><summary className="mp-label">Szenen-Check (Bild vs. Voiceover)</summary>
+                  <ul className="mp-plain-list">{(piece.meta["sceneNotes"] as { id: string; match: boolean; seen: string; issue: string }[]).map((n) => <li key={n.id}><Pill kind={n.match ? "done" : "review"}>{n.id}</Pill> {n.seen}{!n.match && n.issue && <span className="mp-over"> – {n.issue}</span>}</li>)}</ul>
+                </details>
+              )}
+              {renders.length > 0 && <ReviseBox piece={piece} onDone={load} />}
               {piece.aiTellNotes && <details className="mp-details mp-small"><summary className="mp-label">Render-Hinweise</summary><pre className="mp-pre">{piece.aiTellNotes}</pre></details>}
             </Card>
           </div>

@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import type { AgentRun, AuditEntry } from "../../shared/schemas.js";
 import { api } from "../api.js";
-import { Card, Notice, PageHeader, Pill, type PillKind } from "../components/ui.js";
+import { Card, Notice, PageHeader, Pill, Stat, type PillKind } from "../components/ui.js";
+import { fmtUsd } from "../components/Revise.js";
 
 const RUN_PILL: Record<AgentRun["status"], PillKind> = { running: "progress", done: "done", failed: "review" };
 const fmt = (iso: string) => new Date(iso).toLocaleString("de-DE", { dateStyle: "short", timeStyle: "short" });
@@ -17,19 +18,29 @@ export function ActivityPage() {
       .catch((e: unknown) => setError(e instanceof Error ? e.message : "Fehler"));
   }, []);
 
+  const total = runs.reduce((n, r) => n + r.costUsd, 0);
+  const byProvider = new Map<string, number>();
+  for (const r of runs) byProvider.set(r.provider, (byProvider.get(r.provider) ?? 0) + r.costUsd);
+  const since7 = Date.now() - 7 * 86_400_000;
+  const total7 = runs.filter((r) => Date.parse(r.startedAt) >= since7).reduce((n, r) => n + r.costUsd, 0);
   return (
     <>
       <PageHeader label="Beobachtbarkeit" title="Aktivität" />
       {error && <Notice kind="bad">{error}</Notice>}
+      <div className="mp-stats mp-stats--4 mp-stats--tiles">
+        <Stat label="Kosten letzte 7 Tage" value={fmtUsd(total7)} highlight />
+        <Stat label="Kosten gesamt (100 Läufe)" value={fmtUsd(total)} />
+        {[...byProvider.entries()].slice(0, 2).map(([prov, v]) => <Stat key={prov} label={prov} value={fmtUsd(v)} />)}
+      </div>
       <div className="mp-two-col">
         <Card>
           <h2>Agenten-Läufe</h2>
           {runs.length === 0 ? <p className="mp-muted">Noch kein Lauf. Jeder Aufruf eines Modells erscheint hier mit Tokens, Kosten und Dauer.</p> : (
             <div className="mp-table-wrap"><table className="mp-table">
-              <thead><tr><th>Start</th><th>Aufgabe</th><th>Modell</th><th>Tokens</th><th>Kosten</th><th>Dauer</th><th>Status</th></tr></thead>
+              <thead><tr><th>Start</th><th>Aufgabe</th><th>Modell</th><th>Stück</th><th>Tokens</th><th>Kosten</th><th>Dauer</th><th>Status</th></tr></thead>
               <tbody>{runs.map((r) => (
                 <tr key={r.id}>
-                  <td>{fmt(r.startedAt)}</td><td>{r.task}</td><td>{r.model ?? "–"}</td>
+                  <td>{fmt(r.startedAt)}</td><td>{r.task}</td><td>{r.model ?? "–"}</td><td className="mp-small">{r.pieceId ? r.pieceId.slice(0, 8) : "–"}</td>
                   <td className="mp-num-cell">{r.tokensIn + r.tokensOut}</td>
                   <td className="mp-num-cell">{r.costUsd.toFixed(4)} $</td>
                   <td className="mp-num-cell">{r.durationMs !== null ? `${(r.durationMs / 1000).toFixed(1)} s` : "–"}</td>

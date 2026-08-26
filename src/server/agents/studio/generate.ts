@@ -22,7 +22,7 @@ import { carouselSlideHtml, dataUrlFor, framedScreenshotHtml, pinHtml, playwrigh
 import { buildUtmUrl, deepLinkFor, PLATFORM_LIMITS, platformFromChannel, slugify } from "../../util/utm.js";
 import { markdownToHtml } from "../../util/markdown.js";
 import { pngSize } from "../../util/png.js";
-import { writeAudit } from "../../audit.js";
+import { pieceCosts, writeAudit } from "../../audit.js";
 import type { HostUser } from "../../../host-adapter.js";
 
 export interface StudioContext extends AgentContext {
@@ -36,11 +36,16 @@ const err = (msg: string, statusCode = 400) => Object.assign(new Error(msg), { s
 
 export const pieceOf = (r: typeof t.mpContentPieces.$inferSelect): s.ContentPiece => ({
   ...r, format: r.format as s.ContentPiece["format"], status: r.status as s.ContentPiece["status"],
-  assets: parseJson<string[]>(r.assets, []), utm: parseJson<Record<string, unknown>>(r.utm, {}), meta: parseJson<Record<string, unknown>>(r.meta, {}),
+  assets: parseJson<string[]>(r.assets, []), utm: parseJson<Record<string, unknown>>(r.utm, {}), meta: parseJson<Record<string, unknown>>(r.meta, {}), costUsd: 0,
 });
+/** Attach the booked agent-run costs (all providers) to pieces. */
+export function withCosts<T extends { id: string; costUsd: number }>(db: Db, pieces: T[]): T[] {
+  const costs = pieceCosts(db, pieces.map((p) => p.id));
+  return pieces.map((p) => ({ ...p, costUsd: Math.round((costs.get(p.id) ?? 0) * 10000) / 10000 }));
+}
 export function getPiece(db: Db, id: string): s.ContentPiece | null {
   const r = db.select().from(t.mpContentPieces).where(eq(t.mpContentPieces.id, id)).get();
-  return r ? pieceOf(r) : null;
+  return r ? withCosts(db, [pieceOf(r)])[0]! : null;
 }
 
 export function projectScreenshots(db: Db, projectId: string): (typeof t.mpAssets.$inferSelect & { label: string })[] {
@@ -208,7 +213,7 @@ export async function generateContent(ctx: StudioContext, projectId: string, req
   const model = req.format === "article" ? modelFor("analysis") : modelFor("content");
   let result: Draft;
   try {
-    result = (await withRun(ctx.db, { task: `studio.${req.format}`, model, projectId }, (usage) => draftFor(ctx, base, req, pieceId, usage))).result;
+    result = (await withRun(ctx.db, { task: `studio.${req.format}`, model, projectId, pieceId }, (usage) => draftFor(ctx, base, req, pieceId, usage))).result;
   } catch (e) {
     ctx.db.delete(t.mpContentPieces).where(eq(t.mpContentPieces.id, pieceId)).run();
     throw e;
@@ -230,7 +235,7 @@ export async function regenerateContent(ctx: StudioContext, pieceId: string, hin
   const old = ctx.db.select().from(t.mpAssets).where(eq(t.mpAssets.contentPieceId, pieceId)).all();
   for (const a of old) { try { fs.unlinkSync(path.join(ctx.dataDir, a.path)); } catch { /* gone */ } }
   ctx.db.delete(t.mpAssets).where(eq(t.mpAssets.contentPieceId, pieceId)).run();
-  const { result } = await withRun(ctx.db, { task: `studio.regenerate:${existing.format}`, model: modelFor("content"), projectId: existing.projectId }, (usage) => draftFor(ctx, base, merged, pieceId, usage));
+  const { result } = await withRun(ctx.db, { task: `studio.regenerate:${existing.format}`, model: modelFor("content"), projectId: existing.projectId, pieceId }, (usage) => draftFor(ctx, base, merged, pieceId, usage));
   const piece = fillPiece(ctx.db, pieceId, result, existing.meta);
   writeAudit(ctx.db, { user, action: "content.regenerate", entityType: "content_piece", entityId: pieceId, projectId: existing.projectId, content: { hint, score: result.score } });
   return piece;
@@ -260,7 +265,7 @@ export function buildPackage(ctx: StudioContext, piece: s.ContentPiece): s.Publi
 export function studioView(ctx: StudioContext, projectId: string): s.StudioView | null {
   const project = getProject(ctx.db, projectId);
   if (!project) return null;
-  const pieces = ctx.db.select().from(t.mpContentPieces).where(eq(t.mpContentPieces.projectId, projectId)).all().map(pieceOf).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const pieces = withCosts(ctx.db, ctx.db.select().from(t.mpContentPieces).where(eq(t.mpContentPieces.projectId, projectId)).all().map(pieceOf)).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const dirs = directoriesFor(ctx.db, projectId).map((d) => {
     const piece = pieces.find((p) => p.format === "directory_entry" && p.meta["directory"] === d.slug);
     return { ...d, pieceId: piece?.id ?? null, pieceStatus: piece?.status ?? null, submittedUrl: piece?.externalUrl ?? null, submittedAt: piece?.publishedAt ?? null };

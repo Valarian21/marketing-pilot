@@ -41,20 +41,21 @@ export async function executeTask(ctx: AgentContext, taskId: string, user: HostU
   if (!brief.success) throw Object.assign(new Error("Kein bestätigter Brief - erst die Analyse abschließen."), { statusCode: 400 });
   const format = formatForTask(task);
   ctx.db.update(t.mpTasks).set({ status: "in_progress", updatedAt: nowIso() }).where(eq(t.mpTasks.id, taskId)).run();
+  const pendingPieceId = newId();
   try {
-    const { result } = await withRun(ctx.db, { task: `task.execute:${task.type}`, model: modelFor(task.type === "community" ? "community" : "content"), projectId: task.projectId }, (usage) =>
+    const { result } = await withRun(ctx.db, { task: `task.execute:${task.type}`, model: modelFor(task.type === "community" ? "community" : "content"), projectId: task.projectId, pieceId: pendingPieceId }, (usage) =>
       chatJson(ctx.llm, modelFor(task.type === "community" ? "community" : "content"), Out,
         executeTaskPrompt({ brief: brief.data, task, personas: listPersonas(ctx, task.projectId), plan: currentVersion(ctx.db, task.projectId)?.plan ?? null, format }), usage, { maxTokens: 4000, temperature: 0.5 }));
     const ts = nowIso();
     const piece = {
-      id: newId(), projectId: task.projectId, taskId: task.id, channel: task.channel, format, title: result.title || task.title,
+      id: pendingPieceId, projectId: task.projectId, taskId: task.id, channel: task.channel, format, title: result.title || task.title,
       body: result.body + (result.notes ? `\n\n---\nHinweise für die Prüfung:\n${result.notes}` : ""), assets: "[]", status: "review",
       humanEdited: false, publishedAt: null, externalUrl: null, utm: "{}", meta: "{}", aiTellScore: null, aiTellNotes: "", rejectionReason: "", createdAt: ts, updatedAt: ts,
     };
     ctx.db.insert(t.mpContentPieces).values(piece).run();
     ctx.db.update(t.mpTasks).set({ status: "review", outputRefs: toJson([...task.outputRefs, piece.id]), updatedAt: ts }).where(eq(t.mpTasks.id, taskId)).run();
     writeAudit(ctx.db, { user, action: "task.execute", entityType: "task", entityId: task.id, projectId: task.projectId, content: { piece: piece.id, format } });
-    return { ...piece, format, status: "review", assets: [], utm: {}, meta: {} };
+    return { ...piece, format, status: "review", assets: [], utm: {}, meta: {}, costUsd: 0 };
   } catch (e) {
     ctx.db.update(t.mpTasks).set({ status: task.status === "review" ? "review" : "todo", updatedAt: nowIso() }).where(eq(t.mpTasks.id, taskId)).run();
     throw e;

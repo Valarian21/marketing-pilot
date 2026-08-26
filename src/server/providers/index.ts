@@ -5,7 +5,7 @@
  * (see ../runs.ts) - a silent failure is a bug.
  */
 
-export interface LlmMessage { role: "system" | "user" | "assistant"; content: string }
+export interface LlmMessage { role: "system" | "user" | "assistant"; content: string; /** data: URLs or https images (vision models) */ images?: string[] }
 export interface LlmUsage { tokensIn: number; tokensOut: number; costUsd: number }
 export interface LlmResult { text: string; model: string; usage: LlmUsage }
 export interface LlmProvider {

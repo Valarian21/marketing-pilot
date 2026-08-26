@@ -73,3 +73,10 @@ Format: Datum · Entscheidung · Grund · Alternative, die verworfen wurde.
 - **Scheduler im Worker, nicht in der API**: der API-Prozess bleibt zustandslos; ein Neustart des Workers holt fällige Jobs sofort nach, Zeitstempel in `mp_settings` verhindern Doppelläufe.
 - **Stücke ↔ Signups über `utm_content` = Stück-ID**: kein zusätzliches Tracking nötig, jeder UTM-Link aus dem Publish-Paket trägt die ID.
 - **Reddit-Fallback über `new.rss`**: die JSON-Endpunkte antworten von der VPS-IP mit 403 („network policy“), der Atom-Feed `r/<sub>/new.rss` liefert mit Browser-User-Agent. Block-Seiten werden erkannt und im Job-Log genannt; `hot` bleibt gesperrt. Mit `REDDIT_CLIENT_ID/SECRET` läuft alles über `oauth.reddit.com` (inkl. Regeln).
+
+## 2026-08-26 (Feedback-Runde)
+
+- **Kosten am Stück statt am Projekt**: jeder Lauf trägt `pieceId` + `provider`; ElevenLabs liefert keine Preise, deshalb Schätzung über Zeichen (konfigurierbar). Analyse/Strategie bleiben Projektkosten (kein Stück).
+- **Änderungswünsche editieren statt neu erzeugen**: ein „Kürzer“ darf nicht den ganzen Text neu würfeln – der Edit-Prompt ändert nur das Genannte. Bei Videos entscheidet ein Diff der Aktionen (nicht nur das Modell), ob neu aufgenommen werden muss.
+- **Aufnahmen bleiben, Zwischendateien nicht**: `.webm`-Aufnahmen ermöglichen billige Re-Renders; Segmente/Bodies/Overlays sind reproduzierbar und werden sofort gelöscht. Löschen ist bewusst manuell (Speicher-Tab), damit nie ein fertiges Video ohne Marcel verschwindet.
+- **Szenen-Check per Vision-Modell** (günstiges Modell, ~0,001 $/Szene): billiger als jede Heuristik und erklärt dem Menschen in einem Satz, was das Bild zeigt.

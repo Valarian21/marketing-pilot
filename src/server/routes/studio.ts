@@ -13,6 +13,7 @@ import { getProject } from "../repo/projects.js";
 import { extractBrandKit, loadBrandKit, saveBrandKit } from "../agents/studio/brandkit.js";
 import { deriveVoiceProfile } from "../agents/studio/voice.js";
 import { buildPackage, directoriesFor, generateContent, getPiece, regenerateContent, studioView, type StudioContext } from "../agents/studio/generate.js";
+import { revisePiece } from "../agents/revise.js";
 
 export function studioRoutes(app: FastifyInstance, db: Db, getCtx: () => StudioContext | null): void {
   const r = app.withTypeProvider<ZodTypeProvider>();
@@ -77,6 +78,12 @@ export function studioRoutes(app: FastifyInstance, db: Db, getCtx: () => StudioC
   r.post("/api/mp/content/:id/regenerate", { schema: { params: s.IdParams, body: s.RegenerateRequest, response: { 200: s.ContentPiece, 400: s.ErrorBody, 404: s.ErrorBody, 503: s.ErrorBody } } }, async (req, reply) => {
     const ctx = getCtx(); if (!ctx) return noKey(reply);
     return regenerateContent(ctx, req.params.id, req.body.hint, req.user);
+  });
+
+  /** "Ändere …": one instruction, the agent edits the piece (text) or the script + re-renders (video). */
+  r.post("/api/mp/content/:id/revise", { schema: { params: s.IdParams, body: z.object({ instruction: z.string().trim().min(3).max(2000) }), response: { 200: z.object({ piece: s.ContentPiece, changed: z.string(), job: s.Job.nullable(), needsRecording: z.boolean() }), 400: s.ErrorBody, 404: s.ErrorBody, 503: s.ErrorBody } } }, async (req, reply) => {
+    const ctx = getCtx(); if (!ctx) return noKey(reply);
+    return revisePiece(ctx, req.params.id, req.body.instruction, req.user);
   });
 
   r.get("/api/mp/content/:id/package", { schema: { params: s.IdParams, response: { 200: s.PublishPackage, 404: s.ErrorBody } } }, async (req, reply) => {

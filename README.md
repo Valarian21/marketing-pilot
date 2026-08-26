@@ -143,6 +143,14 @@ Das Paket ist heute ein eigener Prozess; „extrahieren“ heißt nur: anders er
    umstellen (das Snippet aus `/insights` neu kopieren – es enthält die URL).
 7. Prüfen: `/api/mp/health` → `mode: standalone`; Login mit dem Standalone-Konto; ein Test-Render.
 
+## Kosten, Änderungswünsche, Speicher
+
+Jedes Stück zeigt seine Kosten über alle Anbieter (`costUsd`, aus `mp_agent_runs.piece_id`).
+`POST /api/mp/content/:id/revise {instruction}` lässt den Agenten ein Stück gezielt ändern
+(Text-Edit bzw. Skript-Revision + Re-Render, ohne neue Aufnahme wenn nur Text betroffen).
+`GET /api/mp/storage` zeigt Platte/Dateien, `DELETE /api/mp/storage/pieces/:id?scope=intermediates|recordings|all`,
+`DELETE /api/mp/assets/:id`, `POST /api/mp/storage/cleanup`. UI: „Speicher“ in der Sidebar.
+
 ## Freigabe-Stufen und Kennzeichnung
 
 Jede Aktion mit Außenwirkung trägt `auto | review | human_only` (Default `review`;

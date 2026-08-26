@@ -12,7 +12,7 @@ import { USER_AGENT, sleep } from "../../providers/html.js";
 import { dismissConsent } from "../analysis/crawl.js";
 
 export interface RecordedClick { tMs: number; x: number; y: number }
-export interface RecordedScene { id: string; startMs: number; endMs: number; clicks: RecordedClick[]; error: string | null }
+export interface RecordedScene { id: string; startMs: number; endMs: number; clicks: RecordedClick[]; error: string | null; /** screenshot taken after the scene's actions (for the scene check) */ shot?: string }
 export interface Recording { file: string; device: VideoDevice; width: number; height: number; viewportWidth: number; viewportHeight: number; scenes: RecordedScene[]; durationMs: number; warnings: string[] }
 export interface RecordOptions {
   device: VideoDevice; outDir: string; baseUrl: string | null;
@@ -127,6 +127,10 @@ export const playwrightRecorder: Recorder = async (script, opts) => {
         } catch { /* try next path */ }
       }
       if (!ok) warnings.push("Login fehlgeschlagen - Aufnahme läuft ohne Anmeldung");
+      else {
+        // First-run tours often appear only on the first app visit: burn that visit here, not on tape.
+        try { await lp.goto(resolveUrl(opts.loginUrl ?? "/", opts.baseUrl), { waitUntil: "domcontentloaded", timeout: 20_000 }); await lp.waitForLoadState("networkidle", { timeout: 6_000 }).catch(() => undefined); await lp.waitForTimeout(800); await dismissConsent(lp); await lp.waitForTimeout(400); await dismissConsent(lp); } catch { /* best effort */ }
+      }
       storageState = path.join(opts.outDir, "state.json");
       await lctx.storageState({ path: storageState });
       await lctx.close();
@@ -152,8 +156,9 @@ export const playwrightRecorder: Recorder = async (script, opts) => {
             case "goto": {
               await page.goto(resolveUrl(a.url ?? "/", opts.baseUrl), { waitUntil: "domcontentloaded", timeout: 25_000 });
               await page.waitForLoadState("networkidle", { timeout: 8_000 }).catch(() => undefined);
+              await sleep(600);
               await dismissConsent(page);
-              await sleep(500); break;
+              await sleep(300); break;
             }
             case "click": case "hover": case "type": {
               const loc = a.target ? await findTarget(page, a.target) : null;
@@ -172,9 +177,11 @@ export const playwrightRecorder: Recorder = async (script, opts) => {
               await sleep(400); break;
             }
             case "scroll": {
-              const total = a.y ?? 600; const chunks = 8;
-              for (let i = 0; i < chunks; i++) { await page.mouse.wheel(0, total / chunks); await sleep(70); }
-              await sleep(500); break;
+              // eased scroll: ~40 small wheel ticks over ~1.1 s so it reads like a thumb, not a jump
+              const total = a.y ?? 600; const steps = 40;
+              let done = 0;
+              for (let i = 1; i <= steps; i++) { const target = Math.round(total * easeInOutCubic(i / steps)); await page.mouse.wheel(0, target - done); done = target; await sleep(28); }
+              await sleep(600); break;
             }
             case "wait": await sleep(a.ms ?? 1000); break;
             case "press": await page.keyboard.press(a.text ?? "Enter"); await sleep(400); break;
@@ -188,6 +195,7 @@ export const playwrightRecorder: Recorder = async (script, opts) => {
       }
       const elapsed = Date.now() - t0 - rec.startMs;
       if (elapsed < scene.durationMs) await sleep(scene.durationMs - elapsed);
+      try { const shot = path.join(opts.outDir, `scene-${opts.device}-${scene.id}.png`); await page.screenshot({ path: shot, scale: "css" }); rec.shot = shot; } catch { /* optional */ }
       rec.endMs = Date.now() - t0;
       scenes.push(rec);
     }

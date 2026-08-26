@@ -42,6 +42,7 @@ const EnvSchema = z.object({
   OPENROUTER_API_KEY: optional,
   ELEVENLABS_API_KEY: optional,
   ELEVENLABS_VOICE_ID: optional,
+  ELEVENLABS_USD_PER_1K_CHARS: z.coerce.number().min(0).default(0.22),
   MP_PUBLISH_PROVIDER: z.enum(["manual", "postiz"]).default("manual"),
   POSTIZ_API_URL: optional,
   POSTIZ_API_KEY: optional,

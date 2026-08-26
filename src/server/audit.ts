@@ -32,13 +32,35 @@ export function listAudit(db: Db, limit = 100, projectId?: string): AuditEntry[]
 }
 
 /** Open a run before calling a provider; close it with `finishRun` in a finally block. */
-export function startRun(db: Db, input: { task: string; model?: string | null; projectId?: string | null }): string {
+export function startRun(db: Db, input: { task: string; model?: string | null; projectId?: string | null; pieceId?: string | null; provider?: string }): string {
   const id = newId();
   db.insert(mpAgentRuns).values({
-    id, projectId: input.projectId ?? null, task: input.task, model: input.model ?? null,
+    id, projectId: input.projectId ?? null, pieceId: input.pieceId ?? null, provider: input.provider ?? "openrouter", task: input.task, model: input.model ?? null,
     status: "running", startedAt: nowIso(),
   }).run();
   return id;
+}
+
+/** Book a finished, externally priced call (e.g. ElevenLabs) as a run in one go. */
+export function bookRun(db: Db, input: { task: string; model: string; provider: string; projectId?: string | null; pieceId?: string | null; costUsd: number; tokensIn?: number; tokensOut?: number; durationMs?: number; error?: string | null }): string {
+  const id = newId();
+  const now = nowIso();
+  db.insert(mpAgentRuns).values({
+    id, projectId: input.projectId ?? null, pieceId: input.pieceId ?? null, provider: input.provider, task: input.task, model: input.model,
+    tokensIn: input.tokensIn ?? 0, tokensOut: input.tokensOut ?? 0, costUsd: input.costUsd, durationMs: input.durationMs ?? null, resultRef: null,
+    error: input.error ?? null, status: input.error ? "failed" : "done", startedAt: now, finishedAt: now,
+  }).run();
+  return id;
+}
+
+/** Cost per piece, USD (all providers). */
+export function pieceCosts(db: Db, pieceIds: string[]): Map<string, number> {
+  const out = new Map<string, number>();
+  if (!pieceIds.length) return out;
+  for (const r of db.select({ pieceId: mpAgentRuns.pieceId, costUsd: mpAgentRuns.costUsd }).from(mpAgentRuns).all()) {
+    if (r.pieceId && pieceIds.includes(r.pieceId)) out.set(r.pieceId, (out.get(r.pieceId) ?? 0) + r.costUsd);
+  }
+  return out;
 }
 
 export function finishRun(db: Db, id: string, result: {

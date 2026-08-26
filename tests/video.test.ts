@@ -164,7 +164,7 @@ describe("video API + render job", () => {
     const res = await built.app.inject({ method: "POST", url: `/api/mp/content/${pieceId}/video/render`, headers: auth, payload: { variants: 2, landscape: true } });
     expect(res.statusCode).toBe(202);
     const job = res.json();
-    expect(job.steps.map((st: { name: string }) => st.name)).toEqual(["record", "voice", "overlays", "reels", "landscape", "assets"]);
+    expect(job.steps.map((st: { name: string }) => st.name)).toEqual(["record", "check", "voice", "overlays", "reels", "landscape", "assets"]);
     expect((await built.app.inject({ method: "POST", url: `/api/mp/content/${pieceId}/video/render`, headers: auth, payload: {} })).statusCode).toBe(409);
 
     ffmpegCalls.length = 0; renderedJobs.length = 0;
