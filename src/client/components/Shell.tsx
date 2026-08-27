@@ -9,7 +9,7 @@ import { Button } from "./ui.js";
 import { lastProject, rememberProject } from "./ProjectNav.js";
 
 const NAV: { group: string; to: string; label: string; icon: IconName; end?: boolean }[] = [
-  { group: "Planung", to: "/", label: "Projekte", icon: "projects", end: true },
+  { group: "Planung", to: "/projects", label: "Projekte", icon: "projects", end: true },
   { group: "Planung", to: "/timeline", label: "Timeline", icon: "timeline" },
   { group: "Planung", to: "/tasks", label: "Aufgaben", icon: "tasks" },
   { group: "Inhalte", to: "/studio", label: "Content Studio", icon: "studio" },
@@ -23,7 +23,7 @@ const NAV: { group: string; to: string; label: string; icon: IconName; end?: boo
 ];
 const GROUPS = Array.from(new Set(NAV.map((n) => n.group)));
 
-interface ProjectLite { id: string; name: string; url: string }
+interface ProjectLite { id: string; name: string; url: string; piecesInReview?: number; openTasksThisWeek?: number }
 
 /** Current project: the one in the URL, else the last one used. */
 function useCurrentProject(projects: ProjectLite[]): ProjectLite | null {
@@ -63,7 +63,7 @@ function ProjectBox({ projects }: { projects: ProjectLite[] }) {
       <Link className="mp-project-name" to={`/projects/${current.id}`} title={current.url}>{current.name}</Link>
       <div className="mp-project-switch">
         <select value={current.id} onChange={(e) => switchTo(e.target.value)} aria-label="Projekt wechseln">{projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
-        <Link to="/">Alle</Link>
+        <Link to="/projects">Alle</Link>
       </div>
     </div>
   );
@@ -74,7 +74,9 @@ export function Shell() {
   const [projects, setProjects] = useState<ProjectLite[]>([]);
   const { pathname } = useLocation();
   const reloadKey = pathname.startsWith("/projects/") ? "" : pathname;   // project list changes only via the projects page
-  useEffect(() => { api<ProjectLite[]>("/projects").then(setProjects).catch(() => setProjects([])); }, [reloadKey]);
+  useEffect(() => { api<ProjectLite[]>("/overview").then(setProjects).catch(() => setProjects([])); }, [reloadKey, pathname]);
+  const current = useCurrentProject(projects);
+  const badge = (to: string): number | null => !current ? null : to === "/review" ? (current.piecesInReview ?? null) : to === "/tasks" ? (current.openTasksThisWeek ?? null) : null;
   return (
     <div className="mp-shell">
       <aside className="mp-sidebar">
@@ -91,7 +93,7 @@ export function Shell() {
                 const Icon = Icons[n.icon];
                 return (
                   <NavLink key={n.to} to={n.to} end={n.end ?? false} className={({ isActive }) => `mp-nav-item${isActive ? " is-active" : ""}`}>
-                    <span className="mp-nav-icon"><Icon /></span>{n.label}
+                    <span className="mp-nav-icon"><Icon /></span>{n.label}{(badge(n.to) ?? 0) > 0 && <span className="mp-nav-badge">{badge(n.to)}</span>}
                   </NavLink>
                 );
               })}

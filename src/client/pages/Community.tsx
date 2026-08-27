@@ -1,6 +1,6 @@
 /** Community radar: leads by score, editable draft, "copy and open thread", mark as answered. No auto-posting - not built on purpose. */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useParams } from "react-router";
+import { useParams, useSearchParams } from "react-router";
 import type { CommunityLead, CommunitySource, CommunityView } from "../../shared/schemas.js";
 import { api } from "../api.js";
 import { Button, Card, Notice, PageHeader, Pill, type PillKind } from "../components/ui.js";
@@ -13,7 +13,8 @@ export function CommunityPage() {
   const [view, setView] = useState<CommunityView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [open, setOpen] = useState<string | null>(null);
+  const [params] = useSearchParams();
+  const [open, setOpen] = useState<string | null>(params.get("lead"));
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [showDone, setShowDone] = useState(false);
   const [editSources, setEditSources] = useState(false);
@@ -47,7 +48,7 @@ export function CommunityPage() {
   return (
     <>
       <ProjectNav id={id} />
-      <PageHeader label="Stufe 5" title="Community-Radar" actions={
+      <PageHeader label="Wachstum" title="Community-Radar" actions={
         <div className="mp-inline">
           {view.lastScanAt && <span className="mp-label">letzter Scan {new Date(view.lastScanAt).toLocaleString("de-DE", { dateStyle: "short", timeStyle: "short" })}</span>}
           <Button variant="primary" disabled={busy || scanning} onClick={() => void scan()}>{scanning ? "Scan läuft …" : "Jetzt scannen"}</Button>
@@ -59,7 +60,7 @@ export function CommunityPage() {
       <Card className="mp-form-card">
         <div className="mp-card-head"><h2>Quellen <span className="mp-muted mp-small">täglich gescannt</span></h2><Button onClick={() => setEditSources((v) => !v)}>{editSources ? "Abbrechen" : "Bearbeiten"}</Button></div>
         {!editSources ? (
-          <div className="mp-inline mp-wrap">{view.sources.map((sx, i) => <Pill key={i} kind={sx.enabled ? "done" : "kind"}>{sx.type === "reddit" ? `r/${sx.value}` : sx.type === "hn" ? `HN: ${sx.value || "Kategorie"}` : sx.label || sx.value}</Pill>)}{view.sources.length === 0 && <span className="mp-muted">Keine Quellen aus der Analyse ableitbar – bitte anlegen.</span>}</div>
+          <div className="mp-inline mp-wrap">{view.sources.map((sx, i) => { const label = sx.type === "reddit" ? `r/${sx.value}` : sx.type === "hn" ? `HN: ${sx.value || "Kategorie"}` : sx.label || sx.value; const url = sx.type === "reddit" ? `https://www.reddit.com/r/${sx.value}/` : sx.type === "rss" ? sx.value : null; return <Pill key={i} kind={sx.enabled ? "done" : "kind"}>{url ? <a href={url} target="_blank" rel="noreferrer" style={{ color: "inherit", textDecoration: "none" }} title="Öffnen (neuer Tab)">{label} ↗</a> : label}</Pill>; })}{view.sources.length === 0 && <span className="mp-muted">Keine Quellen aus der Analyse ableitbar – bitte anlegen.</span>}</div>
         ) : (
           <div className="mp-form">
             {sources.map((sx, i) => (

@@ -23,6 +23,7 @@ import { storageRoutes } from "./routes/storage.js";
 import { mediaRoutes } from "./routes/media.js";
 import { buildContext, type FullContext, type ServiceOverrides } from "./services.js";
 import { markStaleRuns } from "./agents/analysis/pipeline.js";
+import { resolveShortlink } from "./shortlinks.js";
 
 declare module "fastify" {
   interface FastifyRequest { user: HostUser }
@@ -90,6 +91,13 @@ export async function buildApp(env: Env, opts: { host?: HostAdapter; dbFile?: st
   if (hasClient) {
     await app.register(fastifyStatic, { root: clientDir, prefix: "/mp/", wildcard: false, index: false });
   }
+  // Public short links from publish packages (nginx routes /go/ here). No auth, no tracking beyond a click count.
+  app.get("/go/:code", async (req, reply) => {
+    const code = String((req.params as { code: string }).code ?? "");
+    const target = /^[a-z0-9]{4,12}$/.test(code) ? resolveShortlink(db, code) : null;
+    if (!target) return reply.code(404).type("text/html; charset=utf-8").send("<h1 style='font-family:sans-serif;text-align:center;margin-top:20vh'>Link nicht gefunden</h1>");
+    return reply.code(302).header("Cache-Control", "no-store").redirect(target);
+  });
   app.get("/", async (_req, reply) => reply.redirect("/mp/"));
   app.get("/mp", async (_req, reply) => reply.redirect("/mp/"));
   app.setNotFoundHandler(async (req, reply) => {

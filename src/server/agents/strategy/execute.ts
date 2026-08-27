@@ -12,6 +12,9 @@ import { listPersonas } from "../analysis/personas.js";
 import { currentVersion } from "./plan.js";
 import { writeAudit } from "../../audit.js";
 import type { HostUser } from "../../../host-adapter.js";
+import { generateContent, type StudioContext } from "../studio/generate.js";
+import { generateVideoScript } from "../video/script.js";
+import { platformKey, saneTitle } from "../../../shared/channels.js";
 
 const Out = z.object({ title: z.string().default(""), body: z.string().min(1), notes: z.string().default("") });
 
@@ -27,7 +30,7 @@ export function formatForTask(task: { type: string; title: string; channel: stri
 }
 
 export function rowToTask(r: typeof t.mpTasks.$inferSelect): s.Task {
-  return { ...r, type: r.type as s.Task["type"], status: r.status as s.Task["status"], assignedTo: r.assignedTo as s.Task["assignedTo"], approvalLevel: r.approvalLevel as s.Task["approvalLevel"], outputRefs: parseJson<string[]>(r.outputRefs, []) };
+  return { ...r, link: null, type: r.type as s.Task["type"], status: r.status as s.Task["status"], assignedTo: r.assignedTo as s.Task["assignedTo"], approvalLevel: r.approvalLevel as s.Task["approvalLevel"], outputRefs: parseJson<string[]>(r.outputRefs, []) };
 }
 
 export async function executeTask(ctx: AgentContext, taskId: string, user: HostUser): Promise<s.ContentPiece> {
@@ -40,6 +43,17 @@ export async function executeTask(ctx: AgentContext, taskId: string, user: HostU
   const brief = s.Brief.safeParse(project?.brief);
   if (!brief.success) throw Object.assign(new Error("Kein bestätigter Brief - erst die Analyse abschließen."), { statusCode: 400 });
   const format = formatForTask(task);
+  // Real formats go through the studio (proper prompts, renders, AI-tell check) or the video factory;
+  // only research/strategy/measure notes use the generic task prompt below.
+  const platform = platformKey(task.channel) ?? undefined;
+  if (task.type === "content" && format === "video") {
+    return generateVideoScript(ctx, task.projectId, { topic: task.title, hint: task.description, taskId: task.id }, user);
+  }
+  // directory entries need a directory slug - they are prepared from the studio's "Verzeichnisse" tab
+  if (task.type === "content" && (format === "text" || format === "carousel" || format === "pin")) {
+    const req: s.ContentRequest = { format, topic: task.title, hint: task.description, taskId: task.id, ...(platform && s.Platform.safeParse(platform).success ? { platform: platform as s.ContentRequest["platform"] } : {}) };
+    return generateContent(ctx as unknown as StudioContext, task.projectId, req, user);
+  }
   ctx.db.update(t.mpTasks).set({ status: "in_progress", updatedAt: nowIso() }).where(eq(t.mpTasks.id, taskId)).run();
   const pendingPieceId = newId();
   try {
@@ -48,7 +62,7 @@ export async function executeTask(ctx: AgentContext, taskId: string, user: HostU
         executeTaskPrompt({ brief: brief.data, task, personas: listPersonas(ctx, task.projectId), plan: currentVersion(ctx.db, task.projectId)?.plan ?? null, format }), usage, { maxTokens: 4000, temperature: 0.5 }));
     const ts = nowIso();
     const piece = {
-      id: pendingPieceId, projectId: task.projectId, taskId: task.id, channel: task.channel, format, title: result.title || task.title,
+      id: pendingPieceId, projectId: task.projectId, taskId: task.id, channel: task.channel, format, title: saneTitle(result.title, result.body, task.title),
       body: result.body + (result.notes ? `\n\n---\nHinweise für die Prüfung:\n${result.notes}` : ""), assets: "[]", status: "review",
       humanEdited: false, publishedAt: null, externalUrl: null, utm: "{}", meta: "{}", aiTellScore: null, aiTellNotes: "", rejectionReason: "", createdAt: ts, updatedAt: ts,
     };

@@ -72,8 +72,11 @@ export const Channel = z.object({
   createdAt: Iso,
 });
 
+/** The piece a task is about (its output, or the matching draft for a publish task). */
+export const TaskLink = z.object({ pieceId: Id, title: z.string(), status: ContentStatus, format: ContentFormat });
 export const Task = z.object({
   id: Id, projectId: Id,
+  link: TaskLink.nullable().default(null),
   title: z.string(), description: z.string(),
   type: TaskType, status: TaskStatus,
   dueAt: Iso.nullable(), assignedTo: Assignee, approvalLevel: ApprovalLevel,
@@ -283,6 +286,18 @@ export const TimelineView = z.object({
   rows: z.array(z.object({ channel: z.string(), items: z.array(TimelineItem) })),
 });
 
+export const TodayPost = z.object({ piece: ContentPiece, platform: z.string(), composeLink: z.string().nullable(), composeLabel: z.string().nullable(), profileLink: z.string().nullable(), appOnly: z.boolean() });
+export const TodayView = z.object({
+  startDate: z.string(), week: z.number().int(), weekPlanned: z.boolean(),
+  review: z.array(ContentPiece),
+  toPost: z.array(TodayPost),
+  leads: z.object({ count: z.number().int(), top: z.array(CommunityLead) }),
+  myTasks: z.array(Task),
+  agentTasks: z.array(Task),
+  progress: z.object({ done: z.number().int(), total: z.number().int() }),
+  setup: z.object({ briefConfirmed: z.boolean(), planVersion: z.number().int().nullable(), profilesMissing: z.number().int(), voiceProfile: z.boolean(), eventsSeen: z.boolean() }),
+});
+
 export const ProjectOverview = Project.extend({
   openTasksThisWeek: z.number().int(),
   piecesInReview: z.number().int(),
@@ -362,12 +377,21 @@ export const DirectoryStatus = DirectoryDef.extend({
   pieceId: Id.nullable(), pieceStatus: ContentStatus.nullable(), submittedUrl: z.string().nullable(), submittedAt: Iso.nullable(),
 });
 
+export const ChannelProfile = z.object({ platform: z.string().min(1), label: z.string().default(""), url: z.string().default("") });
+
 export const PublishPackage = z.object({
   piece: ContentPiece,
   platform: z.string(),
+  /** the project's own page on that platform (from the channel profiles), for "open profile" */
+  profileLink: z.string().nullable().default(null),
+  profileLabel: z.string().nullable().default(null),
+  appOnly: z.boolean().default(false),
   text: z.string(),
   assets: z.array(z.object({ id: Id, kind: z.string(), url: z.string(), filename: z.string(), width: z.number().int().nullable(), height: z.number().int().nullable(), aiGenerated: z.boolean() })),
   utmLink: z.string().nullable(),
+  /** short redirect (`/go/<code>`) that carries the UTM parameters - this is what goes into the post */
+  shortLink: z.string().nullable().default(null),
+  clicks: z.number().int().default(0),
   deepLink: z.string().nullable(),
   deepLinkLabel: z.string().nullable(),
   postizAvailable: z.boolean(),
@@ -458,7 +482,7 @@ export const InboundEvent = z.object({
 export const InsightsView = z.object({
   weeks: z.array(z.object({ weekStart: z.string(), signups: z.number().int(), activated: z.number().int(), paid: z.number().int() })),
   byChannel: z.array(z.object({ source: z.string(), signups: z.number().int(), activated: z.number().int(), paid: z.number().int() })),
-  pieces: z.array(z.object({ pieceId: z.string(), title: z.string(), channel: z.string(), format: z.string(), signups: z.number().int(), publishedAt: Iso.nullable() })),
+  pieces: z.array(z.object({ pieceId: z.string(), title: z.string(), channel: z.string(), format: z.string(), signups: z.number().int(), clicks: z.number().int().default(0), publishedAt: Iso.nullable() })),
   geoHistory: z.array(z.object({ batch: z.string(), takenAt: Iso, visibility: z.number(), asked: z.number().int() })),
   totalEvents: z.number().int(),
   webhookConfigured: z.boolean(),
@@ -493,6 +517,9 @@ export type ProjectUpdate = z.infer<typeof ProjectUpdate>;
 export type Persona = z.infer<typeof Persona>;
 export type Channel = z.infer<typeof Channel>;
 export type Task = z.infer<typeof Task>;
+export type TaskLink = z.infer<typeof TaskLink>;
+export type TodayView = z.infer<typeof TodayView>;
+export type TodayPost = z.infer<typeof TodayPost>;
 export type ContentPiece = z.infer<typeof ContentPiece>;
 export type Asset = z.infer<typeof Asset>;
 export type Insight = z.infer<typeof Insight>;
@@ -535,6 +562,7 @@ export type ContentRequest = z.infer<typeof ContentRequest>;
 export type DirectoryDef = z.infer<typeof DirectoryDef>;
 export type DirectoryStatus = z.infer<typeof DirectoryStatus>;
 export type PublishPackage = z.infer<typeof PublishPackage>;
+export type ChannelProfile = z.infer<typeof ChannelProfile>;
 export type StudioView = z.infer<typeof StudioView>;
 export type VideoAction = z.infer<typeof VideoAction>;
 export type VideoScene = z.infer<typeof VideoScene>;

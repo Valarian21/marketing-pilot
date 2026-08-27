@@ -4,7 +4,7 @@ import { Shell } from "./components/Shell.js";
 import { Notice } from "./components/ui.js";
 import { LoginPage } from "./pages/Login.js";
 import { ProjectsPage } from "./pages/Projects.js";
-import { ProjectDetailPage } from "./pages/ProjectDetail.js";
+import { TodayPage } from "./pages/Today.js";
 import { AnalysisPage } from "./pages/Analysis.js";
 import { ActivityPage } from "./pages/Activity.js";
 import { SettingsPage } from "./pages/Settings.js";
@@ -30,8 +30,9 @@ function Gate() {
     <div className="mp-root">
       <Routes>
         <Route element={<Shell />}>
-          <Route index element={<ProjectsPage />} />
-          <Route path="projects/:id" element={<ProjectDetailPage />} />
+          <Route index element={<ProjectsPage autoOpen />} />
+          <Route path="projects" element={<ProjectsPage />} />
+          <Route path="projects/:id" element={<TodayPage />} />
           <Route path="projects/:id/analysis" element={<AnalysisPage />} />
           <Route path="projects/:id/strategy" element={<StrategyPage />} />
           <Route path="projects/:id/tasks" element={<TasksPage />} />

@@ -5,6 +5,8 @@ import { ErrorBody, IdParams, Project, ProjectCreate, ProjectUpdate } from "../.
 import { createProject, deleteProject, getProject, listProjects, updateProject } from "../repo/projects.js";
 import { writeAudit } from "../audit.js";
 import type { Db } from "../db/index.js";
+import { ChannelProfile } from "../../shared/schemas.js";
+import { loadProfiles, saveProfiles } from "../channels.js";
 
 export function projectRoutes(app: FastifyInstance, db: Db): void {
   const r = app.withTypeProvider<ZodTypeProvider>();
@@ -35,6 +37,18 @@ export function projectRoutes(app: FastifyInstance, db: Db): void {
     writeAudit(db, { user: req.user, action: "project.update", entityType: "project", entityId: p.id,
       projectId: p.id, content: { fields: Object.keys(req.body) } });
     return p;
+  });
+
+  // Channel profiles: where the project lives on each platform. Every channel name in the UI links here.
+  r.get("/api/mp/projects/:id/profiles", { schema: { params: IdParams, response: { 200: z.array(ChannelProfile), 404: ErrorBody } } }, async (req, reply) => {
+    if (!getProject(db, req.params.id)) return reply.code(404).send({ detail: "Projekt nicht gefunden." });
+    return loadProfiles(db, req.params.id);
+  });
+  r.put("/api/mp/projects/:id/profiles", { schema: { params: IdParams, body: z.array(ChannelProfile), response: { 200: z.array(ChannelProfile), 404: ErrorBody } } }, async (req, reply) => {
+    if (!getProject(db, req.params.id)) return reply.code(404).send({ detail: "Projekt nicht gefunden." });
+    const out = saveProfiles(db, req.params.id, req.body);
+    writeAudit(db, { user: req.user, action: "project.channels", entityType: "project", entityId: req.params.id, projectId: req.params.id, content: { count: out.filter((p) => p.url).length } });
+    return out;
   });
 
   r.delete("/api/mp/projects/:id", {

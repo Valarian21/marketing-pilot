@@ -166,3 +166,35 @@ Erledigt:
   Optionszeile (Reels/Landscape/Musik/Aufnahme wiederverwenden, Primärknopf rechts), Szenenkarten kompakt (Feld-
   flex-basis wurde in Spaltenkarten zur Höhe), `waitFor` im Aktions-Dropdown, Studio-Reiter gestylt, Tabellen-
   überschriften/Zahlen/Daten ohne Umbruch, Aktivität einspaltig, Objekt-IDs gekürzt, Speicher-Formate lesbar.
+
+## UX-Runde „Vom Stück zum Post“ (27.08.)
+
+Gesamtanalyse aller 18 Seiten mit echten Lehreule-Daten: das System erzeugte viel, aber der Weg vom Stück zum Post lief
+über vier Seiten ohne Verbindung – der Wochen-Report meldete „keine einzige geplante Aktion ausgeführt“. Fünf Pakete:
+
+1. **Fehler**: Projekt-Übersicht zeigte fest 0/0/0 (jetzt `/overview`); UTM-Kampagne nahm den ersten Plan-Kanal
+   (LinkedIn-Post trug `reddit-r-lehrerzimmer`) → Kampagne = Kanal des Stücks; Platzhalter-Titel („internal label“)
+   → `saneTitle` nimmt die erste Textzeile; Timeline hatte doppelte Kanäle („Instagram“/„instagram“, „website“/
+   „AlternativeTo“) → `canonicalChannel` in `src/shared/channels.ts`; „Jetzt ausführen“ erzeugte für Reel-Aufgaben
+   einen Text → Dispatch nach Format (Video-Skript, Studio-Text/Carousel/Pin, sonst generische Notiz).
+2. **Kanäle & Profile** (`GET/PUT /api/mp/projects/:id/profiles`, `mp_settings channels:<pid>`): je Plattform die
+   eigene Seite (mehrere je Plattform erlaubt, z. B. Facebook-Gruppen). `<ChannelTag>` macht jeden Kanalnamen in
+   Aufgaben, Timeline, Studio, Medien, Publish und Community-Quellen zum Link (neuer Tab); Subreddits werden aus dem
+   Namen abgeleitet, ohne Profil öffnet die Plattform-Startseite.
+3. **„Heute“-Cockpit** (`/projects/:id`, `GET …/today`): Freigeben · Posten (Text kopieren & Plattform öffnen) ·
+   Antworten · Meine Aufgaben, dazu „Der Agent kann jetzt“ mit Alle-ausführen und Einrichtungs-Hinweise. Startseite
+   springt ins Cockpit des zuletzt genutzten/einzigen Projekts (`/projects` bleibt die Liste). Aufgaben: laufende
+   Woche aufgeklappt und markiert, andere eingeklappt; Publish-Aufgaben zeigen ihr Stück (`Task.link`, Heuristik in
+   `today.ts`: eigenes Output, sonst neuester unveröffentlichter Entwurf gleichen Formats/Kanals, jeder Entwurf nur
+   einer Aufgabe), Haken fragt nach der Post-URL und setzt das Stück auf veröffentlicht; „Im Studio erstellen“
+   belegt Format/Plattform/Thema vor; Sidebar-Zähler für Freigaben und Aufgaben.
+4. **Publish-Flow**: drei Schritte (Text kopieren → Plattform öffnen [kopiert automatisch] → fertig melden).
+   **Kurzlinks** `mp_shortlinks` + `GET /go/:code` (öffentlich, nginx-Location `/go/` → 8105, 302 mit UTM, zählt
+   Klicks): der Post trägt `agi-empire.com/go/xxxxxx` statt der 150-Zeichen-UTM-URL; Instagram/TikTok bekommen keinen
+   Link im Text, sondern den „Link in Bio“-Hinweis. Insights zeigen Klicks je Stück.
+5. **Politur**: Freigabe zeigt Reels mit Hook-Frame als Poster, Landscape eingeklappt, Video-Skript als Leseansicht,
+   „Freigeben & posten“ springt ins Paket; Projekt-Reiter nur noch Heute · Analyse · Strategie (Rest ist in der
+   Sidebar); „Stufe n“-Labels durch die Bereichsnamen ersetzt; Löschen-Knöpfe leise.
+
+Nicht gebaut: Zusammenlegen von „produzieren“ + „posten“ zu einer Karte (Heuristik zu unsicher) – stattdessen zeigt
+die Publish-Aufgabe ihr Stück. 82 Tests. Analyse-Test `runs all steps…` ist zeitabhängig flaky (409-Erwartung).

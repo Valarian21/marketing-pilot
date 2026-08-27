@@ -15,6 +15,7 @@ import { briefConfirmed } from "./strategy.js";
 import { latestReport } from "../agents/loop/weekly.js";
 
 import { pieceOf, withCosts } from "../agents/studio/generate.js";
+import { canonicalChannel } from "../../shared/channels.js";
 
 export function weekOf(startDate: string, iso: string | null): number | null {
   if (!iso) return null;
@@ -29,9 +30,11 @@ export function timelineView(db: Db, projectId: string, weeks = 12): s.TimelineV
   const startDate = plan?.startDate ?? project.createdAt.slice(0, 10);
   const tasks = db.select().from(t.mpTasks).where(eq(t.mpTasks.projectId, projectId)).orderBy(t.mpTasks.week, t.mpTasks.order).all().map(rowToTask);
   const pieces = db.select().from(t.mpContentPieces).where(eq(t.mpContentPieces.projectId, projectId)).all().map(pieceOf);
+  const planNames = (plan?.channels ?? []).map((c) => c.platform);
   const rows = new Map<string, s.TimelineItem[]>();
-  for (const c of plan?.channels ?? []) rows.set(c.platform, []);
-  const push = (ch: string, item: s.TimelineItem) => { const key = ch || "Allgemein"; if (!rows.has(key)) rows.set(key, []); rows.get(key)!.push(item); };
+  for (const c of planNames) rows.set(canonicalChannel(c, planNames), []);
+  // one row per canonical channel: "instagram" (pieces) and "Instagram" (tasks) used to be two rows
+  const push = (ch: string, item: s.TimelineItem) => { const key = canonicalChannel(ch, planNames); if (!rows.has(key)) rows.set(key, []); rows.get(key)!.push(item); };
   for (const x of tasks) {
     const w = weekOf(startDate, x.dueAt) ?? x.week;
     push(x.channel, { kind: "task", id: x.id, title: x.title, week: Math.max(1, w), status: x.status, planned: x.status !== "done", date: x.dueAt, assignedTo: x.assignedTo, type: x.type });

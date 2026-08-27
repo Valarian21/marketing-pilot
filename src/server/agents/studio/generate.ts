@@ -20,6 +20,9 @@ import { voiceBlock } from "./voice.js";
 import { reviseWithCritic } from "./critic.js";
 import { carouselSlideHtml, dataUrlFor, framedScreenshotHtml, pinHtml, playwrightRenderer, type RenderJob, type Renderer } from "./render.js";
 import { buildUtmUrl, deepLinkFor, PLATFORM_LIMITS, platformFromChannel, slugify } from "../../util/utm.js";
+import { canonicalChannel, channelLink, saneTitle } from "../../../shared/channels.js";
+import { loadProfiles, planChannelNames } from "../../channels.js";
+import { ensureShortlink, shortUrl } from "../../shortlinks.js";
 import { markdownToHtml } from "../../util/markdown.js";
 import { pngSize } from "../../util/png.js";
 import { pieceCosts, writeAudit } from "../../audit.js";
@@ -199,7 +202,7 @@ function insertPlaceholder(db: Db, projectId: string, pieceId: string, req: s.Co
 
 function fillPiece(db: Db, pieceId: string, d: Draft, existingMeta: Record<string, unknown>): s.ContentPiece {
   const ts = nowIso();
-  db.update(t.mpContentPieces).set({ title: d.title, body: d.body, assets: toJson(d.assets), meta: toJson({ ...existingMeta, ...d.meta }), status: "review", humanEdited: false, aiTellScore: d.score, aiTellNotes: d.notes, channel: d.channel, format: d.format, updatedAt: ts }).where(eq(t.mpContentPieces.id, pieceId)).run();
+  db.update(t.mpContentPieces).set({ title: saneTitle(d.title, d.body, d.channel), body: d.body, assets: toJson(d.assets), meta: toJson({ ...existingMeta, ...d.meta }), status: "review", humanEdited: false, aiTellScore: d.score, aiTellNotes: d.notes, channel: d.channel, format: d.format, updatedAt: ts }).where(eq(t.mpContentPieces.id, pieceId)).run();
   return getPiece(db, pieceId)!;
 }
 
@@ -255,7 +258,9 @@ export function buildPackage(ctx: StudioContext, piece: s.ContentPiece): s.Publi
   const project = getProject(ctx.db, piece.projectId);
   const platform = String(piece.meta["platform"] ?? platformFromChannel(piece.channel, piece.format === "article" ? "website" : "other"));
   const medium = piece.format === "directory_entry" ? "directory" : piece.format === "article" ? "content" : "social";
-  const campaign = slugify(String(piece.meta["campaign"] ?? currentVersion(ctx.db, piece.projectId)?.plan.channels[0]?.platform ?? piece.channel ?? "marketing"));
+  // campaign = the piece's own channel (a LinkedIn post used to inherit the plan's first channel, "reddit-r-lehrerzimmer")
+  const campaign = slugify(String(piece.meta["campaign"] ?? canonicalChannel(piece.channel || platform, planChannelNames(ctx.db, piece.projectId)) ?? "marketing"));
+  const profile = channelLink(piece.channel || platform, loadProfiles(ctx.db, piece.projectId));
   const utmLink = project && piece.format !== "article" ? buildUtmUrl(project.url, { source: platform, medium, campaign, content: piece.id }) : null;
   const dl = piece.format === "directory_entry" ? { url: String(piece.meta["deepLink"] ?? ""), label: `Formular bei ${piece.channel} öffnen` } : deepLinkFor(platform);
   const assets = ctx.db.select().from(t.mpAssets).where(eq(t.mpAssets.contentPieceId, piece.id)).all().map((a) => {
@@ -268,8 +273,16 @@ export function buildPackage(ctx: StudioContext, piece: s.ContentPiece): s.Publi
   if (piece.meta["overLimit"]) notes.push(`Text überschreitet das Plattform-Limit (${String(piece.meta["length"])} Zeichen).`);
   if (piece.format === "directory_entry" && piece.meta["notes"]) notes.push(String(piece.meta["notes"]));
   if (!piece.humanEdited && piece.aiTellScore !== null && piece.aiTellScore < 7) notes.push(`AI-Tell-Score ${piece.aiTellScore}/10 - vor dem Posten noch einmal in eigene Worte bringen.`);
-  const text = utmLink && piece.format === "text" && !piece.body.includes(project?.url ?? " ") ? `${piece.body}\n\n${utmLink}` : piece.body;
-  return { piece, platform, text, assets, utmLink, deepLink: dl?.url || null, deepLinkLabel: dl?.label ?? null, postizAvailable: ctx.publish.name === "postiz", notes };
+  // short link instead of the raw UTM URL: readable in the post, and every click is counted
+  const publicBase = ctx.env?.MP_PUBLIC_BASE ?? process.env["MP_PUBLIC_BASE"] ?? "";
+  const short = utmLink && publicBase ? ensureShortlink(ctx.db, piece.projectId, piece.id, utmLink) : null;
+  const shortLink = short ? shortUrl(publicBase, short.code) : null;
+  const linkForPost = shortLink ?? utmLink;
+  const hasLink = piece.body.includes(project?.url ?? " ") || (shortLink ? piece.body.includes(shortLink) : false);
+  // Instagram/TikTok captions cannot carry links - the link goes into the bio, the caption says so
+  const text = linkForPost && piece.format === "text" && !hasLink && !profile.appOnly ? `${piece.body}\n\n${linkForPost}` : piece.body;
+  if (profile.appOnly && linkForPost) notes.push(`Links im Text sind hier nicht klickbar - „Link in Bio“ verwenden: ${linkForPost}`);
+  return { piece, platform, profileLink: profile.url, profileLabel: profile.url ? `${profile.label} öffnen` : null, appOnly: profile.appOnly, text, assets, utmLink, shortLink, clicks: short?.clicks ?? 0, deepLink: dl?.url || null, deepLinkLabel: dl?.label ?? null, postizAvailable: ctx.publish.name === "postiz", notes };
 }
 
 export function studioView(ctx: StudioContext, projectId: string): s.StudioView | null {

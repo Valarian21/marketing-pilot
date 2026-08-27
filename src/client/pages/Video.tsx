@@ -17,7 +17,8 @@ export function VideoPage() {
   const [view, setView] = useState<VideoView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [topic, setTopic] = useState("Onboarding-Demo");
+  const [topic, setTopic] = useState(params.get("topic") ?? "Onboarding-Demo");
+  const hintFromTask = params.get("hint") ?? "";
   const [script, setScript] = useState<VideoScript | null>(null);
   const [dirty, setDirty] = useState(false);
   const [opts, setOpts] = useState<{ variants: number; landscape: boolean; reuseRecording: boolean; music: "none" | "landscape" | "all" }>({ variants: 2, landscape: true, reuseRecording: false, music: "landscape" });
@@ -39,7 +40,7 @@ export function VideoPage() {
   }, [activeJob, load]);
 
   const run = async (fn: () => Promise<unknown>) => { setBusy(true); setError(null); try { await fn(); await load(); } catch (e) { setError(e instanceof Error ? e.message : "Fehler"); } finally { setBusy(false); } };
-  const createScript = () => run(async () => { const p = await api<ContentPiece>(`/projects/${id}/video/script`, { method: "POST", json: { topic, hint: "" } }); setDirty(false); setParams({ piece: p.id }); });
+  const createScript = () => run(async () => { const p = await api<ContentPiece>(`/projects/${id}/video/script`, { method: "POST", json: { topic, hint: hintFromTask } }); setDirty(false); setParams({ piece: p.id }); });
   const saveScript = () => run(async () => { if (!piece || !script) return; await api(`/content/${piece.id}/script`, { method: "PUT", json: script }); setDirty(false); });
   const render = () => run(async () => { if (!piece) return; if (dirty && script) await api(`/content/${piece.id}/script`, { method: "PUT", json: script }); setDirty(false); await api(`/content/${piece.id}/video/render`, { method: "POST", json: opts }); });
 
@@ -50,7 +51,7 @@ export function VideoPage() {
   return (
     <>
       <ProjectNav id={id} />
-      <PageHeader label="Stufe 4" title="Video-Fabrik" actions={
+      <PageHeader label="Inhalte" title="Video-Fabrik" actions={
         <div className="mp-inline">
           <input className="mp-input" value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="z. B. Reel #1: Onboarding-Demo" />
           <Button variant="primary" disabled={busy} onClick={() => void createScript()}>{busy ? "…" : "Skript erzeugen"}</Button>
@@ -148,19 +149,26 @@ function JobCard({ job }: { job: Job }) {
   );
 }
 
-/** Video assets of a piece with <video> players (used here and in the review). */
+/** Video assets of a piece: reels with their hook frame as poster, the landscape cut folded below (used here and in the review). */
 export function VideoGallery({ piece }: { piece: ContentPiece }) {
-  const [assets, setAssets] = useState<{ id: string; kind: string; url: string; filename: string; aiGenerated: boolean }[]>([]);
-  useEffect(() => { api<{ assets: { id: string; kind: string; url: string; filename: string; aiGenerated: boolean }[] }>(`/content/${piece.id}/package`).then((p) => setAssets(p.assets)).catch(() => setAssets([])); }, [piece.id]);
+  type A = { id: string; kind: string; url: string; filename: string; aiGenerated: boolean };
+  const [assets, setAssets] = useState<A[]>([]);
+  useEffect(() => { api<{ assets: A[] }>(`/content/${piece.id}/package`).then((p) => setAssets(p.assets)).catch(() => setAssets([])); }, [piece.id]);
   const renders = assets.filter((a) => a.kind === "render");
+  // the pipeline stores "<name>-thumb.png" next to "<name>.mp4"
+  const poster = (a: A) => assets.find((x) => x.filename === a.filename.replace(/\.mp4$/, "-thumb.png"))?.url;
+  const reels = renders.filter((a) => !a.filename.startsWith("landscape"));
+  const wide = renders.filter((a) => a.filename.startsWith("landscape"));
+  const player = (a: A, wideCut = false) => (
+    <figure key={a.id} className={`mp-video${wideCut ? " mp-video--wide" : ""}`}>
+      <video controls preload="none" poster={poster(a)} src={a.url} />
+      <figcaption className="mp-small"><a href={a.url} download={a.filename}>{a.filename}</a>{a.aiGenerated && <Pill kind="kind">KI-Kennzeichnung</Pill>}</figcaption>
+    </figure>
+  );
   return (
     <div className="mp-videos">
-      {renders.map((a) => (
-        <figure key={a.id} className={`mp-video${a.filename.startsWith("landscape") ? " mp-video--wide" : ""}`}>
-          <video controls preload="metadata" src={a.url} />
-          <figcaption className="mp-small"><a href={a.url} download={a.filename}>{a.filename}</a>{a.aiGenerated && <Pill kind="kind">KI-Kennzeichnung</Pill>}</figcaption>
-        </figure>
-      ))}
+      {reels.map((a) => player(a))}
+      {wide.length > 0 && <details className="mp-details mp-video--wide"><summary className="mp-label">Landscape-Schnitt ({wide.length})</summary>{wide.map((a) => player(a, true))}</details>}
     </div>
   );
 }

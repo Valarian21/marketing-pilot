@@ -272,3 +272,14 @@ export const mpReports = sqliteTable("mp_reports", {
   createdAt: createdAt(),
   decidedAt: text("decided_at"),
 }, (t) => [index("mp_reports_project").on(t.projectId)]);
+
+/** Short links for publish packages: `${MP_PUBLIC_BASE}/go/<code>` → UTM target. Clicks are counted on redirect. */
+export const mpShortlinks = sqliteTable("mp_shortlinks", {
+  code: text("code").primaryKey(),
+  projectId: text("project_id").references(() => mpProjects.id, { onDelete: "cascade" }),
+  pieceId: text("piece_id").references(() => mpContentPieces.id, { onDelete: "cascade" }),
+  target: text("target").notNull(),
+  clicks: integer("clicks").notNull().default(0),
+  createdAt: createdAt(),
+  lastClickAt: text("last_click_at"),
+}, (t) => [index("mp_shortlinks_piece").on(t.pieceId)]);

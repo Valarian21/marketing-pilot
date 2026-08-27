@@ -4,6 +4,7 @@ import type { TimelineItem, TimelineView } from "../../shared/schemas.js";
 import { api } from "../api.js";
 import { Card, Notice, PageHeader, Pill } from "../components/ui.js";
 import { ProjectNav } from "../components/ProjectNav.js";
+import { ChannelTag } from "../components/ChannelLink.js";
 
 export function TimelinePage() {
   const { id = "" } = useParams();
@@ -31,7 +32,7 @@ export function TimelinePage() {
               {view.rows.length === 0 && <div className="mp-tl-empty">Noch keine Kanäle – erst Strategie und Aufgaben erzeugen.</div>}
               {view.rows.map((row) => (
                 <div key={row.channel} className="mp-tl-row">
-                  <div className="mp-tl-label" title={row.channel}>{row.channel}</div>
+                  <div className="mp-tl-label" title={row.channel}><ChannelTag name={row.channel} projectId={id} className="mp-tl-channel" /></div>
                   {weeks.map((w) => {
                     const items = row.items.filter((it) => it.week === w);
                     return (
@@ -54,7 +55,7 @@ export function TimelinePage() {
               <div className="mp-card-head"><h2>{sel.item.kind === "task" ? "Aufgabe" : "Content-Stück"}</h2><button type="button" className="mp-btn" onClick={() => setSel(null)}>Schließen</button></div>
               <p><strong>{sel.item.title}</strong></p>
               <dl className="mp-dl">
-                <dt>Kanal</dt><dd>{sel.channel}</dd>
+                <dt>Kanal</dt><dd><ChannelTag name={sel.channel} projectId={id} className="" /></dd>
                 <dt>Woche</dt><dd>{sel.item.week}</dd>
                 <dt>Status</dt><dd><Pill kind={sel.item.planned ? "todo" : "done"}>{sel.item.status}</Pill></dd>
                 <dt>Typ</dt><dd>{sel.item.type}</dd>

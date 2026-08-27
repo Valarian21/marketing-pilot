@@ -5,6 +5,7 @@ import { api } from "../api.js";
 import { Button, Card, Notice, PageHeader, Pill, fmtDateTime, type PillKind } from "../components/ui.js";
 import { ProjectNav } from "../components/ProjectNav.js";
 import { fmtUsd } from "../components/Revise.js";
+import { ChannelTag } from "../components/ChannelLink.js";
 
 const TABS = [{ id: "erstellen", label: "Erstellen" }, { id: "brand", label: "Brand-Kit & Stimme" }, { id: "verzeichnisse", label: "Verzeichnisse" }, { id: "geo", label: "GEO-Artikel" }] as const;
 type Tab = (typeof TABS)[number]["id"];
@@ -33,13 +34,13 @@ export function StudioPage() {
   return (
     <>
       <ProjectNav id={id} />
-      <PageHeader label="Stufe 3" title="Content Studio" />
+      <PageHeader label="Inhalte" title="Content Studio" />
       {error && <Notice kind="bad">{error}</Notice>}
       {!view.hasBrief && <Notice kind="warn">Ohne Brief kein Content – <Link to={`/projects/${id}/analysis`}>Analyse ausführen</Link>.</Notice>}
       {noVoice && view.hasBrief && <Notice kind="warn">Kein Voice-Profil: Texte klingen dann generisch. Lade unter „Brand-Kit &amp; Stimme“ 5–20 eigene Texte hoch und leite das Profil ab.</Notice>}
       <nav className="mp-subnav" aria-label="Studio-Bereiche">
         {TABS.map((t) => <button key={t.id} type="button" className={`mp-subnav-item mp-linkbtn${tab === t.id ? " is-active" : ""}`} onClick={() => setParams({ tab: t.id })}>{t.label}</button>)}
-        <Link className="mp-subnav-item" to={`/projects/${id}/studio/video`}>Video-Fabrik</Link>
+        <Link className="mp-subnav-item mp-subnav-item--link" to={`/projects/${id}/studio/video`}>Video-Fabrik →</Link>
       </nav>
 
       {tab === "erstellen" && <CreateTab id={id} view={view} busy={busy} run={run} />}
@@ -53,11 +54,13 @@ export function StudioPage() {
 type Run = (label: string, fn: () => Promise<unknown>) => Promise<void>;
 
 function CreateTab({ id, view, busy, run }: { id: string; view: StudioView; busy: string | null; run: Run }) {
-  const [format, setFormat] = useState("text");
-  const [platform, setPlatform] = useState("linkedin");
+  // tasks link here with format/platform/topic pre-filled ("Im Studio erstellen")
+  const [params] = useSearchParams();
+  const [format, setFormat] = useState(params.get("format") ?? "text");
+  const [platform, setPlatform] = useState(params.get("platform") ?? "linkedin");
   const [template, setTemplate] = useState("clean");
-  const [topic, setTopic] = useState("");
-  const [hint, setHint] = useState("");
+  const [topic, setTopic] = useState(params.get("topic") ?? "");
+  const [hint, setHint] = useState(params.get("hint") ?? "");
   const submit = (e: FormEvent) => {
     e.preventDefault();
     void run("create", () => api(`/projects/${id}/content`, { method: "POST", json: { format, platform: format === "pin" ? "pinterest" : platform, template, topic, hint } }));
@@ -99,7 +102,7 @@ export function PieceList({ id, pieces }: { id: string; pieces: ContentPiece[] }
           <tr key={p.id}>
             <td>{p.title || "(ohne Titel)"}</td>
             <td><Pill kind="kind">{FORMAT_LABEL[p.format] ?? p.format}</Pill></td>
-            <td className="mp-small">{p.channel}</td>
+            <td className="mp-small"><ChannelTag name={p.channel} projectId={id} className="" /></td>
             <td className="mp-small" title={`Zuletzt bearbeitet ${fmtDateTime(p.updatedAt)}`}>{fmtDateTime(p.createdAt)}</td>
             <td className="mp-num-cell">{p.aiTellScore === null ? "–" : `${p.aiTellScore}/10`}</td>
             <td className="mp-num-cell">{fmtUsd(p.costUsd)}</td>

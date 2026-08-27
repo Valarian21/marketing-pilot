@@ -6,6 +6,7 @@ import { api } from "../api.js";
 import { Card, EmptyState, Notice, PageHeader, Pill, fmtDateTime } from "../components/ui.js";
 import { fmtUsd } from "../components/Revise.js";
 import { fmtBytes } from "./Storage.js";
+import { ChannelTag } from "../components/ChannelLink.js";
 
 interface MediaItem { id: string; projectId: string; projectName: string; title: string; format: string; status: string; channel: string; createdAt: string; updatedAt: string; renderedAt: string | null; costUsd: number; thumbUrl: string | null; previewUrl: string | null; assetCount: number; bytes: number; humanEdited: boolean }
 
@@ -58,7 +59,7 @@ export function MediaPage() {
             <div className="mp-media-body">
               <div className="mp-inline"><Pill kind="kind">{FORMAT_LABEL[i.format] ?? i.format}</Pill><span className="mp-small mp-muted">{STATUS_LABEL[i.status] ?? i.status}{i.humanEdited ? " · bearbeitet" : ""}</span></div>
               <Link to={linkFor(i)} className="mp-media-title">{i.title || "(ohne Titel)"}</Link>
-              <div className="mp-small mp-muted">{i.projectName} · {i.channel || "–"}</div>
+              <div className="mp-small mp-muted">{i.projectName} · {i.channel ? <ChannelTag name={i.channel} projectId={i.projectId} className="" /> : "–"}</div>
               <div className="mp-small mp-muted">Erstellt {fmtDateTime(i.createdAt)}<br />Bearbeitet {fmtDateTime(i.updatedAt)}{i.renderedAt && <><br />Gerendert {fmtDateTime(i.renderedAt)}</>}</div>
               <div className="mp-small">{fmtUsd(i.costUsd)}{i.bytes > 0 && ` · ${fmtBytes(i.bytes)}`}{i.assetCount > 0 && ` · ${i.assetCount} Dateien`}</div>
             </div>

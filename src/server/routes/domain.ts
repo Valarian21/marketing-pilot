@@ -8,6 +8,7 @@ import { desc, eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import type { Db } from "../db/index.js";
+import { listTasks, todayView } from "../today.js";
 import { parseJson } from "../db/index.js";
 import * as t from "../db/schema.js";
 import * as s from "../../shared/schemas.js";
@@ -30,11 +31,9 @@ export function domainRoutes(app: FastifyInstance, db: Db): void {
       .orderBy(t.mpChannels.priority).all().map((x) => ({ ...x, meta: s.ChannelMeta.parse(obj(x.meta)) })));
 
   r.get("/api/mp/projects/:projectId/tasks", { schema: { params: P, response: { 200: z.array(s.Task) } } },
-    async (req) => db.select().from(t.mpTasks).where(eq(t.mpTasks.projectId, req.params.projectId))
-      .orderBy(t.mpTasks.week, t.mpTasks.order).all()
-      .map((x) => ({ ...x, type: x.type as s.Task["type"], status: x.status as s.Task["status"],
-        assignedTo: x.assignedTo as s.Task["assignedTo"], approvalLevel: x.approvalLevel as s.Task["approvalLevel"],
-        outputRefs: arr(x.outputRefs) })));
+    async (req) => listTasks(db, req.params.projectId));
+  r.get("/api/mp/projects/:projectId/today", { schema: { params: P, response: { 200: s.TodayView } } },
+    async (req) => todayView(db, req.params.projectId));
 
   r.get("/api/mp/projects/:projectId/content", { schema: { params: P, response: { 200: z.array(s.ContentPiece) } } },
     async (req) => db.select().from(t.mpContentPieces).where(eq(t.mpContentPieces.projectId, req.params.projectId))

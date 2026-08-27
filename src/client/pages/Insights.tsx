@@ -33,7 +33,7 @@ export function InsightsPage() {
   return (
     <>
       <ProjectNav id={id} />
-      <PageHeader label="Stufe 5" title="Insights" actions={<Button variant="primary" disabled={busy} onClick={() => void run(() => api(`/projects/${id}/reports/run`, { method: "POST", json: {} }))}>{busy ? "…" : "Wochen-Report jetzt erzeugen"}</Button>} />
+      <PageHeader label="Wachstum" title="Insights" actions={<Button variant="primary" disabled={busy} onClick={() => void run(() => api(`/projects/${id}/reports/run`, { method: "POST", json: {} }))}>{busy ? "…" : "Wochen-Report jetzt erzeugen"}</Button>} />
       {error && <Notice kind="bad">{error}</Notice>}
       {!view.webhookConfigured && <Notice kind="warn"><code className="mp-code">MP_EVENTS_TOKEN</code> fehlt in der .env – der Webhook nimmt nur Browser-Signups ohne Token an. Token setzen und im Produkt-Backend mitschicken.</Notice>}
 
@@ -62,10 +62,10 @@ export function InsightsPage() {
 
       <div className="mp-two-col">
         <Card>
-          <h2>Beste und schwächste Stücke <span className="mp-muted mp-small">veröffentlicht, nach utm_content</span></h2>
+          <h2>Beste und schwächste Stücke <span className="mp-muted mp-small">veröffentlicht · Klicks über den Kurzlink, Signups über utm_content</span></h2>
           {view.pieces.length === 0 ? <p className="mp-muted">Noch nichts veröffentlicht.</p> : (
-            <table className="mp-table"><thead><tr><th>Stück</th><th>Kanal</th><th>Signups</th></tr></thead>
-              <tbody>{view.pieces.map((p) => <tr key={p.pieceId}><td><Link to={`/projects/${id}/publish/${p.pieceId}`}>{p.title || p.format}</Link></td><td className="mp-small">{p.channel}</td><td className="mp-num-cell">{p.signups}</td></tr>)}</tbody></table>
+            <table className="mp-table"><thead><tr><th>Stück</th><th>Kanal</th><th>Klicks</th><th>Signups</th></tr></thead>
+              <tbody>{view.pieces.map((p) => <tr key={p.pieceId}><td><Link to={`/projects/${id}/publish/${p.pieceId}`}>{p.title || p.format}</Link></td><td className="mp-small">{p.channel}</td><td className="mp-num-cell">{p.clicks}</td><td className="mp-num-cell">{p.signups}</td></tr>)}</tbody></table>
           )}
         </Card>
         <Card>

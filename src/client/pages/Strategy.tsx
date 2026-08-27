@@ -43,7 +43,7 @@ export function StrategyPage() {
   return (
     <>
       <ProjectNav id={id} />
-      <PageHeader label="Stufe 2" title="Strategie" actions={
+      <PageHeader label="Plan" title="Strategie" actions={
         <Button variant="primary" disabled={busy || running || !view.briefConfirmed} onClick={() => void run(false)}>{view.current ? "Plan anpassen (neue Version)" : "Strategie erzeugen"}</Button>
       } />
       {error && <Notice kind="bad">{error}</Notice>}

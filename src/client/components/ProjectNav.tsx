@@ -2,10 +2,9 @@
 import { useEffect } from "react";
 import { NavLink } from "react-router";
 
+// Only the pages the sidebar does not offer - everything else (Aufgaben, Studio, Freigaben, …) is one click away there.
 const TABS = [
-  { to: "", label: "Übersicht" }, { to: "/analysis", label: "Analyse" }, { to: "/strategy", label: "Strategie" },
-  { to: "/tasks", label: "Aufgaben" }, { to: "/timeline", label: "Timeline" }, { to: "/studio", label: "Studio" }, { to: "/review", label: "Freigaben" },
-  { to: "/community", label: "Community" }, { to: "/insights", label: "Insights" },
+  { to: "", label: "Heute" }, { to: "/analysis", label: "Analyse" }, { to: "/strategy", label: "Strategie" },
 ];
 
 export function rememberProject(id: string): void { try { localStorage.setItem("mp_project", id); } catch { /* ignore */ } }

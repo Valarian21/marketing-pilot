@@ -127,7 +127,9 @@ describe("studio API", () => {
     const pkg = (await built.app.inject({ url: `/api/mp/content/${p.id}/package`, headers: auth })).json();
     expect(pkg.deepLink).toBe("https://x.com/compose/post");
     expect(pkg.utmLink).toContain("utm_source=x");
-    expect(pkg.text).toContain("utm_content=" + p.id);
+    expect(pkg.utmLink).toContain("utm_content=" + p.id);
+    expect(pkg.shortLink).toMatch(/\/go\/[a-z2-9]{6}$/);
+    expect(pkg.text).toContain(pkg.shortLink);   // the post carries the short link, not the raw UTM URL
     expect(pkg.postizAvailable).toBe(false);
   });
 

@@ -67,7 +67,7 @@ export function AnalysisPage() {
   return (
     <>
       <ProjectNav id={id} />
-      <PageHeader label="Stufe 1" title="Analyse" actions={
+      <PageHeader label="Grundlage" title="Analyse" actions={
         <>
           <Button variant="primary" disabled={busy || running} onClick={() => void start()}>{run ? "Analyse neu starten" : "Analyse starten"}</Button>
           <Button variant="primary" disabled={busy || running || !view.brief || confirmed} onClick={() => void confirm()}>{confirmed ? "Brief bestätigt" : "Brief bestätigen"}</Button>

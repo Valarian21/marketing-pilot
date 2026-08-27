@@ -1,6 +1,6 @@
 /** Review queue: one piece at a time, platform-style preview, inline edit, approve / reject / regenerate. */
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useParams, useSearchParams } from "react-router";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import type { ContentPiece } from "../../shared/schemas.js";
 import { api } from "../api.js";
 import { Button, Card, Notice, PageHeader, Pill, fmtDateTime, type PillKind } from "../components/ui.js";
@@ -14,6 +14,7 @@ const STATUS: Record<ContentPiece["status"], { label: string; kind: PillKind }> 
 export function ReviewPage() {
   const { id = "" } = useParams();
   const [params, setParams] = useSearchParams();
+  const navigate = useNavigate();
   const [pieces, setPieces] = useState<ContentPiece[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState<string | null>(null);
@@ -30,7 +31,7 @@ export function ReviewPage() {
   useEffect(() => setDraft(null), [current?.id]);
 
   const go = (p: ContentPiece | undefined) => { if (p) setParams({ piece: p.id }); else setParams({}); };
-  const act = async (status: ContentPiece["status"] | "regenerate") => {
+  const act = async (status: ContentPiece["status"] | "regenerate", thenPackage = false) => {
     if (!current) return;
     setBusy(true); setError(null);
     try {
@@ -43,6 +44,7 @@ export function ReviewPage() {
         await api(`/content/${current.id}`, { method: "PATCH", json: { status, ...(reason ? { reason } : {}), ...(draft !== null && draft !== current.body ? { body: draft } : {}) } });
       }
       await load();
+      if (status === "approved" && thenPackage) { void navigate(`/projects/${id}/publish/${current.id}`); return; }
       if (status === "approved" || status === "rejected") go(queue[idx + 1] ?? queue.find((p) => p.id !== current.id));
     } catch (e) { setError(e instanceof Error ? e.message : "Fehler"); }
     finally { setBusy(false); }
@@ -52,7 +54,7 @@ export function ReviewPage() {
   return (
     <>
       <ProjectNav id={id} />
-      <PageHeader label="Stufe 3" title="Freigaben" actions={<span className="mp-label">{queue.length} in der Warteschlange</span>} />
+      <PageHeader label="Inhalte" title="Freigaben" actions={<span className="mp-label">{queue.length} in der Warteschlange</span>} />
       {error && <Notice kind="bad">{error}</Notice>}
       {!current && <Card className="mp-empty"><h2>Nichts zu prüfen</h2><p>Entwürfe aus dem Content Studio und aus Agent-Aufgaben landen hier.</p><Link className="mp-btn mp-btn--primary" to={`/projects/${id}/studio`}>Zum Content Studio</Link></Card>}
       {current && (
@@ -71,11 +73,15 @@ export function ReviewPage() {
               </div>
             </div>
             <Preview piece={current} text={draft ?? current.body} />
-            <label className="mp-field"><span>Text (Änderungen setzen „von dir bearbeitet“)</span>
-              <textarea className="mp-piece-body" rows={Math.min(28, Math.max(6, (draft ?? current.body).split("\n").length + 2))} value={draft ?? current.body} onChange={(e) => setDraft(e.target.value)} disabled={current.status === "published"} />
-            </label>
+            {current.format === "video" ? (
+              <details className="mp-details mp-small"><summary className="mp-label">Skript als Text (bearbeiten in der <Link to={`/projects/${id}/studio/video?piece=${current.id}`}>Video-Fabrik</Link>)</summary><pre className="mp-pre">{current.body}</pre></details>
+            ) : (
+              <label className="mp-field"><span>Text (Änderungen setzen „von dir bearbeitet“)</span>
+                <textarea className="mp-piece-body" rows={Math.min(28, Math.max(6, (draft ?? current.body).split("\n").length + 2))} value={draft ?? current.body} onChange={(e) => setDraft(e.target.value)} disabled={current.status === "published"} />
+              </label>
+            )}
             <div className="mp-form-actions mp-review-actions">
-              {current.status === "review" && <><Button variant="primary" disabled={busy} onClick={() => void act("approved")}>Freigeben</Button><Button variant="danger" disabled={busy} onClick={() => void act("rejected")}>Ablehnen</Button></>}
+              {current.status === "review" && <><Button variant="primary" disabled={busy} onClick={() => void act("approved", true)}>Freigeben &amp; posten</Button><Button disabled={busy} onClick={() => void act("approved")}>Nur freigeben</Button><Button variant="danger" disabled={busy} onClick={() => void act("rejected")}>Ablehnen</Button></>}
               {current.status !== "published" && <Button disabled={busy} onClick={() => void act("regenerate")}>{busy ? "…" : "Neu generieren"}</Button>}
               {draft !== null && draft !== current.body && current.status !== "published" && <Button disabled={busy} onClick={() => void saveText()}>Text speichern</Button>}
               {(current.status === "approved" || current.status === "published") && <Link className="mp-btn mp-btn--primary" to={`/projects/${id}/publish/${current.id}`}>Publish-Paket</Link>}

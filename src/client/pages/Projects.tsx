@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { Link } from "react-router";
+import { Link, useNavigate } from "react-router";
+import { lastProject } from "../components/ProjectNav.js";
 import type { Project, ProjectOverview } from "../../shared/schemas.js";
 import { api } from "../api.js";
 import { Button, Card, EmptyState, Notice, PageHeader, Pill, type PillKind } from "../components/ui.js";
@@ -12,7 +13,9 @@ const STATUS_LABEL: Record<Project["status"], { label: string; kind: PillKind }>
   archived: { label: "Archiv", kind: "kind" },
 };
 
-export function ProjectsPage() {
+/** `autoOpen`: the start page jumps straight into the cockpit of the (last used or only) project - the list stays reachable via "Alle". */
+export function ProjectsPage({ autoOpen = false }: { autoOpen?: boolean }) {
+  const nav = useNavigate();
   const [projects, setProjects] = useState<ProjectOverview[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -21,9 +24,13 @@ export function ProjectsPage() {
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
-    try { setProjects(await api<ProjectOverview[]>("/overview")); setError(null); }
+    try {
+      const list = await api<ProjectOverview[]>("/overview");
+      if (autoOpen && list.length > 0) { const last = lastProject(); const target = list.find((p) => p.id === last) ?? (list.length === 1 ? list[0] : undefined); if (target) { nav(`/projects/${target.id}`, { replace: true }); return; } }
+      setProjects(list); setError(null);
+    }
     catch (e) { setError(e instanceof Error ? e.message : "Laden fehlgeschlagen."); }
-  }, []);
+  }, [autoOpen, nav]);
   useEffect(() => { void load(); }, [load]);
 
   const create = async (e: FormEvent) => {
@@ -74,6 +81,7 @@ export function ProjectsPage() {
                   <Pill kind={st.kind}>{st.label}</Pill>
                 </div>
                 <a className="mp-project-url" href={p.url} target="_blank" rel="noreferrer">{p.url}</a>
+                <Link to={`/projects/${p.id}`} className="mp-btn mp-btn--primary" style={{ alignSelf: "flex-start" }}>Heute öffnen</Link>
                 <div className="mp-stats mp-stats--4">
                   <div className="mp-ministat" title="Offene Aufgaben diese Woche"><div className="mp-label">Aufgaben</div><div className="mp-num">{p.openTasksThisWeek}</div></div>
                   <div className="mp-ministat" title="Stücke in Freigabe"><div className="mp-label">Freigabe</div><div className="mp-num">{p.piecesInReview}</div></div>
@@ -85,7 +93,7 @@ export function ProjectsPage() {
                 )}
                 <div className="mp-project-foot">
                   <span className="mp-label">{p.planVersion ? `Plan v${p.planVersion}` : p.briefConfirmed ? "Brief bestätigt" : `Angelegt ${new Date(p.createdAt).toLocaleDateString("de-DE")}`}</span>
-                  <Button variant="danger" onClick={() => void remove(p)}>Löschen</Button>
+                  <button type="button" className="mp-linkbtn mp-small mp-muted" onClick={() => void remove(p)}>Projekt löschen</button>
                 </div>
               </Card>
             );

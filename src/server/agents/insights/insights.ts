@@ -1,4 +1,5 @@
 /** Insights: inbound product events (webhook), aggregation per week/channel/piece, GEO history, landing-page snippet. */
+import { clicksByPiece } from "../../shortlinks.js";
 import { and, desc, eq } from "drizzle-orm";
 import type * as s from "../../../shared/schemas.js";
 import * as t from "../../db/schema.js";
@@ -40,9 +41,10 @@ export function insightsView(db: Db, projectId: string, webhookConfigured: boole
     }
     if (e.event === "signup" && e.utmContent) byPiece.set(e.utmContent, (byPiece.get(e.utmContent) ?? 0) + 1);
   }
+  const clicks = clicksByPiece(db, projectId);
   const pieces = db.select().from(t.mpContentPieces).where(and(eq(t.mpContentPieces.projectId, projectId), eq(t.mpContentPieces.status, "published"))).all()
-    .map((p) => ({ pieceId: p.id, title: p.title, channel: p.channel, format: p.format, signups: byPiece.get(p.id) ?? 0, publishedAt: p.publishedAt }))
-    .sort((a, b) => b.signups - a.signups);
+    .map((p) => ({ pieceId: p.id, title: p.title, channel: p.channel, format: p.format, signups: byPiece.get(p.id) ?? 0, clicks: clicks.get(p.id) ?? 0, publishedAt: p.publishedAt }))
+    .sort((a, b) => b.signups - a.signups || b.clicks - a.clicks);
   const geo = db.select().from(t.mpGeoSnapshots).where(eq(t.mpGeoSnapshots.projectId, projectId)).all();
   const batches = new Map<string, { takenAt: string; asked: number; mentioned: number }>();
   for (const g of geo) { const b = batches.get(g.batch) ?? { takenAt: g.takenAt, asked: 0, mentioned: 0 }; b.asked++; if (g.mentioned) b.mentioned++; batches.set(g.batch, b); }
