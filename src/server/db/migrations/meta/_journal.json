@@ -64,6 +64,13 @@
       "when": 1787827610050,
       "tag": "0008_wakeful_lyja",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1788175000188,
+      "tag": "0009_unusual_nova",
+      "breakpoints": true
     }
   ]
 }

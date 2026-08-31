@@ -7,6 +7,7 @@ import { api } from "../api.js";
 import { Button, Card, Notice, PageHeader, Pill, Stat, type PillKind } from "../components/ui.js";
 import { ProjectNav } from "../components/ProjectNav.js";
 import { ProfilesCard } from "../components/Profiles.js";
+import { ProductDataCard } from "../components/ProductData.js";
 import { ChannelTag } from "../components/ChannelLink.js";
 import { PLATFORMS } from "../../shared/channels.js";
 
@@ -181,6 +182,7 @@ export function TodayPage() {
         </Card>
         <div id="profile"><ProfilesCard projectId={id} /></div>
       </div>
+      <div id="produktdaten"><ProductDataCard projectId={id} /></div>
     </>
   );
 }

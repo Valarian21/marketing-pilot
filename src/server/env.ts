@@ -65,6 +65,15 @@ const EnvSchema = z.object({
   REDDIT_CLIENT_SECRET: optional,
   REDDIT_USER_AGENT: optional,
   MP_SCHEDULER: bool.default(true),
+  /** Schnappschuss von Binderplans app.db, relativ zum Paket-Wurzelverzeichnis.
+   *  Erzeugt vom root-eigenen systemd-Timer `binderplan-snapshot.timer` - /root ist
+   *  fuer den `developer`-Prozess nicht durchquerbar, die Live-Datei also unerreichbar. */
+  MP_BINDERPLAN_DB: z.string().default("./data/cache/binderplan.db"),
+  /** Binderplans HTTP-Dienst - liefert Kartenbilder, deren Dateicache unter /root liegt. */
+  MP_BINDERPLAN_API: z.string().default("http://127.0.0.1:8103"),
+  MP_TCGDEX_API: z.string().default("https://api.tcgdex.net/v2"),
+  /** Aelter als das gilt ein Preis als veraltet und wird nachgeladen. */
+  MP_PRICE_MAX_AGE_HOURS: z.coerce.number().min(1).default(72),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

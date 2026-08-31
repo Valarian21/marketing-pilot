@@ -377,6 +377,62 @@ export const DirectoryStatus = DirectoryDef.extend({
   pieceId: Id.nullable(), pieceStatus: ContentStatus.nullable(), submittedUrl: z.string().nullable(), submittedAt: Iso.nullable(),
 });
 
+// --- Produktdaten (Shot 6) ---------------------------------------------------
+
+/** Welche Produktdatenbank hinter einem Projekt haengt. `none` = brief-basiert wie bisher. */
+export const DataSource = z.object({ provider: z.enum(["none", "binderplan"]).default("none") });
+
+export const ProductSet = z.object({
+  id: z.string(), name: z.string(), nameEn: z.string(), serieId: z.string(), serieName: z.string(),
+  releaseDate: z.string(), total: z.number().int(), region: z.enum(["intl", "jp"]), eraId: z.string(),
+});
+export const ProductEra = z.object({
+  id: z.string(), name: z.string(), nameEn: z.string(), from: z.string(), to: z.string(), setCount: z.number().int(),
+});
+
+/** Eine Zeile der Rangliste. Diese Zahlen sind die Wahrheit des Stuecks - kein LLM fasst sie an. */
+export const RankedCard = z.object({
+  rank: z.number().int(), id: z.string(), name: z.string(), nameEn: z.string(),
+  setId: z.string(), setName: z.string(), localId: z.string(), rarity: z.string(), illustrator: z.string(),
+  priceEur: z.number(), priceBasisUsed: z.enum(["normal", "holo"]), priceUpdatedAt: z.string(),
+  region: z.enum(["intl", "jp"]), imageLang: z.enum(["de", "en"]).nullable(),
+});
+export const PriceMover = RankedCard.extend({
+  baseEur: z.number(), changeEur: z.number(), changePct: z.number(), days: z.number().int(),
+});
+
+export const ScopeCoverage = z.object({
+  cardsInScope: z.number().int(), priced: z.number().int(), refreshed: z.number().int(), skipped: z.number().int(),
+});
+
+export const DataPreview = z.object({
+  kind: z.enum(["top", "movers"]),
+  cards: z.array(PriceMover.partial({ baseEur: true, changeEur: true, changePct: true, days: true })),
+  scopeLabel: z.string(), scopeLabelEn: z.string().default(""),
+  totalEur: z.number().default(0),
+  /** Aeltester Preisstand der Liste - gehoert so in die Fusszeile jeder Slide. */
+  priceStand: z.string(),
+  coverage: ScopeCoverage.nullable().default(null),
+  withHistory: z.number().int().default(0),
+  tookMs: z.number().int().default(0),
+});
+
+export const ProductDataStatus = z.object({
+  provider: z.string(), available: z.boolean(), detail: z.string(),
+  dbPath: z.string(), dbUpdatedAt: z.string().nullable(),
+  cards: z.number().int(), sets: z.number().int(), eras: z.number().int(),
+  pricesTotal: z.number().int(), pricesFresh: z.number().int(),
+  sourceLastPriceRun: z.string().nullable(),
+  imageCacheFiles: z.number().int(), imageCacheBytes: z.number().int(),
+});
+
+export const ProductDataView = z.object({
+  source: DataSource,
+  status: ProductDataStatus,
+  sets: z.array(ProductSet).default([]),
+  eras: z.array(ProductEra).default([]),
+});
+
 export const ChannelProfile = z.object({ platform: z.string().min(1), label: z.string().default(""), url: z.string().default("") });
 
 export const PublishPackage = z.object({
@@ -563,6 +619,14 @@ export type DirectoryDef = z.infer<typeof DirectoryDef>;
 export type DirectoryStatus = z.infer<typeof DirectoryStatus>;
 export type PublishPackage = z.infer<typeof PublishPackage>;
 export type ChannelProfile = z.infer<typeof ChannelProfile>;
+export type DataSource = z.infer<typeof DataSource>;
+export type ProductSet = z.infer<typeof ProductSet>;
+export type ProductEra = z.infer<typeof ProductEra>;
+export type RankedCard = z.infer<typeof RankedCard>;
+export type PriceMover = z.infer<typeof PriceMover>;
+export type DataPreview = z.infer<typeof DataPreview>;
+export type ProductDataStatus = z.infer<typeof ProductDataStatus>;
+export type ProductDataView = z.infer<typeof ProductDataView>;
 export type StudioView = z.infer<typeof StudioView>;
 export type VideoAction = z.infer<typeof VideoAction>;
 export type VideoScene = z.infer<typeof VideoScene>;

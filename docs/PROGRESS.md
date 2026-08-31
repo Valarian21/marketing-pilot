@@ -198,3 +198,69 @@ Gesamtanalyse aller 18 Seiten mit echten Lehreule-Daten: das System erzeugte vie
 
 Nicht gebaut: Zusammenlegen von „produzieren“ + „posten“ zu einer Karte (Heuristik zu unsicher) – stattdessen zeigt
 die Publish-Aufgabe ihr Stück. 82 Tests. Analyse-Test `runs all steps…` ist zeitabhängig flaky (409-Erwartung).
+
+## Shot 6 – Produktdaten-Provider (Binderplan lesen, Preise sicherstellen): **fertig** (2026-08-31)
+
+Erledigt:
+- **Interface** `src/server/providers/product-data.ts`: `listSets`, `listEras`, `resolveSet`,
+  `newestSets`, `topCards`, `priceMovers`, `cardImage`, `status`. Generisch – Lehreule bleibt
+  ohne Datenquelle und alle brief-basierten Flows unverändert.
+- **Ären-Logik** `providers/binderplan-eras.ts`: `AEREN`, `AERA_SERIEN`, `_aera_fuer_set` und
+  `_aera_sql` aus Binderplans `main.py` (Zeilen ~60–137) nach TS übernommen, mit Quellenangabe im
+  Kommentar. Getestet gegen feste Zuordnungen (`swsh`, `sv`, `col`→hgss) und über das Datum
+  zugeschlagene Quer-Serien (McDonald's 2022 → swsh, POP 2005 → ex, Trainer-Kit 2010 → hgss).
+- **Provider** `providers/product-data.binderplan.ts`: öffnet die Datenbank `readonly` +
+  `fileMustExist`. Preisquellen werden zusammengeführt (Binderplans `card_prices` und unsere
+  `mp_card_prices`, der frischere gewinnt); `priceBasis: "max"` nimmt die teurere von normal/holo
+  und nennt die verwendete Variante mit.
+- **Preis-Vollständigkeit**: neue Tabelle `mp_card_prices` (Migration `0009`). Fehlende und
+  Preise älter als `MP_PRICE_MAX_AGE_HOURS` (72) werden von TCGdex nachgeladen – exakt Binderplans
+  Schlüssel-Reihenfolge (`trend` → `avg30` → `avg` → `low`, dito `-holo`), 6 parallel, 20 s Timeout,
+  120 ms Pause zwischen den Wellen. Ein ganzes Set wird immer komplett bepreist; bei Ären greift
+  ein Deckel von 400 Abfragen, priorisiert nach bekanntem Preis (Top 3·n) und danach nach
+  Sammlernummer absteigend – in modernen Sets liegen die Secret Rares über der Set-Grenze, das ist
+  der beste Anhalt, den die Kartendaten ohne Preis hergeben. Was nicht angefasst wurde, meldet
+  `coverage.skipped` offen ans UI.
+- **Bilder**: `cardImage` mit Fallback-Kette eigener Cache → `127.0.0.1:8103/api/img/card/…` →
+  TCGdex-URL, Endung folgt dem Content-Type (webp/png).
+- **API**: `GET …/data` (Status + Set-/Ären-Listen), `PUT …/data-source`, `GET …/data/preview`
+  (`kind=top|movers`), `GET …/data/card-image/:cardId`. Vorschau läuft synchron – ein Set ist in
+  unter 10 s durch, dafür lohnt keine Job-Queue.
+- **UI**: Karte „Produktdaten“ auf der Projektseite (`#produktdaten`): Datenquelle wählen, Status
+  (Bestand, Frischeanteil, Alter des Schnappschusses, letzter Preislauf der Quelle, Bildcache) und
+  eine Vorschau-Tabelle mit Kartenbild, Preis und der Fußzeile, die später auf jede Slide gehört:
+  `Preise: Cardmarket-Trend · Stand TT.MM.JJJJ · binderplan.app`.
+- **Betrieb**: `deploy/binderplan-snapshot.{sh,service,timer}` – stündlicher root-Timer, der eine
+  konsistente Kopie von Binderplans `app.db` nach `data/cache/binderplan.db` legt. Warum überhaupt:
+  siehe DECISIONS („Schnappschuss statt Direktzugriff“). Neue `.env`-Schlüssel: `MP_BINDERPLAN_DB`,
+  `MP_BINDERPLAN_API`, `MP_TCGDEX_API`, `MP_PRICE_MAX_AGE_HOURS`.
+- **19 neue Tests** gegen eine Fixture-Datenbank im app.db-Format (5 Sets über 3 Ären inkl. jp-Set,
+  21 Karten, Preise teils fehlend/veraltet) – ohne Netz und ohne den Schnappschuss vom VPS.
+  Abgedeckt: Ären-Mapping, `priceBasis`, Nachlade-Logik mit TCGdex-Attrappe, Deckel und
+  Priorisierung, eigener Cache, Regions-Semantik, movers, Bild-Fallback-Kette, Status – und die
+  **Lese-Garantie** (Schreibversuche gegen das Handle scheitern; der Fixture-Preis bleibt
+  unverändert). Gesamt jetzt **101 Tests**.
+
+Live-Abnahme (2026-08-31, Projekt „Binderplan“, Kaltstart ohne Cache):
+- **Silberne Sturmwinde** (`swsh12`): 215 Karten in **8,7 s** vollständig bepreist, Gesamtwert
+  867,46 €, Stand 31.08.2026. Platz 1 Lugia V 186/195 mit 626,08 € – die bekannte Chase-Karte des
+  Sets, die Liste ist plausibel. `coverage: 215/215, 0 übersprungen`.
+- **Ära Schwert & Schild**: 3.710 Karten im Bereich, 385 nachgeladen, 12,5 s. Platz 1–3 Nachtara
+  VMAX (1.125 €), Rayquaza VMAX (1.040 €), Gengar VMAX (982 €) – die tatsächlichen Spitzenkarten
+  der Ära.
+- Kartenbild über die API: HTTP 200, `image/webp`, 78 KB. Unbekanntes Set: `400 Set unbekannt`.
+
+Gelernt / Abweichungen vom Plan:
+- Direktzugriff auf `/root/apps/binderplan/app.db` ist unmöglich (`/root` ist `drwx------`); der
+  Schnappschuss ist deshalb der Normalfall, nicht der Notnagel. Details in DECISIONS.
+- Die Region eines Sets, nicht die der Karte, ist maßgeblich – sonst rutschen japanische Set-Namen
+  in deutsche Ranglisten.
+- Der Plan schreibt `region: "intl"|"ja"`; in den Daten heißt es `jp`. Der Code folgt den Daten.
+
+Offen:
+- `priceMovers` ist gebaut und getestet, aber Binderplans Preisverlauf ist zu dünn für eine
+  wöchentliche Serie (1.698 Zeilen über 350 Karten an 6 Tagen). **Vor Shot 9 entscheiden**, ob der
+  Pilot eine eigene dichtere Reihe aufbaut oder die Serie auf Karten mit genug Messpunkten
+  beschränkt wird – siehe DECISIONS.
+- Der Schnappschuss ist stündlich; ein Set, das Binderplan gerade erst synchronisiert hat, ist im
+  Pilot also bis zu eine Stunde später sichtbar. Für Content unkritisch.

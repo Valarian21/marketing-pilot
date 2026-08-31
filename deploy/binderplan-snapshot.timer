@@ -1,0 +1,12 @@
+[Unit]
+Description=Binderplan-Schnappschuss stündlich
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=1h
+# Preise altern ohnehin über den eigenen TCGdex-Nachlader des Piloten; hier geht es
+# nur um neue Karten/Sets und um Binderplans eigenen Preislauf.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,13 @@
+[Unit]
+Description=Binderplan-Schnappschuss für den Marketing Pilot (nur lesen)
+Documentation=file:///home/developer/ai_empire/marketing-pilot/MARKETING_PILOT_PLAN_V2.md
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/home/developer/ai_empire/marketing-pilot/deploy/binderplan-snapshot.sh
+# Der Dienst liest genau eine Datei und schreibt genau in ein Verzeichnis.
+ProtectSystem=strict
+ReadWritePaths=/home/developer/ai_empire/marketing-pilot/data/cache
+PrivateTmp=true
+NoNewPrivileges=true

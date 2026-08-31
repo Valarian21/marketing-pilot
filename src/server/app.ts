@@ -12,6 +12,7 @@ import type { HostAdapter, HostUser } from "../host-adapter.js";
 import { createHostAdapter } from "../host-adapter.js";
 import { projectRoutes } from "./routes/projects.js";
 import { domainRoutes } from "./routes/domain.js";
+import { dataRoutes } from "./routes/data.js";
 import { metaRoutes } from "./routes/meta.js";
 import { analysisRoutes } from "./routes/analysis.js";
 import { strategyRoutes } from "./routes/strategy.js";
@@ -76,6 +77,7 @@ export async function buildApp(env: Env, opts: { host?: HostAdapter; dbFile?: st
   metaRoutes(app, env, host, version);
   projectRoutes(app, db);
   domainRoutes(app, db);
+  dataRoutes(app, db, env);
   analysisRoutes(app, db, () => ctx);
   strategyRoutes(app, db, () => ctx);
   taskRoutes(app, db, () => ctx);

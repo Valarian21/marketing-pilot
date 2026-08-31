@@ -120,3 +120,57 @@ Stille Szenenenden werden auf Stimme + 1,5 s gekappt (das Ergebnis des letzten K
 Musikbett mit Sidechain-Kompressor (Stimme drückt Musik weg), Grundpegel 30 %. Reels standardmäßig
 **ohne** Musik – auf Instagram/TikTok kommt der Sound lizenzsauber aus der Plattform-Bibliothek;
 Landscape (YouTube/Website) mit Musik. ElevenLabs-Music-API bräuchte am Key `music_generation`.
+
+## Produktdaten: Schnappschuss statt Direktzugriff (2026-08-31, Shot 6)
+
+Der Plan sah vor, Binderplans `app.db` direkt read-only zu öffnen, mit dem Hinweis „gleicher
+Unix-User `developer` – prüfen“. Die Prüfung fiel negativ aus: **`/root` ist `drwx------`**. Der
+Pilot läuft als `developer` und kommt an `/root/apps/binderplan/app.db` nicht heran, obwohl die
+Datei selbst `0644` ist — es scheitert an der Traversierung.
+
+Ein ACL-Traversierungsrecht (`setfacl -m u:developer:x /root`) wäre der kurze Weg gewesen und
+wurde **verworfen**: unter `/root` liegen weitere world-readable Datenbanken, darunter Lehreules
+713 MB große Kundendatenbank (`/root/apps/arbeitsblatt-studio/data/app.db`) sowie die von atemzug
+und date-einladung. Für ein Marketing-Feature das Kundendaten dreier Produkte zu öffnen ist kein
+vertretbarer Tausch.
+
+Stattdessen der im Plan als Fallback vorgesehene Weg, aber als Normalfall: ein root-eigener
+systemd-Timer (`deploy/binderplan-snapshot.{sh,service,timer}`) legt stündlich eine konsistente
+Kopie nach `data/cache/binderplan.db` (Besitzer `developer`, `0640`). Kopiert wird über das
+**SQLite-Online-Backup** (`Connection.backup`), nicht per `cp` — sonst wäre die Kopie bei aktivem
+WAL inkonsistent. Das Ziel hat kein WAL, der Leser braucht also keine `-wal`/`-shm`-Rechte.
+Zwei Vorteile, die den Umweg rechtfertigen: Binderplan spürt von unserer Leselast nichts, und der
+Provider kann die Datei nicht einmal versehentlich sperren. Preise sind davon unberührt — die holt
+der Pilot ohnehin selbst frisch von TCGdex; der Schnappschuss liefert nur Karten- und Set-Stamm.
+
+**Kartenbilder gehen über HTTP**, nicht über Dateien: Binderplans Bildcache liegt ebenfalls unter
+`/root`. Die Kette ist eigener Cache → `127.0.0.1:8103/api/img/card/…` → TCGdex-URL aus der Karte.
+
+## Region kommt vom Set, nicht von der Karte (2026-08-31, Shot 6)
+
+In Binderplan gibt es Altbestände, deren `cards.region` und `sets.region` sich widersprechen:
+`neo4-4` („Dunkles Psiana“) ist als `intl`-Karte an das `jp`-Set `neo4` gehängt, dessen Name
+`闇、そして光へ...` lautet. Nach `cards.region` gefiltert landete die Karte in einer deutschen
+Rangliste — auf einer Slide stünde dann ein japanischer Set-Name. Maßgeblich ist deshalb die
+Region des **Sets**. Betrifft Ären-Abfragen und Preis-Bewegungen; bei einem konkreten Set stellt
+sich die Frage nicht.
+
+## Preis-Bewegungen sind noch zu dünn für eine Serie (2026-08-31, Shot 6)
+
+`priceMovers` funktioniert und ist getestet, aber Binderplans `price_history` trägt beim Bau nur
+**1.698 Zeilen über 350 von 33.732 Karten an 6 Tagen**. Gefüllt wird, was Nutzer ansehen. Die
+Folge sind echte, aber wilde Ausschläge (Nachtara/Unerschrocken 133 € → 687 € in vier Tagen,
++416 %) bei dünn gehandelten Karten. Die Zahlen sind korrekt gemessen — als wöchentliche Serie
+„Preis-Raketen“ (Shot 9) wären sie trotzdem irreführend. Die Vorschau nennt deshalb offen, auf wie
+vielen Karten mit Verlauf eine Liste beruht (`withHistory`). **Vor Shot 9 zu klären:** entweder
+eine eigene, dichtere Preisreihe im Pilot aufbauen (der Nachlader schreibt ohnehin täglich in
+`mp_card_prices`) oder die Serie auf Karten mit mindestens N Messpunkten und einem Mindest-Basispreis
+beschränken.
+
+## Ein veralteter Preis ist besser als kein Preis (2026-08-31, Shot 6)
+
+Ist eine Karte nicht frisch bepreisbar (TCGdex antwortet nicht, oder der Nachlade-Deckel greift),
+bleibt der alte Wert stehen, statt die Karte aus der Liste zu werfen — dieselbe Regel, die
+Binderplan selbst anwendet. Ehrlich bleibt das, weil `priceStand` einer Liste immer den **ältesten**
+Stand ihrer Karten trägt, nicht den jüngsten: die Fußzeile einer Slide sagt damit im Zweifel ein
+älteres Datum, nie ein zu schönes.

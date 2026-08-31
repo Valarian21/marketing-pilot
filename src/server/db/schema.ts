@@ -283,3 +283,19 @@ export const mpShortlinks = sqliteTable("mp_shortlinks", {
   createdAt: createdAt(),
   lastClickAt: text("last_click_at"),
 }, (t) => [index("mp_shortlinks_piece").on(t.pieceId)]);
+
+// --- Produktdaten (Shot 6) -----------------------------------------------------
+
+/**
+ * Eigener Preis-Cache. Die Datenbank des Produkts wird ausschließlich gelesen –
+ * fehlende und veraltete Preise holt der Provider selbst von TCGdex und legt sie
+ * hier ab. `fetchedAt` entscheidet gegen den Preis der Quelle: der frischere gewinnt.
+ */
+export const mpCardPrices = sqliteTable("mp_card_prices", {
+  cardId: text("card_id").primaryKey(),
+  eur: real("eur"),
+  eurHolo: real("eur_holo"),
+  /** binderplan | tcgdex – woher der Wert stammt. */
+  source: text("source").notNull().default("tcgdex"),
+  fetchedAt: text("fetched_at").notNull(),
+}, (t) => [index("mp_card_prices_fetched").on(t.fetchedAt)]);
