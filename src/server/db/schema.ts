@@ -297,6 +297,10 @@ export const mpCardPrices = sqliteTable("mp_card_prices", {
   eurHolo: real("eur_holo"),
   /** binderplan | tcgdex – woher der Wert stammt. */
   source: text("source").notNull().default("tcgdex"),
+  /** Teuerste TCGplayer-Variante in USD – nur als Gegenprobe zum Euro-Preis. */
+  usd: real("usd"),
+  /** 1 = Euro- und Dollar-Preis widersprechen sich so stark, dass der Wert unbrauchbar ist. */
+  suspect: integer("suspect").notNull().default(0),
   fetchedAt: text("fetched_at").notNull(),
 }, (t) => [index("mp_card_prices_fetched").on(t.fetchedAt)]);
 

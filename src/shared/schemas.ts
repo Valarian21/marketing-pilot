@@ -342,11 +342,24 @@ export const VoiceProfile = z.object({
   model: z.string().default(""),
   sampleCount: z.number().int().default(0),
 });
+/**
+ * Formensprache der gerenderten Stuecke.
+ * `weich` ist das Bisherige (runde Ecken, weiche Schatten, keine Konturen).
+ * `kontur` ist die Aufkleber-Sprache: harte schwarze Linien, versetzter
+ * Schatten, eine zweite Signalfarbe. Je Projekt gewaehlt — Lehreule bleibt weich.
+ */
+export const BrandStyle = z.enum(["weich", "kontur"]);
+
 export const BrandKit = z.object({
   colors: z.array(z.string()).default([]),
   primary: z.string().nullable().default(null),
   ink: z.string().nullable().default(null),
   background: z.string().nullable().default(null),
+  /** Zweite Signalfarbe (Gelb bei Binderplan) — nur im Stil `kontur` benutzt. */
+  accent2: z.string().nullable().default(null),
+  /** Konturfarbe der Aufkleber-Sprache. */
+  contour: z.string().nullable().default(null),
+  style: BrandStyle.default("weich"),
   logoAssetId: z.string().nullable().default(null),
   logoUrl: z.string().nullable().default(null),
   fonts: z.array(z.string()).default([]),
@@ -356,7 +369,8 @@ export const BrandKit = z.object({
 });
 export const BrandKitPatch = z.object({
   colors: z.array(z.string()).optional(), primary: z.string().nullable().optional(), ink: z.string().nullable().optional(),
-  background: z.string().nullable().optional(),
+  background: z.string().nullable().optional(), accent2: z.string().nullable().optional(),
+  contour: z.string().nullable().optional(), style: BrandStyle.optional(),
 });
 export const VoiceSampleCreate = z.object({ text: z.string().trim().min(40, "Mindestens 40 Zeichen"), source: z.string().default("") });
 
@@ -887,6 +901,7 @@ export type ContentPatch = z.infer<typeof ContentPatch>;
 export type VoiceSample = z.infer<typeof VoiceSample>;
 export type VoiceProfile = z.infer<typeof VoiceProfile>;
 export type BrandKit = z.infer<typeof BrandKit>;
+export type BrandStyle = z.infer<typeof BrandStyle>;
 export type Platform = z.infer<typeof Platform>;
 export type ArticleKind = z.infer<typeof ArticleKind>;
 export type CarouselTemplate = z.infer<typeof CarouselTemplate>;

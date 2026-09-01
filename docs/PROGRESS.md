@@ -574,3 +574,40 @@ Offen:
 erzeugten Stücke tragen das Standard-Grün des Piloten statt Binderplans Orange (#E85D43).** Seit
 der Extraktion stimmen Farben (Orange auf Creme), Schrift (Quicksand) und das echte App-Icon.
 Eine Aufgabe erinnert daran, die alten Entwürfe neu zu erzeugen oder zu verwerfen.
+
+## Neues Erscheinungsbild „Neunundneunzig" + Preis-Gegenprobe (2026-09-01, spät)
+
+**Marke.** Marcel hat aus sechs vorgeschlagenen Richtungen „Neunundneunzig" gewählt: Kartenrücken-
+Blau, Sonnengelb, Signalrot, harte schwarze Konturen mit versetztem Schatten. Umgesetzt in
+`/root/apps/binderplan` (eigenes Repo, Commit `cccde57`) und im Piloten:
+
+- **binderplan.app**: Tokens ausgetauscht, Bungee + Archivo **selbst gehostet** (`assets/schrift.css`
+  wie schon bei Quicksand — keine Google-Anfrage beim Seitenaufruf). Startseite laut, **Werkbank
+  bewusst ruhig**: weißer Grund, dünne Linien, nur Blau trägt die Bedienung, Gelb markiert Besitz,
+  Rot bleibt der einen Aktion vorbehalten, die Geld oder Papier kostet. Die Karten sind die
+  einzigen bunten Flächen.
+- **Neues Icon**: die Binderseite als Aufkleber, neun Fächer, zwei belegt — lesbar bis 32 px.
+  Dabei gefunden: `_app_icon()` in Binderplans `main.py` **zeichnete das Icon zur Laufzeit** und
+  legte es im Cache ab; ein neues Icon im Repo blieb wirkungslos. Jetzt wird die Datei gelesen,
+  gezeichnet wird nur noch als Notnagel.
+- **Zweiter Stil im Renderer** (`BrandKit.style: "weich" | "kontur"` plus `accent2` und `contour`):
+  dieselben Vorlagen bedienen beide Welten, Lehreule bleibt unverändert weich. Im Konturstil:
+  Bungee/Archivo, 14-px-Rahmen, Rang im gelben Kasten, Preis mit Textmarker-Unterlegung, heller
+  Grund statt Farbverlauf — damit die Karte das Bunteste auf der Slide bleibt.
+- **Social-Kit** trägt die Sprache mit: schwarzer Innenrahmen, gelbe Unterlegung unter dem Namen,
+  Logo im Kontur-Kasten.
+
+**Preis-Gegenprobe.** Marcel meldete: „Mewtu ★ steht mit 56 € in der Liste, die Karte kostet
+1.200 €." Die Prüfung ergab: TCGdex verweist bei dieser Karte auf das **falsche
+Cardmarket-Produkt** — dieselbe Antwort nennt bei TCGplayer 5.000 $. Der Fehler liegt an der
+Quelle, nicht im Piloten; Binderplan zeigt dieselbe Zahl.
+
+Eingebaut ist deshalb eine Gegenprobe aus derselben API-Antwort (`isImplausible`, Migration `0012`):
+weicht der Dollar-Preis um mehr als das Fünffache vom Euro-Preis ab, gilt der Wert als unbrauchbar
+und die Karte fällt aus Ranglisten **und** Preis-Bewegungen. Normale Abweichungen liegen laut
+Stichprobe bei 0,8× bis 2,7×. Für die Bewegungen werden die Kandidaten eigens nachgeladen — der
+Verlauf allein sagt nichts über die Glaubwürdigkeit.
+
+Drei Beispiel-Stücke im neuen Design erzeugt: Skyridge Top 10 (Crystal Glurak 4.526,87 €),
+Preis-Raketen 7 Tage (ohne die falsche Mewtu-Zeile) und ein Showcase aus Marcels „Art Binder",
+der die Artwork-Seiten bewirbt.

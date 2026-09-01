@@ -63,7 +63,26 @@ interface CardRow {
   kinds: string | null; set_name: string | null; set_name_en: string | null;
 }
 
-interface Price { eur: number | null; holo: number | null; updatedAt: string }
+interface Price { eur: number | null; holo: number | null; updatedAt: string; suspect?: boolean }
+
+/**
+ * Gegenprobe gegen die zweite Preisquelle derselben Antwort.
+ *
+ * Anlass: „Mewtu ★" aus Holon Phantoms stand mit **56,98 €** in einer Liste,
+ * während TCGplayer für dieselbe Karte 5.000 $ nennt — TCGdex verweist dort auf
+ * das falsche Cardmarket-Produkt. Bei Gold-Star-Karten passiert das öfter.
+ *
+ * Normale Karten liegen zwischen 0,8× und 3× (Wechselkurs, andere Märkte,
+ * gemessen an einer Stichprobe). Ab dem Fünffachen ist nicht mehr der Markt
+ * unterschiedlich, sondern die Verknüpfung kaputt — in beide Richtungen.
+ */
+export const PRICE_MISMATCH_FACTOR = 5;
+
+export function isImplausible(eur: number | null, usd: number | null): boolean {
+  if (!eur || !usd || eur <= 0 || usd <= 0) return false;
+  const ratio = usd / eur;
+  return ratio > PRICE_MISMATCH_FACTOR || ratio < 1 / PRICE_MISMATCH_FACTOR;
+}
 
 /** Binderplan speichert `datetime('now')` (UTC, ohne Zone) – hier auf ISO gebracht. */
 const toIso = (v: string | null | undefined): string => (v ? `${v.trim().replace(" ", "T")}Z`.replace("ZZ", "Z") : "");
@@ -147,7 +166,10 @@ export class BinderplanProvider implements ProductDataProvider {
       const own = this.db.select().from(t.mpCardPrices).where(inArray(t.mpCardPrices.cardId, chunk)).all();
       for (const r of own) {
         const prev = out.get(r.cardId);
-        if (!prev || r.fetchedAt > prev.updatedAt) out.set(r.cardId, { eur: r.eur, holo: r.eurHolo, updatedAt: r.fetchedAt });
+        // Der Verdacht haftet an der Karte, nicht am Eintrag: auch wenn Binderplans
+        // Wert frischer ist, bleibt er unglaubwuerdig, wenn unsere Gegenprobe anschlug.
+        if (!prev || r.fetchedAt > prev.updatedAt) out.set(r.cardId, { eur: r.eur, holo: r.eurHolo, updatedAt: r.fetchedAt, suspect: r.suspect === 1 });
+        else if (prev) prev.suspect = r.suspect === 1;
       }
     }
     return out;
@@ -172,7 +194,7 @@ export class BinderplanProvider implements ProductDataProvider {
   }
 
   /** Ein Preis von TCGdex, exakt nach Binderplans Schlüssel-Reihenfolge. */
-  private async fetchPrice(cardId: string): Promise<{ eur: number | null; holo: number | null }> {
+  private async fetchPrice(cardId: string): Promise<{ eur: number | null; holo: number | null; usd: number | null }> {
     // Japanische IDs beginnen mit einem Großbuchstaben – dieselbe Regel wie in Binderplan.
     const lang = /^[A-Z]/.test(cardId) ? "ja" : "en";
     try {
@@ -180,15 +202,28 @@ export class BinderplanProvider implements ProductDataProvider {
       const timer = setTimeout(() => ctl.abort(), 20_000);
       const res = await this.fetchImpl(`${this.o.tcgdexBase}/${lang}/cards/${encodeURIComponent(cardId)}`, { signal: ctl.signal });
       clearTimeout(timer);
-      if (!res.ok) return { eur: null, holo: null };
-      const body = await res.json() as { pricing?: { cardmarket?: Record<string, number | null> } };
+      if (!res.ok) return { eur: null, holo: null, usd: null };
+      const body = await res.json() as {
+        pricing?: {
+          cardmarket?: Record<string, number | null>;
+          tcgplayer?: Record<string, { marketPrice?: number | null; midPrice?: number | null; lowPrice?: number | null } | string | null>;
+        };
+      };
       const cm = body.pricing?.cardmarket ?? {};
       const pick = (keys: readonly string[]): number | null => {
         for (const k of keys) { const v = cm[k]; if (v !== null && v !== undefined && Number.isFinite(Number(v))) return Math.round(Number(v) * 100) / 100; }
         return null;
       };
-      return { eur: pick(PRICE_KEYS), holo: pick(HOLO_KEYS) };
-    } catch { return { eur: null, holo: null }; }
+      // Die teuerste TCGplayer-Variante als zweite Meinung. Sie geht nie in eine
+      // Rangliste ein – sie sagt nur, ob dem Euro-Preis zu trauen ist.
+      let usd: number | null = null;
+      for (const v of Object.values(body.pricing?.tcgplayer ?? {})) {
+        if (!v || typeof v !== "object") continue;
+        const p = v.marketPrice ?? v.midPrice ?? v.lowPrice ?? null;
+        if (p !== null && Number.isFinite(Number(p))) usd = Math.max(usd ?? 0, Number(p));
+      }
+      return { eur: pick(PRICE_KEYS), holo: pick(HOLO_KEYS), usd };
+    } catch { return { eur: null, holo: null, usd: null }; }
   }
 
   /** Nachladen in kleinen Wellen und Ergebnis in mp_card_prices ablegen. */
@@ -200,10 +235,12 @@ export class BinderplanProvider implements ProductDataProvider {
       const got = await Promise.all(wave.map(async (id) => [id, await this.fetchPrice(id)] as const));
       for (const [id, p] of got) {
         if (p.eur === null && p.holo === null) continue;
-        out.set(id, { eur: p.eur, holo: p.holo, updatedAt: at });
+        const suspect = isImplausible(Math.max(p.eur ?? 0, p.holo ?? 0), p.usd) ? 1 : 0;
+        if (suspect) this.log(`Preis unglaubwürdig: ${id} — Cardmarket ${Math.max(p.eur ?? 0, p.holo ?? 0)} € gegen TCGplayer ${p.usd} $`);
+        out.set(id, { eur: p.eur, holo: p.holo, updatedAt: at, suspect: Boolean(suspect) });
         this.db.insert(t.mpCardPrices)
-          .values({ cardId: id, eur: p.eur, eurHolo: p.holo, source: "tcgdex", fetchedAt: at })
-          .onConflictDoUpdate({ target: t.mpCardPrices.cardId, set: { eur: p.eur, eurHolo: p.holo, source: "tcgdex", fetchedAt: at } })
+          .values({ cardId: id, eur: p.eur, eurHolo: p.holo, usd: p.usd, suspect, source: "tcgdex", fetchedAt: at })
+          .onConflictDoUpdate({ target: t.mpCardPrices.cardId, set: { eur: p.eur, eurHolo: p.holo, usd: p.usd, suspect, source: "tcgdex", fetchedAt: at } })
           .run();
       }
       if (i + this.o.concurrency < ids.length) await new Promise((r) => setTimeout(r, 120));
@@ -304,6 +341,9 @@ export class BinderplanProvider implements ProductDataProvider {
     const ranked = pool
       .map((r) => ({ r, p: prices.get(r.id), e: this.effective(prices.get(r.id), basis) }))
       .filter((x): x is { r: CardRow; p: Price; e: { eur: number; used: "normal" | "holo" } } => x.e !== null && x.p !== undefined)
+      // Karten, deren beide Quellen sich widersprechen, kommen gar nicht erst in
+      // die Rangliste — lieber eine Karte weniger als eine falsche Zahl auf einer Slide.
+      .filter((x) => !x.p.suspect)
       .filter((x) => (q.minPrice === undefined || x.e.eur >= q.minPrice))
       .sort((a, b) => b.e.eur - a.e.eur)
       .slice(0, n);
@@ -358,7 +398,17 @@ export class BinderplanProvider implements ProductDataProvider {
     if (moves.length === 0) {
       return { cards: [], scopeLabel: q.direction === "up" ? `Preis-Raketen ${q.days} Tage` : `Preis-Rutsche ${q.days} Tage`, priceStand: "", withHistory: withHistory.length };
     }
-    const ids = moves.map((m) => m.id);
+    // Auch hier: widersprüchliche Preise fliegen raus, bevor daraus eine „Rakete" wird.
+    // Der Verlauf allein sagt nichts über die Glaubwürdigkeit — deshalb werden die
+    // Kandidaten hier eigens nachgeladen, damit die Gegenprobe überhaupt vorliegt.
+    // Es sind höchstens ein paar Dutzend Karten, das kostet Sekunden.
+    const bekannt = this.knownPrices(moves.map((m) => m.id));
+    const ungeprueft = moves.filter((m) => bekannt.get(m.id)?.suspect === undefined).map((m) => m.id);
+    if (ungeprueft.length) await this.refresh(ungeprueft);
+    const verdacht = this.knownPrices(moves.map((m) => m.id));
+    const sauber = moves.filter((m) => !verdacht.get(m.id)?.suspect);
+    if (sauber.length < moves.length) this.log(`Preis-Bewegungen: ${moves.length - sauber.length} Karten wegen widersprüchlicher Preise verworfen`);
+    const ids = sauber.map((m) => m.id);
     const cardRows = this.sqlite.prepare(
       `SELECT cards.id, cards.set_id, cards.local_id, cards.local_num, cards.name_de, cards.name_en, cards.name_ja,
               cards.rarity, cards.illustrator, cards.region, cards.image_de, cards.image_en, cards.image_alt, cards.kinds,
@@ -370,7 +420,7 @@ export class BinderplanProvider implements ProductDataProvider {
     const byId = new Map(cardRows.map((r) => [r.id, r]));
 
     const cards: PriceMover[] = [];
-    for (const m of moves) {
+    for (const m of sauber) {
       const r = byId.get(m.id);
       if (!r || cards.length >= n) continue;
       const names = this.cardName(r);

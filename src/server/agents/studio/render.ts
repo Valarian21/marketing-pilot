@@ -12,15 +12,47 @@ export interface RenderJob { html: string; width: number; height: number; file: 
 export type Renderer = (jobs: RenderJob[]) => Promise<void>;
 
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-const FONT_LINK = `<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gabarito:wght@600;700&family=Nunito+Sans:wght@400;600&family=DM+Mono:wght@500&display=swap">`;
+const FONT_LINK = `<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gabarito:wght@600;700&family=Nunito+Sans:wght@400;600&family=DM+Mono:wght@500&family=Bungee&family=Archivo:wght@500;600;800&display=swap">`;
+
+/** Im Stil `kontur` traegt eine andere Schrift und eine zweite Signalfarbe. */
+export const istKontur = (kit: BrandKit): boolean => kit.style === "kontur";
 
 export function themeVars(kit: BrandKit): string {
   const primary = kit.primary ?? "#3D7A4E";
   const ink = kit.ink ?? "#1E2A20";
   const bg = kit.background ?? "#FFFFFF";
   const soft = kit.colors.find((c) => c !== primary && c !== ink && c !== bg) ?? "#EEF2EA";
-  return `--b-primary:${primary};--b-ink:${ink};--b-bg:${bg};--b-soft:${soft};--b-on-primary:#FFFFFF;--f-display:"Gabarito",system-ui,sans-serif;--f-body:"Nunito Sans",system-ui,sans-serif;--f-mono:"DM Mono",monospace;`;
+  const kontur = istKontur(kit);
+  const linie = kit.contour ?? "#14161C";
+  const zweite = kit.accent2 ?? primary;
+  const schriften = kontur
+    ? `--f-display:"Bungee",system-ui,sans-serif;--f-body:"Archivo",system-ui,sans-serif;--f-mono:"Archivo",system-ui,sans-serif;`
+    : `--f-display:"Gabarito",system-ui,sans-serif;--f-body:"Nunito Sans",system-ui,sans-serif;--f-mono:"DM Mono",monospace;`;
+  // Der Grund einer Rangkarte: weich ein Verlauf, im Konturstil schlicht hell —
+  // dort tragen Rahmen und Rang-Kasten die Marke, und die Karte bleibt das Bunteste.
+  const grund = kontur ? bg : `linear-gradient(170deg,${soft},${bg})`;
+  return `--b-primary:${primary};--b-ink:${ink};--b-bg:${bg};--b-soft:${soft};--b-on-primary:#FFFFFF;`
+    + `--b-accent2:${zweite};--b-contour:${linie};--b-ground:${grund};${schriften}`;
 }
+
+/**
+ * Aufkleber-Sprache: harte Konturen statt weicher Schatten, Rang und Preis in
+ * Kaesten. Bewusst nur ueber Klassen, damit dieselben Vorlagen beide Welten
+ * bedienen und Lehreule unveraendert bleibt.
+ */
+const KONTUR_CSS = `
+.stil-kontur .slide{border:14px solid var(--b-contour)}
+.stil-kontur .drank{background:var(--b-accent2);color:var(--b-contour);border:5px solid var(--b-contour);border-radius:10px;font-family:var(--f-body);font-weight:800}
+.stil-kontur .dprice{color:var(--b-contour);display:inline-block;font-family:var(--f-body);font-weight:800;padding:0 .12em;
+  background-image:linear-gradient(transparent 54%, var(--b-accent2) 54%, var(--b-accent2) 88%, transparent 88%)}
+.stil-kontur .dname{letter-spacing:-.01em}
+.stil-kontur .dcard::after{display:none}
+.stil-kontur .dcard img{filter:drop-shadow(0 0 0 transparent)}
+.stil-kontur .dchange{color:var(--b-contour);background:var(--b-accent2);display:inline-block;padding:.12em .4em;border:3px solid var(--b-contour);border-radius:6px}
+.stil-kontur .dshot{border:5px solid var(--b-contour);box-shadow:none}
+.stil-kontur .dfoot{opacity:.85}
+.stil-kontur .dtotal{color:var(--b-accent2);font-weight:800}
+`;
 
 const base = (kit: BrandKit, w: number, h: number, body: string, extraCss = "") => `<!doctype html><html><head><meta charset="utf-8">${FONT_LINK}<style>
 :root{${themeVars(kit)}} *{box-sizing:border-box;margin:0} html,body{width:${w}px;height:${h}px;overflow:hidden}
@@ -32,7 +64,7 @@ p{font-size:${Math.round(w * 0.036)}px;line-height:1.4;margin-top:${Math.round(w
 .img{width:100%;flex:1;margin:${Math.round(w * 0.03)}px 0;border-radius:${Math.round(w * 0.02)}px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.18);background:var(--b-soft)}
 .img img{width:100%;height:100%;object-fit:contain;object-position:top}
 .pill{display:inline-block;padding:.35em .9em;border-radius:999px;background:var(--b-primary);color:var(--b-on-primary);font-family:var(--f-mono);font-size:${Math.round(w * 0.024)}px;letter-spacing:.06em;text-transform:uppercase}
-${extraCss}</style></head><body>${body}</body></html>`;
+${extraCss}${istKontur(kit) ? KONTUR_CSS : ""}</style></head><body class="${istKontur(kit) ? "stil-kontur" : "stil-weich"}">${body}</body></html>`;
 
 export function carouselSlideHtml(kit: BrandKit, template: CarouselTemplate, slide: Slide, w: number, h: number, brand: string): string {
   const counter = `<div class="meta"><span>${esc(brand)}</span><span>${slide.index + 1} / ${slide.total}</span></div>`;
@@ -91,13 +123,15 @@ const dataCss = (w: number) => `
 .dchange{font-family:var(--f-mono);font-size:${Math.round(w * 0.03)}px;margin-top:.4em;color:var(--b-primary)}
 .dfan{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;position:relative}
 .dfan img{position:absolute;max-height:74%;max-width:40%;object-fit:contain;border-radius:${Math.round(w * 0.012)}px;box-shadow:0 ${Math.round(w * 0.02)}px ${Math.round(w * 0.05)}px rgba(0,0,0,.35)}
+.stil-kontur .dfan img{border:${Math.round(w * 0.006)}px solid var(--b-contour);box-shadow:${Math.round(w * 0.012)}px ${Math.round(w * 0.012)}px 0 var(--b-contour)}
+.stil-kontur .dcard img{border-radius:${Math.round(w * 0.012)}px}
 .dtotal{font-family:var(--f-mono);font-size:${Math.round(w * 0.03)}px;opacity:.75;font-variant-numeric:tabular-nums}
 .dshot{flex:1;min-height:0;border-radius:${Math.round(w * 0.02)}px;overflow:hidden;background:var(--b-soft);box-shadow:0 ${Math.round(w * 0.02)}px ${Math.round(w * 0.05)}px rgba(0,0,0,.2)}
 .dshot img{width:100%;height:100%;object-fit:cover;object-position:top}`;
 
 /** Rangkarte: Bild groß, Preis groß, alles andere leise. */
 export function rankingSlideHtml(kit: BrandKit, slide: RankingSlide, w: number, h: number, brand: string, footer: string): string {
-  const body = `<div class="slide" style="background:linear-gradient(170deg,var(--b-soft),var(--b-bg))"><div class="dwrap">
+  const body = `<div class="slide" style="background:var(--b-ground)"><div class="dwrap">
 <div class="dhead"><span class="drank">${slide.rank}</span><span class="dbrand">${esc(brand)}</span></div>
 <div class="dcard">${slide.imageDataUrl ? `<img src="${slide.imageDataUrl}">` : ""}</div>
 <div><div class="dname">${esc(slide.name)}</div><div class="dset">${esc(slide.setLine)}</div>
@@ -141,7 +175,7 @@ ${dataFoot(w, footer)}</div></div>`;
  * abgeschnittenes Fach wäre eine Falschaussage über die App.
  */
 export function showcaseSlideHtml(kit: BrandKit, a: { headline: string; sub: string; imageDataUrl: string | null }, w: number, h: number, brand: string, footer: string): string {
-  const body = `<div class="slide" style="background:linear-gradient(170deg,var(--b-soft),var(--b-bg))"><div class="dwrap">
+  const body = `<div class="slide" style="background:var(--b-ground)"><div class="dwrap">
 <div class="dhead"><span class="dbrand">${esc(brand)}</span></div>
 <div class="dshot" style="background:transparent;box-shadow:none">${a.imageDataUrl ? `<img src="${a.imageDataUrl}" style="object-fit:contain;object-position:center">` : ""}</div>
 <div><div class="dname" style="font-size:${Math.round(w * 0.055)}px">${esc(a.headline)}</div><div class="dset">${esc(a.sub)}</div></div>

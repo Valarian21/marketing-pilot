@@ -441,3 +441,34 @@ zeigt sie als eigenen Block „Einrichtung · einmalig, ohne Frist", der nie „
 Fortschrittswarnung auslöst. Die Freigabe-Stufe wird dort nicht angezeigt — sie sagt, wie viel der
 Agent allein darf, und bei einem Einrichtungsschritt gibt es keinen Agenten. Lange Anleitungen
 stehen als aufklappbarer Markdown-Block, damit die Liste lesbar bleibt.
+
+## Zwei Formensprachen statt einer (2026-09-01)
+
+Binderplan hat mit „Neunundneunzig" eine Marke bekommen, die mit Lehreule nichts zu tun hat: harte
+Konturen, Aufkleber-Schatten, zwei Signalfarben. Der Pilot bedient beide Produkte mit **denselben**
+Slide-Vorlagen — eine zweite Kopie der Templates wäre in drei Monaten auseinandergelaufen.
+
+Deshalb trägt das Brand-Kit jetzt einen `style` (`weich` | `kontur`) plus `accent2` und `contour`.
+`themeVars()` liefert je Stil andere Schriften und einen anderen Slide-Grund, `base()` setzt eine
+Klasse am `<body>`, und ein einziger CSS-Block bringt die Aufkleber-Sprache mit. Lehreule bleibt
+unberührt, weil sein Kit weiterhin `weich` ist.
+
+Eine Regel gilt in beiden Welten: **der Grund einer Rangkarte ist ruhig.** Im weichen Stil ein
+zarter Verlauf, im Konturstil schlicht hell. Der erste Render mit gelbem Grund sah aus wie ein
+Warnschild, und die Karte — das einzige, worum es geht — verschwand darin.
+
+## Eine zweite Preisquelle als Wahrheitsprobe (2026-09-01)
+
+„Mewtu ★" stand mit 56,98 € in einer veröffentlichten Liste. Die Karte kostet rund 1.200 €.
+Die Ursache lag nicht im Piloten: TCGdex verknüpft diese Karte mit dem falschen
+Cardmarket-Produkt — sichtbar wird das erst, wenn man **dieselbe Antwort** weiterliest, denn dort
+nennt TCGplayer 5.000 $ für dieselbe Karte. Bei Gold-Star-Karten passiert das öfter.
+
+Die Gegenprobe kostet nichts: der Dollar-Preis kommt in derselben Antwort mit. Weicht er um mehr
+als das Fünffache ab, ist nicht der Markt unterschiedlich, sondern die Verknüpfung kaputt — eine
+Stichprobe über bekannte Karten liegt zwischen 0,8× und 2,7×. Solche Karten fallen aus Ranglisten
+und Bewegungen heraus, statt mit einer falschen Zahl auf eine Slide zu geraten.
+
+Das ist die dritte Ausbaustufe derselben Haltung: Shot 6 hat Zahlen deterministisch gemacht, Shot 9
+unglaubwürdige Ausschläge gefiltert, und hier wird die Quelle selbst gegengeprüft. Wo nur eine
+Quelle spricht, wird nichts verworfen — eine Vermutung ist kein Beweis.

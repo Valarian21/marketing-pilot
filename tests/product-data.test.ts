@@ -345,3 +345,22 @@ describe("Status", () => {
     p.close();
   });
 });
+
+describe("Gegenprobe gegen die zweite Preisquelle", () => {
+  it("erkennt widersprüchliche Preise, lässt normale Abweichungen aber durch", async () => {
+    const { isImplausible, PRICE_MISMATCH_FACTOR } = await import("../src/server/providers/product-data.binderplan.js");
+    expect(PRICE_MISMATCH_FACTOR).toBe(5);
+    // Der echte Fall: Mewtu ★ steht mit 56,98 € gegen 5.000 $ bei TCGplayer.
+    expect(isImplausible(56.98, 5000)).toBe(true);
+    // Auch andersherum, falls Cardmarket derjenige mit dem Ausreißer ist.
+    expect(isImplausible(900, 12)).toBe(true);
+    // Gemessene Normalfälle: Wechselkurs und Marktunterschiede bleiben drin.
+    expect(isImplausible(574.54, 524.94)).toBe(false);   // Lugia V
+    expect(isImplausible(95.06, 224.94)).toBe(false);    // Blastoise, 2,4x
+    expect(isImplausible(3.57, 9.62)).toBe(false);       // Energie-Karte, 2,7x
+    // Ohne zweite Meinung wird nichts verworfen.
+    expect(isImplausible(56.98, null)).toBe(false);
+    expect(isImplausible(null, 5000)).toBe(false);
+    expect(isImplausible(0, 5000)).toBe(false);
+  });
+});

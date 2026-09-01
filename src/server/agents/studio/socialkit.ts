@@ -18,13 +18,13 @@ import * as t from "../../db/schema.js";
 import { newId, nowIso, parseJson, toJson, type Db } from "../../db/index.js";
 import { getProject } from "../../repo/projects.js";
 import { loadBrandKit } from "./brandkit.js";
-import { dataUrlFor, playwrightRenderer, themeVars, type RenderJob, type Renderer } from "./render.js";
+import { dataUrlFor, istKontur, playwrightRenderer, themeVars, type RenderJob, type Renderer } from "./render.js";
 import { markPng, pngSize } from "../../util/png.js";
 import { buildZip, safeName, type ZipEntry } from "../../util/zip.js";
 
 const err = (msg: string, statusCode = 400) => Object.assign(new Error(msg), { statusCode });
 const esc = (x: string) => x.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-const FONT_LINK = `<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gabarito:wght@600;700&family=Nunito+Sans:wght@400;600&family=DM+Mono:wght@500&display=swap">`;
+const FONT_LINK = `<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gabarito:wght@600;700&family=Nunito+Sans:wght@400;600&family=DM+Mono:wght@500&family=Bungee&family=Archivo:wght@500;600;800&display=swap">`;
 
 export interface SocialFormat {
   key: string;
@@ -79,14 +79,27 @@ export function avatarHtml(kit: s.BrandKit, a: { brand: string; logoDataUrl: str
 
 export function bannerHtml(kit: s.BrandKit, a: { brand: string; claim: string; domain: string; logoDataUrl: string | null; safeW: number; safeH: number }, w: number, h: number): string {
   const scale = Math.min(a.safeW / 1500, 1);
+  const kontur = istKontur(kit);
+  // Im Konturstil traegt der Name eine gelbe Unterlegung und das Logo einen
+  // schwarzen Kasten — dieselbe Sprache wie auf der Startseite.
+  const nameStil = kontur
+    ? `font-family:var(--f-display);font-weight:400;font-size:${Math.round(80 * scale)}px;line-height:1.06;letter-spacing:.005em;display:inline-block;position:relative;z-index:1`
+    : `font-family:var(--f-display);font-weight:700;font-size:${Math.round(96 * scale)}px;line-height:1.02;letter-spacing:-.02em`;
+  const logoStil = kontur
+    ? `background:#fff;border:${Math.round(6 * scale)}px solid var(--b-contour);border-radius:${Math.round(a.safeH * 0.09)}px;padding:${Math.round(a.safeH * 0.035)}px;box-shadow:${Math.round(10 * scale)}px ${Math.round(10 * scale)}px 0 var(--b-contour)`
+    : `background:#fff;border-radius:${Math.round(a.safeH * 0.1)}px;padding:${Math.round(a.safeH * 0.05)}px`;
+  const strich = kontur
+    ? `<span style="position:absolute;left:-1.5%;right:-1.5%;bottom:.1em;height:.26em;background:var(--b-accent2);z-index:-1"></span>`
+    : "";
   return base(kit, w, h, `<div class="wrap" style="background:var(--b-primary);color:var(--b-on-primary)">
 <div style="position:absolute;inset:0;background:linear-gradient(120deg, rgba(255,255,255,.14), transparent 55%)"></div>
+${kontur ? `<div style="position:absolute;inset:${Math.round(18 * scale)}px;border:${Math.round(7 * scale)}px solid var(--b-contour);border-radius:${Math.round(14 * scale)}px"></div>` : ""}
 <div style="width:${a.safeW}px;height:${a.safeH}px;display:flex;align-items:center;gap:${Math.round(56 * scale)}px;position:relative">
-  ${a.logoDataUrl ? `<img src="${a.logoDataUrl}" style="width:${Math.round(a.safeH * 0.52)}px;height:${Math.round(a.safeH * 0.52)}px;object-fit:contain;flex:0 0 auto;background:#fff;border-radius:${Math.round(a.safeH * 0.1)}px;padding:${Math.round(a.safeH * 0.05)}px">` : ""}
+  ${a.logoDataUrl ? `<img src="${a.logoDataUrl}" style="width:${Math.round(a.safeH * 0.5)}px;height:${Math.round(a.safeH * 0.5)}px;object-fit:contain;flex:0 0 auto;${logoStil}">` : ""}
   <div style="min-width:0">
-    <div style="font-family:var(--f-display);font-weight:700;font-size:${Math.round(96 * scale)}px;line-height:1.02;letter-spacing:-.02em">${esc(a.brand)}</div>
-    <div style="font-size:${Math.round(38 * scale)}px;line-height:1.3;margin-top:${Math.round(18 * scale)}px;opacity:.92;max-width:${Math.round(a.safeW * 0.8)}px">${esc(a.claim)}</div>
-    <div style="font-family:var(--f-mono);font-size:${Math.round(28 * scale)}px;margin-top:${Math.round(22 * scale)}px;opacity:.8">${esc(a.domain)}</div>
+    <div style="position:relative"><span style="${nameStil}">${esc(a.brand)}${strich}</span></div>
+    <div style="font-size:${Math.round(34 * scale)}px;line-height:1.32;margin-top:${Math.round(20 * scale)}px;opacity:.94;max-width:${Math.round(a.safeW * 0.78)}px">${esc(a.claim)}</div>
+    <div style="font-family:var(--f-mono);font-size:${Math.round(26 * scale)}px;margin-top:${Math.round(20 * scale)}px;opacity:.85;letter-spacing:.02em">${esc(a.domain)}</div>
   </div>
 </div></div>`);
 }
