@@ -36,7 +36,9 @@ export function saveCredentials(db: Db, projectId: string, patch: Credentials): 
     for (const [k, v] of Object.entries(fields)) {
       if (v.trim()) target[k] = v.trim(); else delete target[k];
     }
-    if (Object.keys(target).length) cur[platform] = target; else delete cur[platform];
+    // Wann der Zugang zuletzt angefasst wurde. Meta- und Threads-Token halten
+    // 60 Tage; ohne diesen Stempel merkt man ihr Ablaufen erst am Fehlschlag.
+    if (Object.keys(target).length) { target["savedAt"] = nowIso(); cur[platform] = target; } else delete cur[platform];
   }
   db.insert(t.mpSettings).values({ key: key(projectId), value: toJson(cur), updatedAt: nowIso() })
     .onConflictDoUpdate({ target: t.mpSettings.key, set: { value: toJson(cur), updatedAt: nowIso() } }).run();
@@ -53,18 +55,29 @@ export function posterFor(platform: string): PlatformPoster | null {
   return POSTERS[p] ?? null;
 }
 
+/** Plattformen, deren Zugang von selbst abläuft (Meta-Familie, 60 Tage). */
+const EXPIRING = new Set(["instagram", "facebook", "threads"]);
+const TOKEN_LIFE_DAYS = 60;
+
 /** Was das UI über jede Plattform anzeigt, inklusive „schon eingerichtet?". */
-export function platformStatus(db: Db, projectId: string): PlatformPosting[] {
+export function platformStatus(db: Db, projectId: string, now = new Date()): PlatformPosting[] {
   const creds = loadCredentials(db, projectId);
   return Object.entries(PLATFORM_POSTING).map(([platform, def]) => {
     const poster = POSTERS[platform];
     const have = creds[platform] ?? {};
     const configured = Boolean(poster) && poster!.missing(have).length === 0;
+    const savedAt = have["savedAt"] ? Date.parse(have["savedAt"]) : NaN;
+    const age = Number.isNaN(savedAt) ? null : Math.floor((now.getTime() - savedAt) / 86_400_000);
+    const warning = configured && EXPIRING.has(platform) && age !== null && age >= TOKEN_LIFE_DAYS - 10
+      ? age >= TOKEN_LIFE_DAYS
+        ? `Der Zugang ist ${age} Tage alt und damit abgelaufen — Token neu holen und hier eintragen.`
+        : `Der Zugang ist ${age} Tage alt und läuft in ${TOKEN_LIFE_DAYS - age} Tagen ab — Token erneuern.`
+      : "";
     return {
       platform, label: def.label, reason: def.reason,
       // Eingerichtete Meta-/Pinterest-Konten sind ab dann normale API-Kanäle.
       mode: def.mode === "needs_setup" && configured ? "api" : def.mode,
-      fields: def.fields, configured,
+      fields: def.fields, configured, tokenAgeDays: age, warning,
     };
   });
 }

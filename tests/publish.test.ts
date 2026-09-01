@@ -89,6 +89,20 @@ describe("Was auf welcher Plattform erlaubt ist", () => {
     saveCredentials(built.db, pid, { instagram: { igUserId: "1789", accessToken: "tok" } });
     expect(platformStatus(built.db, pid).find((x) => x.platform === "instagram")!.mode).toBe("api");
   });
+  it("merkt sich, wann ein Zugang eingetragen wurde, und warnt vor dem Ablauf", () => {
+    saveCredentials(built.db, pid, { threads: { userId: "9", accessToken: "tok" } });
+    const frisch = platformStatus(built.db, pid).find((x) => x.platform === "threads")!;
+    expect(frisch.tokenAgeDays).toBe(0);
+    expect(frisch.warning).toBe("");
+    // 55 Tage spaeter: Vorwarnung. 61 Tage spaeter: abgelaufen.
+    const in55 = new Date(Date.now() + 55 * 86_400_000);
+    expect(platformStatus(built.db, pid, in55).find((x) => x.platform === "threads")!.warning).toContain("läuft in 5 Tagen ab");
+    const in61 = new Date(Date.now() + 61 * 86_400_000);
+    expect(platformStatus(built.db, pid, in61).find((x) => x.platform === "threads")!.warning).toContain("abgelaufen");
+    // Bluesky-Passwoerter laufen nicht ab - dort gibt es keine Warnung.
+    expect(platformStatus(built.db, pid, in61).find((x) => x.platform === "bluesky")!.warning).toBe("");
+  });
+
   it("überschreibt gespeicherte Geheimnisse nicht mit Leere", () => {
     saveCredentials(built.db, pid, { bluesky: { handle: "", appPassword: "" } });
     // beide Felder leer -> beide geloescht; die Probe gilt dem Teil-Update:

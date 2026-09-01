@@ -84,7 +84,11 @@ export function PublishingPage() {
           <tbody>{view.platforms.map((p) => (
             <tr key={p.platform}>
               <td><strong>{p.label}</strong></td>
-              <td><Pill kind={MODE[p.mode].kind}>{MODE[p.mode].label}</Pill>{p.configured && p.mode === "api" && <div className="mp-small mp-muted">eingerichtet</div>}</td>
+              <td>
+                <Pill kind={MODE[p.mode].kind}>{MODE[p.mode].label}</Pill>
+                {p.configured && p.mode === "api" && <div className="mp-small mp-muted">eingerichtet{p.tokenAgeDays !== null && ` · vor ${p.tokenAgeDays} Tagen`}</div>}
+                {p.warning && <div className="mp-small mp-over">{p.warning}</div>}
+              </td>
               <td className="mp-small mp-muted">{p.reason}</td>
               <td>
                 {p.fields.length === 0 ? <span className="mp-small mp-muted">–</span> : p.fields.map((f) => (

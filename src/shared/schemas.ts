@@ -659,6 +659,10 @@ export const PlatformPosting = z.object({
   /** Felder, die das Projekt fuer diese Plattform hinterlegen muss. */
   fields: z.array(z.object({ key: z.string(), label: z.string(), secret: z.boolean().default(true) })).default([]),
   configured: z.boolean().default(false),
+  /** Wie alt der hinterlegte Zugang ist — Meta- und Threads-Token laufen nach 60 Tagen ab. */
+  tokenAgeDays: z.number().int().nullable().default(null),
+  /** Klartext-Warnung, wenn er bald abläuft (sonst leer). */
+  warning: z.string().default(""),
 });
 
 export const ScheduledStatus = z.enum(["queued", "posted", "failed", "cancelled"]);
