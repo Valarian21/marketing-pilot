@@ -74,7 +74,7 @@ export const PLATFORM_POSTING: Record<string, PlatformPostingDef> = {
   },
   instagram: {
     label: "Instagram", mode: "needs_setup",
-    reason: "Kostenlos, verlangt aber ein Business-/Creator-Konto, eine verknüpfte Facebook-Seite und eine eigene Meta-App; Medien müssen über eine öffentliche URL erreichbar sein.",
+    reason: "Kostenlos und ohne App Review, solange nur dein eigenes Konto postet: Professional-Konto (Business/Creator), verknüpfte Facebook-Seite, eine Meta-App im Entwicklermodus, dein Konto darin als Instagram-Tester. Geprüft am 01.09.2026.",
     fields: [F("igUserId", "Instagram-Business-ID", false), F("accessToken", "Langlebiges Zugriffstoken")],
   },
   facebook: {
@@ -84,7 +84,7 @@ export const PLATFORM_POSTING: Record<string, PlatformPostingDef> = {
   },
   pinterest: {
     label: "Pinterest", mode: "needs_setup",
-    reason: "API v5 ist kostenlos, der Zugang muss aber beantragt und freigeschaltet werden.",
+    reason: "Kostenlos, aber zweistufig: den Trial-Zugang gibt es in ein bis zwei Tagen — damit erzeugte Pins sieht jedoch nur du selbst. Für echte Pins braucht es Standard-Zugang, ein bis vier Wochen Prüfung mit Video-Nachweis. Geprüft am 01.09.2026.",
     fields: [F("boardId", "Board-ID", false), F("accessToken", "Zugriffstoken")],
   },
   youtube: {
@@ -94,7 +94,7 @@ export const PLATFORM_POSTING: Record<string, PlatformPostingDef> = {
   },
   tiktok: {
     label: "TikTok", mode: "needs_audit",
-    reason: "Ohne bestandenen App-Audit wären alle Beiträge privat (SELF_ONLY) — deshalb bewusst von Hand, mit Fotomodus und Bio-Link.",
+    reason: "Ohne bestandenen Content-Posting-Audit erzwingt TikTok bei jedem API-Beitrag SELF_ONLY — nur du selbst siehst ihn. Deshalb bewusst von Hand, mit Fotomodus und Bio-Link. Geprüft am 01.09.2026.",
     fields: [],
   },
   x: {
@@ -107,7 +107,11 @@ export const PLATFORM_POSTING: Record<string, PlatformPostingDef> = {
     reason: "Die API gibt es nur über das Partnerprogramm — für ein Ein-Personen-Produkt kein Weg.",
     fields: [],
   },
-  threads: { label: "Threads", mode: "manual", reason: "Noch kein eigener Provider gebaut; der Drei-Schritt-Weg funktioniert.", fields: [] },
+  threads: {
+    label: "Threads", mode: "needs_setup",
+    reason: "Kostenlos und ohne App Review, solange nur dein eigenes Konto postet: Meta-App anlegen, dein Threads-Konto als Tester eintragen, Token holen.",
+    fields: [F("userId", "Threads-Nutzer-ID", false), F("accessToken", "Zugriffstoken")],
+  },
   reddit: {
     label: "Reddit", mode: "blocked",
     reason: "Hausregel seit V1: Reddit wird gelesen, nie beschrieben. Es gibt keinen Code-Pfad, der dort postet.",

@@ -11,7 +11,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { loadEnv } from "../src/server/env.js";
 import { buildApp } from "../src/server/app.js";
 import { assetToken, ASSET_TTL_MS, readAssetToken } from "../src/server/publish/asset-tokens.js";
-import { linkFacets, blueskyPoster, telegramPoster, instagramPoster } from "../src/server/publish/posters.js";
+import { linkFacets, blueskyPoster, telegramPoster, instagramPoster, threadsPoster } from "../src/server/publish/posters.js";
 import { platformStatus, posterFor, saveCredentials } from "../src/server/publish/index.js";
 import { duePosts, nextFreeSlot, runScheduledPost, schedulePiece } from "../src/server/publish/schedule.js";
 import { PLATFORM_POSTING } from "../src/server/publish/types.js";
@@ -65,6 +65,10 @@ describe("Was auf welcher Plattform erlaubt ist", () => {
     expect(PLATFORM_POSTING["reddit"]!.mode).toBe("blocked");
     expect(posterFor("reddit")).toBeNull();
     expect(posterFor("REDDIT")).toBeNull();
+  });
+  it("kann Threads automatisch bedienen, sobald der Zugang steht", () => {
+    expect(PLATFORM_POSTING["threads"]!.mode).toBe("needs_setup");
+    expect(posterFor("threads")).not.toBeNull();
   });
   it("lässt X, LinkedIn, TikTok und YouTube bewusst manuell — mit Begründung", () => {
     for (const p of ["x", "linkedin", "tiktok", "youtube"]) {
@@ -209,6 +213,37 @@ describe("Posten", () => {
     expect(String(media[0]!.init.body)).toContain("is_carousel_item=true");
     expect(String(media[3]!.init.body)).toContain("media_type=CAROUSEL");
     expect(out.ref).toBe("ig-post-1");
+  });
+
+  it("postet auf Threads über Container und Veröffentlichung", async () => {
+    const calls: string[] = [];
+    const impl = (async (url: string | URL, init: RequestInit = {}) => {
+      const u = String(url);
+      calls.push(`${u.split("?")[0]}|${String(init.body ?? "")}`);
+      if (u.includes("threads_publish")) return new Response(JSON.stringify({ id: "th-1" }), { status: 200, headers: { "content-type": "application/json" } });
+      if (u.includes("fields=permalink")) return new Response(JSON.stringify({ permalink: "https://www.threads.net/@binderplan/post/abc" }), { status: 200, headers: { "content-type": "application/json" } });
+      return new Response(JSON.stringify({ id: `c${calls.length}` }), { status: 200, headers: { "content-type": "application/json" } });
+    }) as unknown as typeof fetch;
+    const out = await threadsPoster.post({
+      platform: "threads", text: "Die teuersten Karten.", link: null, title: "", creds: { userId: "9", accessToken: "tok" }, fetchImpl: impl,
+      assets: [1, 2].map(() => ({ path: "x", url: "https://agi-empire.test/go/a/t", mime: "image/png", alt: "", kind: "image" as const })),
+    });
+    expect(calls.filter((c) => c.includes("/threads|")).length).toBe(3);   // 2 Kinder + Sammel-Container
+    expect(calls[2]).toContain("media_type=CAROUSEL");
+    expect(out.ref).toBe("th-1");
+    expect(out.externalUrl).toContain("threads.net");
+  });
+
+  it("kürzt für Threads auf 500 Zeichen", async () => {
+    const bodies: string[] = [];
+    const impl = (async (url: string | URL, init: RequestInit = {}) => {
+      bodies.push(String(init.body ?? ""));
+      return new Response(JSON.stringify({ id: "x" }), { status: 200, headers: { "content-type": "application/json" } });
+    }) as unknown as typeof fetch;
+    await threadsPoster.post({ platform: "threads", text: "wort ".repeat(200), assets: [], link: null, title: "", creds: { userId: "9", accessToken: "t" }, fetchImpl: impl });
+    const text = new URLSearchParams(bodies[0]!).get("text")!;
+    expect(text.length).toBeLessThanOrEqual(500);
+    expect(text.endsWith("…")).toBe(true);
   });
 
   it("erkennt Links im Text byte-genau (Bluesky-Facetten)", () => {

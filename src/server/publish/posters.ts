@@ -218,7 +218,58 @@ export const pinterestPoster: PlatformPoster = {
   },
 };
 
+// --- Threads ------------------------------------------------------------------
+
+const THREADS = "https://graph.threads.net/v1.0";
+
+/**
+ * Threads laeuft wie Instagram in zwei Schritten (Container, dann
+ * veroeffentlichen), aber auf einem eigenen Host und mit eigenem Token. Fuer das
+ * **eigene** Konto genuegt die Tester-Rolle in der Meta-App — kein App Review.
+ * Textlaenge 500 Zeichen, bis zu 20 Bilder als Carousel.
+ */
+export const threadsPoster: PlatformPoster = {
+  platform: "threads",
+  missing: (c) => need(c, ["userId", "accessToken"]),
+  async post(i: PostInput): Promise<PostOutput> {
+    const f = i.fetchImpl ?? fetch;
+    const user = i.creds["userId"]!;
+    const token = i.creds["accessToken"]!;
+    const text = i.text.length > 500 ? `${i.text.slice(0, 497).replace(/\s+\S*$/, "")}…` : i.text;
+    const media = i.assets.filter((a) => a.url).slice(0, 20);
+
+    const container = async (params: Record<string, string>): Promise<string> => {
+      const out = await json<{ id: string }>(await call(f, `${THREADS}/${user}/threads`, {
+        method: "POST", body: new URLSearchParams({ ...params, access_token: token }),
+      }, "Threads"));
+      return out.id;
+    };
+
+    let creationId: string;
+    const video = media.find((a) => a.kind === "video");
+    if (video) creationId = await container({ media_type: "VIDEO", video_url: video.url, text });
+    else if (media.length === 1) creationId = await container({ media_type: "IMAGE", image_url: media[0]!.url, text });
+    else if (media.length > 1) {
+      const children: string[] = [];
+      for (const a of media) children.push(await container({ media_type: "IMAGE", image_url: a.url, is_carousel_item: "true" }));
+      creationId = await container({ media_type: "CAROUSEL", children: children.join(","), text });
+    } else creationId = await container({ media_type: "TEXT", text });
+
+    const pub = await json<{ id: string }>(await call(f, `${THREADS}/${user}/threads_publish`, {
+      method: "POST", body: new URLSearchParams({ creation_id: creationId, access_token: token }),
+    }, "Threads-Publish"));
+    // Der Permalink kostet einen zusaetzlichen Aufruf, macht den Eintrag aber anklickbar.
+    let permalink: string | null = null;
+    try {
+      const info = await json<{ permalink?: string }>(await call(f, `${THREADS}/${pub.id}?fields=permalink&access_token=${encodeURIComponent(token)}`, {}, "Threads-Permalink"));
+      permalink = info.permalink ?? null;
+    } catch { /* der Post steht, der Link ist Kuer */ }
+    return { ref: pub.id, externalUrl: permalink };
+  },
+};
+
 export const POSTERS: Record<string, PlatformPoster> = {
+  threads: threadsPoster,
   bluesky: blueskyPoster, telegram: telegramPoster, mastodon: mastodonPoster,
   instagram: instagramPoster, facebook: facebookPoster, pinterest: pinterestPoster,
 };
