@@ -20,12 +20,17 @@ import { taskRoutes } from "./routes/tasks.js";
 import { studioRoutes } from "./routes/studio.js";
 import { videoRoutes } from "./routes/video.js";
 import { seriesRoutes } from "./routes/series.js";
+import { publishRoutes } from "./routes/publish.js";
 import { loopRoutes, EVENTS_PUBLIC_PATH } from "./routes/loop.js";
 import { storageRoutes } from "./routes/storage.js";
 import { mediaRoutes } from "./routes/media.js";
 import { buildContext, type FullContext, type ServiceOverrides } from "./services.js";
 import { markStaleRuns } from "./agents/analysis/pipeline.js";
 import { resolveShortlink } from "./shortlinks.js";
+import { eq } from "drizzle-orm";
+import * as schema from "./db/schema.js";
+import { bioHtml, projectByBioCode } from "./publish/bio.js";
+import { readAssetToken } from "./publish/asset-tokens.js";
 
 declare module "fastify" {
   interface FastifyRequest { user: HostUser }
@@ -85,6 +90,7 @@ export async function buildApp(env: Env, opts: { host?: HostAdapter; dbFile?: st
   studioRoutes(app, db, () => ctx);
   videoRoutes(app, db, () => ctx);
   seriesRoutes(app, db);
+  publishRoutes(app, db, env);
   loopRoutes(app, db, env, () => ctx);
   storageRoutes(app, db, () => env.MP_DATA_DIR);
   mediaRoutes(app, db, () => env.MP_DATA_DIR);
@@ -101,6 +107,24 @@ export async function buildApp(env: Env, opts: { host?: HostAdapter; dbFile?: st
     const target = /^[a-z0-9]{4,12}$/.test(code) ? resolveShortlink(db, code) : null;
     if (!target) return reply.code(404).type("text/html; charset=utf-8").send("<h1 style='font-family:sans-serif;text-align:center;margin-top:20vh'>Link nicht gefunden</h1>");
     return reply.code(302).header("Cache-Control", "no-store").redirect(target);
+  });
+  // Bio-Seite und signierte Asset-Adressen liegen bewusst unter /go/ - nginx
+  // leitet das bereits hierher, und beide muessen ohne Anmeldung erreichbar sein.
+  app.get("/go/bio/:code", async (req, reply) => {
+    const code = String((req.params as { code: string }).code ?? "");
+    const projectId = /^[a-z0-9]{4,12}$/.test(code) ? projectByBioCode(db, code) : null;
+    const html = projectId ? bioHtml(db, projectId, env.MP_PUBLIC_BASE ?? "") : null;
+    if (!html) return reply.code(404).type("text/html; charset=utf-8").send("<h1 style='font-family:sans-serif;text-align:center;margin-top:20vh'>Seite nicht gefunden</h1>");
+    return reply.type("text/html; charset=utf-8").header("Cache-Control", "public, max-age=120").send(html);
+  });
+  app.get("/go/a/:token", async (req, reply) => {
+    const assetId = readAssetToken(db, String((req.params as { token: string }).token ?? ""));
+    const asset = assetId ? db.select().from(schema.mpAssets).where(eq(schema.mpAssets.id, assetId)).get() : null;
+    const file = asset ? path.resolve(env.MP_DATA_DIR, asset.path) : null;
+    if (!file || !file.startsWith(path.resolve(env.MP_DATA_DIR) + path.sep) || !fs.existsSync(file)) return reply.code(404).send({ detail: "Nicht gefunden." });
+    const ext = path.extname(file).toLowerCase();
+    const type = ext === ".mp4" ? "video/mp4" : ext === ".webp" ? "image/webp" : ext === ".jpg" || ext === ".jpeg" ? "image/jpeg" : "image/png";
+    return reply.type(type).header("Cache-Control", "public, max-age=3600").send(fs.createReadStream(file));
   });
   app.get("/", async (_req, reply) => reply.redirect("/mp/"));
   app.get("/mp", async (_req, reply) => reply.redirect("/mp/"));

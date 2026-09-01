@@ -606,7 +606,78 @@ export const SeriesView = z.object({
   workerAlive: z.boolean(),
 });
 
-export const ChannelProfile = z.object({ platform: z.string().min(1), label: z.string().default(""), url: z.string().default("") });
+// --- Veroeffentlichen v2 (Shot 10) -------------------------------------------
+
+/** Ein Slot je Kanal: Wochentag und Stunde in Europe/Berlin. */
+export const PostSlot = z.object({ day: Weekday, hour: z.number().int().min(0).max(23) });
+
+/**
+ * Wie weit ein Kanal automatisiert ist.
+ * - `manual`: nichts passiert von selbst (Standard, ueberall).
+ * - `scheduled`: nach **menschlicher Freigabe** postet der Pilot zum Slot.
+ * - `auto`: Serien-Stuecke dieses Kanals duerfen ohne Einzelfreigabe posten —
+ *   nur fuer Daten-Formate, mit Wochendeckel und Tagesdigest.
+ */
+export const PublishMode = z.enum(["manual", "scheduled", "auto"]);
+
+export const ChannelProfile = z.object({
+  platform: z.string().min(1), label: z.string().default(""), url: z.string().default(""),
+  slots: z.array(PostSlot).default([]),
+  publishMode: PublishMode.default("manual"),
+  autoWeeklyCap: z.number().int().min(0).max(50).default(5),
+});
+
+/** Was eine Plattform ueberhaupt zulaesst — Grundlage jeder Anzeige im UI. */
+export const PostingMode = z.enum(["api", "manual", "needs_setup", "needs_audit", "blocked"]);
+export const PlatformPosting = z.object({
+  platform: z.string(),
+  label: z.string(),
+  mode: PostingMode,
+  /** Ein Satz, warum das so ist — steht genau so im UI. */
+  reason: z.string(),
+  /** Felder, die das Projekt fuer diese Plattform hinterlegen muss. */
+  fields: z.array(z.object({ key: z.string(), label: z.string(), secret: z.boolean().default(true) })).default([]),
+  configured: z.boolean().default(false),
+});
+
+export const ScheduledStatus = z.enum(["queued", "posted", "failed", "cancelled"]);
+export const ScheduledPost = z.object({
+  id: Id, projectId: Id, pieceId: Id, platform: z.string(),
+  scheduledAt: Iso, status: ScheduledStatus, origin: PublishMode,
+  providerRef: z.string().nullable(), externalUrl: z.string().nullable(), error: z.string().nullable(),
+  attempts: z.number().int(), postedAt: Iso.nullable(), createdAt: Iso,
+  /** Titel des Stuecks — die Liste soll ohne zweite Abfrage lesbar sein. */
+  title: z.string().default(""),
+});
+
+export const ScheduleCreate = z.object({
+  /** Leer = naechster freier Slot des Kanals. */
+  scheduledAt: Iso.optional(),
+  platforms: z.array(z.string()).default([]),
+});
+
+/** Oeffentliche Bio-Seite eines Projekts. */
+export const BioSettings = z.object({
+  code: z.string().default(""),
+  headline: z.string().default(""),
+  intro: z.string().default(""),
+  /** So viele zuletzt veroeffentlichte Stuecke stehen automatisch drauf. */
+  latest: z.number().int().min(0).max(12).default(5),
+  enabled: z.boolean().default(false),
+});
+
+export const PublishView = z.object({
+  profiles: z.array(ChannelProfile),
+  platforms: z.array(PlatformPosting),
+  scheduled: z.array(ScheduledPost),
+  bio: BioSettings,
+  bioUrl: z.string().nullable(),
+  /** Heute automatisch gepostet — der Digest aus dem Plan. */
+  autoToday: z.array(ScheduledPost),
+  workerAlive: z.boolean(),
+});
+
+export const CredentialsPatch = z.record(z.string(), z.record(z.string(), z.string()));
 
 export const PublishPackage = z.object({
   piece: ContentPiece,
@@ -802,6 +873,14 @@ export type SeriesPatch = z.infer<typeof SeriesPatch>;
 export type SeriesCatalogEntry = z.infer<typeof SeriesCatalogEntry>;
 export type SeriesView = z.infer<typeof SeriesView>;
 export type Weekday = z.infer<typeof Weekday>;
+export type PostSlot = z.infer<typeof PostSlot>;
+export type PublishMode = z.infer<typeof PublishMode>;
+export type PostingMode = z.infer<typeof PostingMode>;
+export type PlatformPosting = z.infer<typeof PlatformPosting>;
+export type ScheduledPost = z.infer<typeof ScheduledPost>;
+export type ScheduleCreate = z.infer<typeof ScheduleCreate>;
+export type BioSettings = z.infer<typeof BioSettings>;
+export type PublishView = z.infer<typeof PublishView>;
 export type DirectoryDef = z.infer<typeof DirectoryDef>;
 export type DirectoryStatus = z.infer<typeof DirectoryStatus>;
 export type PublishPackage = z.infer<typeof PublishPackage>;

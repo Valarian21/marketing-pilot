@@ -55,7 +55,30 @@ export function canonicalChannel(name: string, planChannels: readonly string[] =
   return fromPlan?.trim() || PLATFORMS[key]!.label;
 }
 
-export interface ChannelProfile { platform: string; label: string; url: string }
+export type WeekdayId = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
+const WEEKDAY_IDS: readonly WeekdayId[] = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+
+/** Ein Kanal-Profil des Projekts. `slots`/`publishMode` kamen mit Shot 10 dazu. */
+export interface ChannelProfile {
+  platform: string; label: string; url: string;
+  /** Wochentag + Stunde (Europe/Berlin), zu denen auf diesem Kanal gepostet wird. */
+  slots: { day: WeekdayId; hour: number }[];
+  /** manual | scheduled | auto — Standard ist ueberall `manual`. */
+  publishMode: "manual" | "scheduled" | "auto";
+  autoWeeklyCap: number;
+}
+
+/** Ein Profil mit allen Feldern, egal wie alt der gespeicherte Eintrag ist. */
+export function fullProfile(p: Partial<ChannelProfile> & { platform: string }): ChannelProfile {
+  const slots = (Array.isArray(p.slots) ? p.slots : [])
+    .filter((x): x is { day: WeekdayId; hour: number } => WEEKDAY_IDS.includes(x?.day as WeekdayId) && Number.isInteger(x?.hour) && x.hour >= 0 && x.hour <= 23);
+  return {
+    platform: p.platform, label: p.label ?? "", url: p.url ?? "",
+    slots,
+    publishMode: p.publishMode === "scheduled" || p.publishMode === "auto" ? p.publishMode : "manual",
+    autoWeeklyCap: typeof p.autoWeeklyCap === "number" ? Math.max(0, Math.min(50, Math.round(p.autoWeeklyCap))) : 5,
+  };
+}
 
 export interface ChannelLink { platform: string | null; label: string; url: string | null; appOnly: boolean }
 
@@ -82,7 +105,7 @@ export function defaultProfiles(planChannels: readonly string[]): ChannelProfile
     const key = platformKey(c);
     if (!key || seen.has(key) || !PLATFORMS[key]?.home) continue;
     seen.add(key);
-    out.push({ platform: key, label: PLATFORMS[key]!.label, url: "" });
+    out.push(fullProfile({ platform: key, label: PLATFORMS[key]!.label }));
   }
   return out;
 }

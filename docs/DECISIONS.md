@@ -330,3 +330,54 @@ erst an den Ausgabedaten aufgefallen).
 **zusammengeführte** Ergebnis gegen `SeriesParams`. Die Validierung geht nicht verloren, sie
 greift eine Ebene später. Wer anderswo im Piloten einen PATCH auf ein Objekt mit Defaults baut,
 sollte dieselbe Falle im Kopf haben.
+
+## Die Hausregel wird an einer Stelle erzwungen, nicht an zwölf (2026-09-01, Shot 10)
+
+„Reddit, Foren und Discord haben keinen Code-Pfad, der postet" ist seit V1 gesetzt. Mit sechs
+Providern und einem Zeitplan gäbe es plötzlich viele Stellen, an denen diese Regel brechen
+könnte. Deshalb hat sie genau einen Ort: `posterFor()` liefert für alles, was in
+`PLATFORM_POSTING` als `blocked`, `manual` oder `needs_audit` steht, **null** — unabhängig davon,
+ob jemand einen Poster registriert hat. `schedulePiece` und `runScheduledPost` fragen beide
+darüber, und ein Test prüft es namentlich für Reddit, X, TikTok und YouTube.
+
+Dieselbe Tabelle trägt den Grund im Klartext, und der steht wörtlich im UI. „Manuell" ist keine
+fehlende Funktion, sondern eine Entscheidung — wer sie liest, soll auch lesen, warum: X kostet
+0,20 $ je Post mit Link, LinkedIn gibt es nur übers Partnerprogramm, TikTok und YouTube sperren
+Beiträge aus nicht auditierten Projekten.
+
+## Instagram holt Medien, statt sie zu bekommen (2026-09-01, Shot 10)
+
+Bluesky, Telegram und Mastodon nehmen Dateien entgegen. Instagram und Pinterest nicht: sie
+verlangen eine **öffentlich erreichbare URL** und laden von dort. Die Alternativen wären ein
+öffentliches Verzeichnis (nein) oder ein Zwischen-Hoster (unnötig).
+
+Gewählt: signierte, ablaufende Adressen unter `/go/a/<token>` — HMAC über Asset-ID und
+Ablaufzeit mit einem Geheimnis, das beim ersten Gebrauch entsteht. Sechs Stunden Gültigkeit
+reichen für jeden Container-Fluss und sind kurz genug, dass ein durchgesickerter Link wertlos
+wird. Kein Verzeichnis, kein ratbarer Pfad, und der Vergleich läuft zeitkonstant.
+
+## Ein gescheiterter Auto-Post wird zur Aufgabe, nicht zur Fehlermeldung (2026-09-01, Shot 10)
+
+Der Zeitplan ist eine Abkürzung des Drei-Schritt-Wegs, kein Ersatz. Wenn Bluesky 500 antwortet
+oder ein Token abgelaufen ist, darf der Beitrag nicht einfach verschwinden: `runScheduledPost`
+setzt den Eintrag auf `failed`, schreibt den Anbieter-Fehlertext dazu **und** legt die Aufgabe
+„Von Hand posten: …" an, die aufs fertige Publish-Paket zeigt. Beides landet im Audit.
+
+Aus demselben Grund gibt es keinen automatischen zweiten Versuch: ein Beitrag, der zum Slot
+nicht rausging, ist eine Sache für einen Menschen — nicht für eine Schleife, die um drei Uhr
+nachts dasselbe Token noch einmal probiert.
+
+## Voll automatisch nur für Daten-Formate, mit Deckel und Digest (2026-09-01, Shot 10)
+
+Der Plan erlaubt `publishMode: "auto"` — Serien-Stücke ohne Einzelfreigabe. Drei Grenzen halten
+das eng, und alle drei stehen im Code, nicht in der Doku:
+
+1. **Nur `data_carousel`.** Bei Daten-Formaten kommt jede Zahl deterministisch aus dem Provider;
+   ein Reel existiert zum Zeitpunkt des Serienlaufs außerdem noch gar nicht.
+2. **Nur Kanäle mit echtem Poster** — `posterFor()` entscheidet, siehe oben.
+3. **Nur bis zum Wochendeckel** des Kanals (Default 5). Ist er erreicht, bleibt das Stück in der
+   Freigabe, mit Notiz.
+
+Der Standard ist überall `manual`. Ob ein Kanal wirklich ohne Einzelfreigabe posten darf, bleibt
+Marcels Entscheidung; der Digest „Heute automatisch gepostet" mit Direktlink zum Löschen ist die
+Gegenleistung dafür, dass er sie treffen kann.

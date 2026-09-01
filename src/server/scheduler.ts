@@ -13,13 +13,15 @@ import { currentVersion } from "./agents/strategy/plan.js";
 import { dueSeries } from "./agents/series/series.js";
 import { SERIES_STEPS } from "./agents/series/job.js";
 import { berlinParts } from "./agents/series/time.js";
+import { duePosts } from "./publish/schedule.js";
+import { PUBLISH_STEPS } from "./publish/job.js";
 
 const DAY = 86_400_000;
 const stampKey = (kind: string, pid: string) => `sched:${kind}:${pid}`;
 const lastRun = (db: Db, kind: string, pid: string): number => { const r = db.select().from(t.mpSettings).where(eq(t.mpSettings.key, stampKey(kind, pid))).get(); return r ? Date.parse(r.value) : 0; };
 const stamp = (db: Db, kind: string, pid: string, at: string): void => { db.insert(t.mpSettings).values({ key: stampKey(kind, pid), value: at, updatedAt: nowIso() }).onConflictDoUpdate({ target: t.mpSettings.key, set: { value: at, updatedAt: nowIso() } }).run(); };
 
-export interface Due { kind: "community.scan" | "weekly.report" | "geo.measure" | "series.run"; projectId: string; seriesId?: string }
+export interface Due { kind: "community.scan" | "weekly.report" | "geo.measure" | "series.run" | "publish.due"; projectId: string; seriesId?: string }
 
 /** Pure: which jobs are due right now. */
 export function dueJobs(db: Db, now = new Date()): Due[] {
@@ -43,6 +45,9 @@ export function dueJobs(db: Db, now = new Date()): Due[] {
     if (last && berlinParts(new Date(last)).date === berlinParts(now).date) continue;
     due.push({ kind: "series.run", projectId: series.projectId, seriesId: series.id });
   }
+  // Faellige Beitraege (Shot 10). Ohne Eintraege entsteht auch kein Job - der
+  // Takt laeuft ohnehin alle zehn Minuten, das reicht fuer Redaktionsslots.
+  for (const pid of new Set(duePosts(db, now).map((x) => x.projectId))) due.push({ kind: "publish.due", projectId: pid });
   return due;
 }
 
@@ -56,8 +61,9 @@ export function enqueueDue(db: Db, now = new Date()): Due[] {
       out.push(d);
       continue;
     }
-    enqueueJob(db, { projectId: d.projectId, kind: d.kind, payload: { projectId: d.projectId, scheduled: true }, steps: [d.kind === "community.scan" ? "scan" : d.kind === "weekly.report" ? "report" : "geo"] });
-    stamp(db, d.kind, d.projectId, now.toISOString());
+    const steps = d.kind === "community.scan" ? ["scan"] : d.kind === "weekly.report" ? ["report"] : d.kind === "publish.due" ? PUBLISH_STEPS : ["geo"];
+    enqueueJob(db, { projectId: d.projectId, kind: d.kind, payload: { projectId: d.projectId, scheduled: true }, steps });
+    if (d.kind !== "publish.due") stamp(db, d.kind, d.projectId, now.toISOString());
     out.push(d);
   }
   return out;

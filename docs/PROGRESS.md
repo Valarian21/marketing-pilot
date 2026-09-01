@@ -444,3 +444,58 @@ Offen:
 - Marcel sollte die beiden Grenzwerte (4 Messpunkte, 200 %) gegenlesen. Sie sind konservativ
   gewählt; wer eine echte Rakete verpassen will, hebt `maxChangePct`.
 - Der Katalog wartet auf Shot 11 für Artist Spotlight, Errate den Preis und Binder-Showcase.
+
+## Shot 10 – Veröffentlichen v2: **gebaut** (2026-09-01)
+
+Erledigt:
+- **`mp_scheduled_posts`** (Migration `0011`): ein Eintrag je Stück **und** Kanal, mit
+  Herkunft (`scheduled` = nach Freigabe, `auto` = aus einer Serie), Anbieter-Referenz,
+  Fehlertext und Versuchszähler.
+- **Slots je Kanal-Profil**: `slots: [{day, hour}]` in Europe/Berlin, dazu `publishMode`
+  (`manual | scheduled | auto`) und `autoWeeklyCap`. Alte Profile bekommen die Felder beim Lesen
+  ergänzt (`fullProfile`). Standard bleibt überall **manuell**.
+- **Poster** (`src/server/publish/posters.ts`), alle ohne Bibliothek und mit einspeisbarem
+  `fetch`: **Bluesky** (Login → Blob-Upload → Record, Link-Facetten byte-genau, 300-Zeichen-Kappung),
+  **Telegram** (sendPhoto / sendMediaGroup / sendVideo), **Mastodon** (v2-Media → Status),
+  **Instagram** (Container-Fluss inkl. Carousel und Reels), **Facebook-Seite**, **Pinterest**.
+- **`PLATFORM_POSTING`**: eine Tabelle, die zu jeder Plattform sagt, was geht — und **warum
+  nicht**. TikTok und YouTube stehen als „manuell (Audit nötig)", X und LinkedIn als „manuell
+  (bewusst)" mit Ein-Satz-Begründung, Reddit als „nie automatisch". `posterFor()` gibt für
+  gesperrte, manuelle und Audit-Plattformen `null` zurück — die Hausregel wird an genau einer
+  Stelle erzwungen, nicht an vielen.
+- **Zugangsdaten je Projekt und Kanal** (`mp_settings publish:<projectId>`), teil-speicherbar:
+  ein leeres Feld lässt den vorhandenen Wert stehen. Nach draußen geht nur „eingerichtet: ja/nein".
+- **Signierte, ablaufende Asset-Adressen** `GET /go/a/<token>` (HMAC, 6 h) — Instagram und
+  Pinterest holen Medien über öffentliche URLs, statt sie hochzuladen.
+- **Zeitplan**: „Freigeben & einplanen" in der Freigabe legt den Beitrag in den nächsten freien
+  Slot; der Worker-Takt (`publish.due`) postet fällige Einträge. Scheitert einer, entsteht die
+  Aufgabe „Von Hand posten: …" mit Link aufs Publish-Paket — der Drei-Schritt-Weg bleibt
+  vollständig funktionsfähig.
+- **Auto-Stufe**: Kanäle auf `auto` bekommen Serien-Stücke ohne Einzelfreigabe eingeplant —
+  nur `data_carousel`, nur mit echtem Poster, nur bis zum Wochendeckel. Was heute so rausging,
+  steht als Digest oben auf der Seite „Veröffentlichen".
+- **Link-in-Bio-Seite** `GET /go/bio/<code>`: eine serverseitig gebaute HTML-Datei ohne Skript,
+  aus dem Brand-Kit gefärbt, mit UTM-Produktlink und den zuletzt veröffentlichten Stücken als
+  Kurzlinks. Der Code wird einmal vergeben und nie geändert.
+- **UI** `/mp/projects/:id/publishing` (Sidebar „Veröffentlichen"): Plattform-Tabelle mit Status,
+  Begründung und Zugangsfeldern; Slots und Automatik je Kanal; Bio-Einstellungen mit Adresse;
+  Zeitplan mit Absagen und „Fällige jetzt posten".
+- **19 neue Tests** (Gesamt **179**): Reddit/X/TikTok ohne Poster, Einrichtungsstatus,
+  Teil-Speichern von Geheimnissen, Asset-Token (gültig, abgelaufen, gefälscht, ausgeliefert),
+  Slot-Berechnung und Belegung, Verweigerung ohne Zugang, Bluesky-Post mit Bild und Facetten,
+  Fehlschlag → Aufgabe + Audit, Zeichenkappung, Telegram-Aufruf, Instagram-Container-Fluss,
+  Bio-Seite (aus/an, stabiler Code, Kurzlinks, Klickzählung).
+
+Live-Abnahme (2026-09-01): Bio-Seite unter `https://agi-empire.com/go/bio/cxuwx` erreichbar
+(HTTP 200 über nginx, 1,6 KB), Plattform-Übersicht zeigt alle zwölf Kanäle mit ihrem Status.
+
+**Was noch auf Marcel wartet** (die offenen Fragen des Plans):
+1. **Instagram/Facebook**: Business-/Creator-Konto, verknüpfte Facebook-Seite und eine eigene
+   Meta-App. Der Provider ist gebaut und besteht den Trockenlauf gegen Attrappen — er braucht
+   nur Konto-ID und Token.
+2. **Bluesky / Telegram / Mastodon**: sofort einsatzbereit, sobald Marcel Handle + App-Passwort
+   bzw. Bot-Token + Kanal einträgt. Ein echter Post ist ohne diese Daten nicht prüfbar.
+3. **Pinterest**: API-Zugang muss beantragt werden.
+4. **TikTok- und YouTube-Audit**: bewusst nicht gebaut, bis Marcel den Audit will.
+5. **Auto-Stufe**: überall aus. Ob ein Kanal wirklich ohne Einzelfreigabe posten darf, ist
+   Marcels Entscheidung, nicht meine.

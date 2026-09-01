@@ -76,6 +76,18 @@ export function ReviewPage() {
     } catch (e) { setError(e instanceof Error ? e.message : "Fehler"); }
     finally { setBusy(false); }
   };
+  /** Freigeben und gleich in den nächsten Slot des Kanals legen (Shot 10). */
+  const approveAndSchedule = async () => {
+    if (!current) return;
+    setBusy(true); setError(null);
+    try {
+      await api(`/content/${current.id}`, { method: "PATCH", json: { status: "approved", ...(draft !== null && draft !== current.body ? { body: draft } : {}) } });
+      const planned = await api<{ platform: string; scheduledAt: string }[]>(`/content/${current.id}/publish/schedule`, { method: "POST", json: { platforms: [], scheduledAt: undefined } });
+      window.alert(planned.map((p) => `${p.platform}: ${new Date(p.scheduledAt).toLocaleString("de-DE")}`).join("\n"));
+      await load();
+    } catch (e) { setError(e instanceof Error ? e.message : "Fehler"); }
+    finally { setBusy(false); }
+  };
   const saveText = async () => { if (!current || draft === null) return; setBusy(true); try { await api(`/content/${current.id}`, { method: "PATCH", json: { body: draft } }); await load(); } finally { setBusy(false); } };
 
   return (
@@ -114,7 +126,7 @@ export function ReviewPage() {
             )}
             <div className="mp-form-actions mp-review-actions">
               {current.status === "review" && siblings.length > 1 && <><Button variant="primary" disabled={busy} onClick={() => void actBundle("approved")}>Alle {siblings.length} freigeben</Button><Button variant="danger" disabled={busy} onClick={() => void actBundle("rejected")}>Bündel ablehnen</Button></>}
-              {current.status === "review" && <><Button variant="primary" disabled={busy} onClick={() => void act("approved", true)}>{siblings.length > 1 ? "Nur dieses freigeben & posten" : "Freigeben & posten"}</Button><Button disabled={busy} onClick={() => void act("approved")}>Nur freigeben</Button><Button variant="danger" disabled={busy} onClick={() => void act("rejected")}>Ablehnen</Button></>}
+              {current.status === "review" && <><Button variant="primary" disabled={busy} onClick={() => void act("approved", true)}>{siblings.length > 1 ? "Nur dieses freigeben & posten" : "Freigeben & posten"}</Button><Button disabled={busy} onClick={() => void act("approved")}>Nur freigeben</Button><Button disabled={busy} title="Freigeben und in den nächsten Slot dieses Kanals legen - der Pilot postet dann selbst" onClick={() => void approveAndSchedule()}>Freigeben &amp; einplanen</Button><Button variant="danger" disabled={busy} onClick={() => void act("rejected")}>Ablehnen</Button></>}
               {current.status !== "published" && <Button disabled={busy} onClick={() => void act("regenerate")}>{busy ? "…" : "Neu generieren"}</Button>}
               {draft !== null && draft !== current.body && current.status !== "published" && <Button disabled={busy} onClick={() => void saveText()}>Text speichern</Button>}
               {(current.status === "approved" || current.status === "published") && <Link className="mp-btn mp-btn--primary" to={`/projects/${id}/publish/${current.id}`}>Publish-Paket</Link>}

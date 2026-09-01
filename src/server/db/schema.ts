@@ -323,3 +323,30 @@ export const mpContentSeries = sqliteTable("mp_content_series", {
   createdAt: createdAt(),
   updatedAt: text("updated_at").notNull(),
 }, (t) => [index("mp_series_project").on(t.projectId)]);
+
+// --- Veroeffentlichen v2 (Shot 10) ---------------------------------------------
+
+/**
+ * Geplante Beitraege. Ein Eintrag entsteht erst **nach** der Freigabe (oder bei
+ * `publishMode: auto` durch eine Serie) und traegt genau einen Kanal.
+ *
+ * `providerRef` ist die Antwort der Plattform (Post-ID/URI) — daran haengt der
+ * Loesch-Link im Digest.
+ */
+export const mpScheduledPosts = sqliteTable("mp_scheduled_posts", {
+  id: text("id").primaryKey(),
+  projectId: projectRef(),
+  pieceId: text("piece_id").notNull().references(() => mpContentPieces.id, { onDelete: "cascade" }),
+  platform: text("platform").notNull(),
+  scheduledAt: text("scheduled_at").notNull(),
+  /** queued | posted | failed | cancelled */
+  status: text("status").notNull().default("queued"),
+  /** manual | scheduled | auto - womit der Eintrag entstanden ist. */
+  origin: text("origin").notNull().default("scheduled"),
+  providerRef: text("provider_ref"),
+  externalUrl: text("external_url"),
+  error: text("error"),
+  attempts: integer("attempts").notNull().default(0),
+  postedAt: text("posted_at"),
+  createdAt: createdAt(),
+}, (t) => [index("mp_scheduled_status").on(t.status, t.scheduledAt), index("mp_scheduled_project").on(t.projectId)]);

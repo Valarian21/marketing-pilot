@@ -16,6 +16,7 @@ const NAV: { group: string; to: string; label: string; icon: IconName; end?: boo
   { group: "Inhalte", to: "/series", label: "Serien", icon: "series" },
   { group: "Inhalte", to: "/media", label: "Medien", icon: "media" },
   { group: "Inhalte", to: "/review", label: "Freigaben", icon: "review" },
+  { group: "Inhalte", to: "/publishing", label: "Veröffentlichen", icon: "send" },
   { group: "Wachstum", to: "/community", label: "Community", icon: "community" },
   { group: "Wachstum", to: "/insights", label: "Insights", icon: "insights" },
   { group: "Betrieb", to: "/activity", label: "Aktivität", icon: "activity" },

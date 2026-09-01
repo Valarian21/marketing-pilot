@@ -1,7 +1,7 @@
 /** "Kanäle & Profile" card: one row per platform with the project's own page URL. Every channel name in the app links here. */
 import { useEffect, useState } from "react";
 import { api } from "../api.js";
-import { PLATFORMS, type ChannelProfile } from "../../shared/channels.js";
+import { PLATFORMS, type ChannelProfile, fullProfile } from "../../shared/channels.js";
 import { Button, Card, Notice } from "./ui.js";
 import { loadProfiles, useProfiles } from "./ChannelLink.js";
 
@@ -49,7 +49,7 @@ export function ProfilesCard({ projectId }: { projectId: string }) {
             </div>
           ))}
           <div className="mp-form-actions">
-            <Button onClick={() => setRows([...rows, { platform: "instagram", label: "Instagram", url: "" }])}>Kanal hinzufügen</Button>
+            <Button onClick={() => setRows([...rows, fullProfile({ platform: "instagram", label: "Instagram" })])}>Kanal hinzufügen</Button>
             <Button variant="primary" disabled={busy} onClick={() => void save()}>{busy ? "…" : "Speichern"}</Button>
             <span className="mp-small mp-muted">Mehrere Einträge je Plattform sind erlaubt (z. B. mehrere Facebook-Gruppen).</span>
           </div>
