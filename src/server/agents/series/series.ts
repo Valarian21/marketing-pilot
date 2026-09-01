@@ -20,10 +20,7 @@ import { writeAudit } from "../../audit.js";
 import { currentVersion, dueAtFor } from "../strategy/plan.js";
 import { weekOf } from "../../routes/tasks.js";
 import { generateContent, pieceOf, type StudioContext } from "../studio/generate.js";
-import { bundlePieces } from "../studio/data-content.js";
-import { loadProfiles } from "../../channels.js";
-import { posterFor } from "../../publish/index.js";
-import { autoPostsThisWeek, schedulePiece } from "../../publish/schedule.js";
+import { autoScheduleBundle } from "../../publish/auto.js";
 import { catalogFor, isAvailable } from "./catalog.js";
 import { isDue, nextRunAt } from "./time.js";
 import type { HostUser } from "../../../host-adapter.js";
@@ -227,10 +224,12 @@ export async function runSeries(
     const lead = await generateContent(ctx, series.projectId, req, user);
     pieces.push(lead.id);
     if (!opts.preview) {
-      const auto = autoSchedule(ctx.db, series, lead.id, now, user);
+      // Reels sind hier noch Entwuerfe - fuer sie greift die Automatik erst, wenn
+      // der Worker die MP4 gebaut hat (siehe video/slideshow.ts).
+      const auto = autoScheduleBundle(ctx.db, series.projectId, lead.id, { now, user });
       // Nur was NICHT automatisch rausgeht, braucht eine Aufgabe.
-      if (auto.length < 1) createPublishTask(ctx.db, series, lead, now);
-      autoNotes.push(...auto);
+      if (auto.scheduled === 0) createPublishTask(ctx.db, series, lead, now);
+      autoNotes.push(...auto.notes);
     }
   }
 
@@ -247,34 +246,6 @@ export async function runSeries(
     pieces, scope: scope.label, formats: series.params.formats,
     note: [opts.preview ? "Vorschau — die Rotation wurde nicht verbraucht." : "", ...autoNotes].filter(Boolean).join(" "),
   };
-}
-
-/**
- * Kanäle auf `publishMode: "auto"` bekommen ihre Serien-Stücke ohne
- * Einzelfreigabe eingeplant — die Ausnahme, die der Plan ausdrücklich erlaubt,
- * weil bei Daten-Formaten jede Zahl deterministisch aus dem Provider kommt.
- *
- * Drei Grenzen halten das eng: nur `data_carousel` (ein Reel existiert zum
- * Zeitpunkt des Laufs noch gar nicht), nur Kanäle mit echtem Poster, und nur
- * bis zum Wochendeckel des Kanals.
- */
-function autoSchedule(db: Db, series: s.ContentSeries, leadId: string, now: Date, user: HostUser): string[] {
-  const profiles = loadProfiles(db, series.projectId);
-  const notes: string[] = [];
-  for (const row of bundlePieces(db, series.projectId, leadId)) {
-    if (row.format !== "data_carousel" || row.status !== "review") continue;
-    const profile = profiles.find((p) => p.platform === row.channel);
-    if (profile?.publishMode !== "auto" || !posterFor(row.channel)) continue;
-    if (autoPostsThisWeek(db, series.projectId, row.channel, now) >= profile.autoWeeklyCap) {
-      notes.push(`${row.channel}: Wochendeckel erreicht, bleibt in der Freigabe.`);
-      continue;
-    }
-    db.update(t.mpContentPieces).set({ status: "approved", updatedAt: nowIso() }).where(eq(t.mpContentPieces.id, row.id)).run();
-    const planned = schedulePiece(db, series.projectId, { pieceId: row.id, platforms: [row.channel], origin: "auto", now });
-    notes.push(`${row.channel}: automatisch für ${planned[0]?.scheduledAt.slice(0, 16).replace("T", " ")} eingeplant.`);
-    writeAudit(db, { user, action: "series.autoSchedule", entityType: "content_piece", entityId: row.id, projectId: series.projectId, content: { platform: row.channel, at: planned[0]?.scheduledAt, series: series.id } });
-  }
-  return notes;
 }
 
 /** Zu jedem Bündel eine Aufgabe „Posten", verlinkt wie im Cockpit üblich. */

@@ -8,6 +8,7 @@ import { ProjectNav } from "../components/ProjectNav.js";
 import { markdownToHtml } from "../../shared/markdown.js";
 import { VideoGallery } from "./Video.js";
 import { bundleIdOf } from "./Studio.js";
+import { ShotGallery } from "../components/Lightbox.js";
 import { ReviseBox, fmtUsd } from "../components/Revise.js";
 
 const STATUS: Record<ContentPiece["status"], { label: string; kind: PillKind }> = { draft: { label: "Entwurf", kind: "todo" }, review: { label: "in Freigabe", kind: "review" }, approved: { label: "freigegeben", kind: "done" }, published: { label: "veröffentlicht", kind: "done" }, rejected: { label: "abgelehnt", kind: "kind" } };
@@ -171,7 +172,7 @@ function Preview({ piece, text }: { piece: ContentPiece; text: string }) {
     const cards = Array.isArray(piece.meta["cards"]) ? (piece.meta["cards"] as { rank: number; name: string; setName: string; localId: string; priceEur: number }[]) : [];
     return (
       <div className="mp-preview">
-        <div className="mp-shots">{piece.assets.map((a) => <figure key={a} className="mp-shot"><img src={`/api/mp/assets/${a}/file`} alt="" loading="lazy" /></figure>)}</div>
+        <ShotGallery shots={dataSlides(piece, cards)} />
         <p className="mp-small mp-muted">{String(piece.meta["scopeLabel"] ?? "")} · {String(piece.meta["size"] ?? "")} · {cards.length} Karten · {String(piece.meta["footer"] ?? "")}</p>
         {cards.length > 0 && (
           <details className="mp-details mp-small"><summary className="mp-label">Zahlen der Rangliste (kommen so aus den Produktdaten)</summary>
@@ -189,7 +190,7 @@ function Preview({ piece, text }: { piece: ContentPiece; text: string }) {
     const sizes = piece.format === "carousel" ? ["1080x1080"] : null;
     return (
       <div className="mp-preview">
-        <div className="mp-shots">{(piece.format === "carousel" ? piece.assets.slice(0, Math.ceil(piece.assets.length / 2)) : piece.assets).map((a) => <figure key={a} className="mp-shot"><img src={`/api/mp/assets/${a}/file`} alt="" loading="lazy" /></figure>)}</div>
+        <ShotGallery shots={(piece.format === "carousel" ? piece.assets.slice(0, Math.ceil(piece.assets.length / 2)) : piece.assets).map((a, i) => ({ id: a, url: `/api/mp/assets/${a}/file`, label: piece.format === "carousel" ? `Slide ${i + 1}` : "" }))} />
         {sizes && <p className="mp-small mp-muted">Beide Größen (1080×1080, 1080×1350) liegen im Publish-Paket.</p>}
         {piece.format === "carousel" && <div className="mp-post"><p>{String(piece.meta["caption"] ?? "")}</p></div>}
       </div>
@@ -209,4 +210,18 @@ function Preview({ piece, text }: { piece: ContentPiece; text: string }) {
       {limit > 0 && <div className={`mp-small ${text.length > limit ? "mp-over" : "mp-muted"}`}>{text.length}/{limit} Zeichen</div>}
     </div>
   );
+}
+
+/**
+ * Die Slides eines Daten-Stücks mit sprechenden Beschriftungen: die Reihenfolge
+ * ist immer Cover, Karten in Anzeigereihenfolge, CTA — so wie sie gerendert wurde.
+ */
+function dataSlides(piece: ContentPiece, cards: { rank: number; name: string }[]): { id: string; url: string; label: string }[] {
+  const countdown = (piece.meta["dataQuery"] as { countdown?: boolean } | undefined)?.countdown !== false;
+  const order = countdown ? [...cards].reverse() : cards;
+  return piece.assets.map((a, i) => {
+    const card = order[i - 1];
+    const label = i === 0 ? "Cover" : i === piece.assets.length - 1 ? "Abschluss" : card ? `Platz ${card.rank} · ${card.name}` : `Slide ${i}`;
+    return { id: a, url: `/api/mp/assets/${a}/file`, label };
+  });
 }

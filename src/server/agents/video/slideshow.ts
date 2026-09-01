@@ -27,6 +27,7 @@ import { estimateDurationMs, estimateWords, isSpokenWord, type WordTiming } from
 import { pickMusic, runFfmpeg, OUTPUT_FPS } from "./assemble.js";
 import { captionJobs, hookCardHtml, type CaptionCue, type Layout } from "./overlays.js";
 import type { VideoContext } from "./pipeline.js";
+import { autoScheduleBundle } from "../../publish/auto.js";
 
 export const SLIDESHOW_STEPS = ["voice", "overlays", "video", "assets"];
 
@@ -430,7 +431,10 @@ export const renderSlideshowJob: JobHandler<VideoContext> = async (ctx, job, pro
         ...(m.id === pieceId ? { aiTellNotes: [m.aiTellNotes, warnings.length ? `Render-Hinweise:\n${warnings.join("\n")}` : ""].filter(Boolean).join("\n") } : {}),
       }).where(eq(t.mpContentPieces.id, m.id)).run();
     }
-    progress("assets", { detail: `${members.length} Stücke aktualisiert` });
+    // Erst jetzt existiert die MP4 - hier greift die Automatik fuer Reels.
+    const auto = autoScheduleBundle(ctx.db, piece.projectId, bundleId, { now: new Date(ts), user: { id: "scheduler", name: "Serien-Plan" } });
+    if (auto.notes.length) warnings.push(...auto.notes);
+    progress("assets", { detail: `${members.length} Stücke aktualisiert${auto.scheduled ? `, ${auto.scheduled} automatisch eingeplant` : ""}` });
     return [videoId, thumbId];
   });
 

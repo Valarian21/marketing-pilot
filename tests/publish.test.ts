@@ -16,6 +16,7 @@ import { platformStatus, posterFor, saveCredentials } from "../src/server/publis
 import { duePosts, nextFreeSlot, runScheduledPost, schedulePiece } from "../src/server/publish/schedule.js";
 import { PLATFORM_POSTING } from "../src/server/publish/types.js";
 import { saveProfiles } from "../src/server/channels.js";
+import { autoScheduleBundle } from "../src/server/publish/auto.js";
 import { fakeHost } from "./helpers.js";
 
 const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==", "base64");
@@ -246,5 +247,49 @@ describe("Bio-Seite", () => {
     const hit = await built.app.inject({ method: "GET", url: `/go/${code}` });
     expect(hit.statusCode).toBe(302);
     expect(hit.headers.location).toContain("utm_source=bio");
+  });
+});
+
+
+describe("Voll automatisch", () => {
+  const user = { id: "test", name: "test" };
+  /** Ein Bündel wie es eine Serie hinterlässt: Leit-Stück plus ein Mitglied. */
+  const bundle = (id: string, format: string, seriesId: string | null, status = "review") => {
+    built.db.run(`INSERT INTO mp_content_pieces (id, project_id, task_id, channel, format, title, body, assets, status, human_edited, published_at, external_url, utm, meta, ai_tell_score, ai_tell_notes, rejection_reason, created_at, updated_at)
+      VALUES ('${id}', '${pid}', NULL, 'bluesky', '${format}', 'Serie ${id}', 'Text', '[]', '${status}', 0, NULL, NULL, '{}',
+      '${JSON.stringify({ bundleId: id, bundleLead: true, platform: "bluesky", ...(seriesId ? { request: { seriesId } } : {}) }).replace(/'/g, "''")}',
+      NULL, '', '', '2026-09-01T00:00:00.000Z', '2026-09-01T00:00:00.000Z')` as never);
+    return id;
+  };
+
+  it("rührt nichts an, solange der Kanal auf manuell steht", () => {
+    saveProfiles(built.db, pid, [{ platform: "bluesky", label: "Bluesky", url: "", slots: [{ day: "wed", hour: 9 }], publishMode: "scheduled", autoWeeklyCap: 5 }]);
+    const id = bundle("auto1", "data_carousel", "s1");
+    expect(autoScheduleBundle(built.db, pid, id, { user }).scheduled).toBe(0);
+  });
+
+  it("plant Serien-Carousels und Serien-Reels ein, sobald der Kanal auf auto steht", () => {
+    saveProfiles(built.db, pid, [{ platform: "bluesky", label: "Bluesky", url: "", slots: [{ day: "wed", hour: 9 }], publishMode: "auto", autoWeeklyCap: 5 }]);
+    const carousel = autoScheduleBundle(built.db, pid, bundle("auto2", "data_carousel", "s1"), { user });
+    expect(carousel.scheduled).toBe(1);
+    // Das Reel kommt erst nach dem Render hier an - dann aber genauso.
+    const reel = autoScheduleBundle(built.db, pid, bundle("auto3", "data_reel", "s1"), { user });
+    expect(reel.scheduled).toBe(1);
+  });
+
+  it("fasst Handarbeit nie an, auch nicht auf einem Auto-Kanal", () => {
+    const ohneSerie = autoScheduleBundle(built.db, pid, bundle("auto4", "data_carousel", null), { user });
+    expect(ohneSerie.scheduled).toBe(0);
+    // ein Text-Stück aus einer Serie waere ebenfalls tabu
+    const text = autoScheduleBundle(built.db, pid, bundle("auto5", "text", "s1"), { user });
+    expect(text.scheduled).toBe(0);
+  });
+
+  it("hält den Wochendeckel ein und sagt es", () => {
+    saveProfiles(built.db, pid, [{ platform: "bluesky", label: "Bluesky", url: "", slots: [{ day: "wed", hour: 9 }], publishMode: "auto", autoWeeklyCap: 2 }]);
+    // zwei sind aus dem vorherigen Test schon geplant
+    const res = autoScheduleBundle(built.db, pid, bundle("auto6", "data_carousel", "s1"), { user });
+    expect(res.scheduled).toBe(0);
+    expect(res.notes.join(" ")).toContain("Wochendeckel");
   });
 });
