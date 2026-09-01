@@ -28,7 +28,8 @@ const fakeLlm: LlmProvider = {
     const task = /^\[task:([a-z-]+)\]/.exec(messages.find((m) => m.role === "system")?.content ?? "")?.[1];
     switch (task) {
       case "voice-profile": return json({ summary: "Kurz, direkt, du.", address: "du", sentenceLength: "kurz", favoriteWords: ["ehrlich"], humor: "trocken", typicalOpeners: ["Kurz gesagt:"], noGos: ["Emojis"], promptBlock: "Write short sentences. Use du. Example: 'Kurz gesagt: das klappt.'" });
-      case "ai-tell-critic": { const score = criticScores.shift() ?? 9; return json({ score, issues: score < 7 ? ["'Game-Changer' - Floskel"] : [], suggestions: score < 7 ? ["Floskel streichen"] : [] }); }
+      // Der Kritiker antwortet mal mit Saetzen, mal mit Objekten - beides muss durchgehen.
+      case "ai-tell-critic": { const score = criticScores.shift() ?? 9; return json({ score, issues: score < 7 ? [{ quote: "'Game-Changer'", why: "Floskel" }] : [], suggestions: score < 7 ? ["Floskel streichen"] : [] }); }
       case "rewrite": return json({ body: "Überarbeitet: Sonntag gehört wieder dir. Ich bau das Tool selbst." });
       case "text-post": return json({ title: "LinkedIn: Sonntag", body: "Erster Entwurf mit Game-Changer.", altText: "Screenshot der App" });
       case "carousel": return json({ title: "Carousel Sonntag", caption: "Warum Sonntag frei bleibt.", slides: [{ kind: "text", headline: "Sonntag frei", body: "in 10 Minuten" }, { kind: "screenshot", headline: "So sieht es aus", body: "", screenshotId: "" }, { kind: "text", headline: "Probier es", body: "beispielwerk.test" }] });

@@ -139,6 +139,21 @@ export function ReviewPage() {
 /** Preview roughly the way the platform shows it. */
 function Preview({ piece, text }: { piece: ContentPiece; text: string }) {
   const platform = String(piece.meta["platform"] ?? piece.channel).toLowerCase();
+  if (piece.format === "data_reel") {
+    const cards = Array.isArray(piece.meta["cards"]) ? (piece.meta["cards"] as { rank: number; name: string; priceEur: number }[]) : [];
+    const plan = piece.meta["reelPlan"] as { secondsPerCard: number; dropped: string[]; totalMs: number } | undefined;
+    return (
+      <div className="mp-preview">
+        <VideoGallery piece={piece} />
+        <p className="mp-small mp-muted">
+          {String(piece.meta["scopeLabel"] ?? "")} · {cards.length} Karten
+          {plan && <> · {(plan.totalMs / 1000).toFixed(0)} s, {plan.secondsPerCard.toFixed(1)} s je Karte{plan.dropped.length > 0 && ` (${plan.dropped.length} gekappt)`}</>}
+          {" · "}{String(piece.meta["footer"] ?? "")}
+        </p>
+        <div className="mp-post"><p>{text}</p></div>
+      </div>
+    );
+  }
   if (piece.format === "data_carousel") {
     // Alle Slides dieses Stuecks haben dieselbe Groesse - die Plattform bestimmt sie.
     const cards = Array.isArray(piece.meta["cards"]) ? (piece.meta["cards"] as { rank: number; name: string; setName: string; localId: string; priceEur: number }[]) : [];

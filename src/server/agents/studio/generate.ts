@@ -29,6 +29,7 @@ import { pngSize } from "../../util/png.js";
 import { pieceCosts, writeAudit } from "../../audit.js";
 import { enqueueJob, hasActiveJob, workerAlive } from "../../jobs.js";
 import { renderOptionsFromMeta, VIDEO_STEPS } from "../video/pipeline.js";
+import { SLIDESHOW_STEPS } from "../video/slideshow.js";
 import type { HostUser } from "../../../host-adapter.js";
 
 export interface StudioContext extends AgentContext {
@@ -186,8 +187,9 @@ async function draftFor(ctx: StudioContext, base: Base, req: s.ContentRequest, p
       return { title: meta.title, body: rev.body, format: "article", channel: "website", meta: { kind, competitor: competitor ?? null, slug, metaDescription: meta.metaDescription, faq: meta.faq, jsonLd, htmlPath: path.relative(ctx.dataDir, file), request: req }, assets: [], score: rev.score, notes: rev.notes };
     }
     case "data_carousel":
+    case "data_reel":
       // laeuft nie hier durch - generateContent zweigt vorher nach data-content.ts ab
-      throw err("Daten-Carousels werden als Bündel erzeugt, nicht als Einzelstück.");
+      throw err("Daten-Formate werden als Bündel erzeugt, nicht als Einzelstück.");
     default:
       throw err(`Format "${req.format}" kommt in einem späteren Shot (Video: Shot 4, Community-Antworten: Shot 5).`);
   }
@@ -222,6 +224,11 @@ function linkTask(db: Db, taskId: string, pieceId: string): void {
  */
 async function generateDataPieces(ctx: StudioContext, base: Base, req: s.ContentRequest, user: HostUser, reuseLeadId?: string): Promise<s.ContentPiece> {
   const languages: ("de" | "en")[] = req.language === "both" ? ["de", "en"] : [req.language === "en" ? "en" : "de"];
+  // Beim Reel entsteht die MP4 im Worker. Lieber jetzt abbrechen als nach dem
+  // Modellaufruf: die Slides waeren sonst bezahlt und das Video nie gebaut.
+  // 400 statt 503: der Fehlerbehandler versteckt 5xx-Meldungen hinter „Interner Fehler",
+  // und genau diese Meldung soll der Nutzer lesen (so macht es auch die Video-Route).
+  if (req.format === "data_reel" && !workerAlive(ctx.db)) throw err("Der Render-Worker läuft nicht (app-marketing-pilot-worker) - das Reel wurde nicht gebaut.", 400);
   const renderer = ctx.renderer ?? playwrightRenderer;
   const shot = projectScreenshots(ctx.db, base.project.id)[0];
   const dataBase: DataBase = { db: ctx.db, project: base.project, brief: base.brief, personas: base.personas, kit: base.kit, voice: base.voice, language: base.language };
@@ -238,7 +245,8 @@ async function generateDataPieces(ctx: StudioContext, base: Base, req: s.Content
           renderer,
           screenshotPath: shot ? path.join(ctx.dataDir, shot.path) : null,
         }));
-      writeAudit(ctx.db, { user, action: "content.generate", entityType: "content_piece", entityId: leadId, projectId: base.project.id, content: { format: "data_carousel", language, pieces: result.length, platforms: result.map((p) => p.channel) } });
+      if (req.format === "data_reel") enqueueJob(ctx.db, { projectId: base.project.id, kind: "video.slideshow", payload: { pieceId: leadId }, steps: SLIDESHOW_STEPS });
+      writeAudit(ctx.db, { user, action: "content.generate", entityType: "content_piece", entityId: leadId, projectId: base.project.id, content: { format: req.format, language, pieces: result.length, platforms: result.map((p) => p.channel) } });
       if (i === 0) lead = withCosts(ctx.db, [result[0]!])[0]!;
     } catch (e) {
       if (leadId !== reuseLeadId) ctx.db.delete(t.mpContentPieces).where(eq(t.mpContentPieces.id, leadId)).run();
@@ -251,7 +259,7 @@ async function generateDataPieces(ctx: StudioContext, base: Base, req: s.Content
 
 export async function generateContent(ctx: StudioContext, projectId: string, req: s.ContentRequest, user: HostUser): Promise<s.ContentPiece> {
   const base = loadBase(ctx, projectId);
-  if (req.format === "data_carousel") return generateDataPieces(ctx, base, req, user);
+  if (req.format === "data_carousel" || req.format === "data_reel") return generateDataPieces(ctx, base, req, user);
   const pieceId = newId();
   insertPlaceholder(ctx.db, projectId, pieceId, req, req.taskId ?? null);
   const model = req.format === "article" ? modelFor("analysis") : modelFor("content");
@@ -284,7 +292,7 @@ export async function regenerateContent(ctx: StudioContext, pieceId: string, hin
   const req: s.ContentRequest = reqParsed.success ? reqParsed.data : s.ContentRequest.parse({ format: existing.format, topic: existing.title, hint: "" });
   const merged = { ...req, hint: [req.hint, hint].filter(Boolean).join(" | ") };
   const base = loadBase(ctx, existing.projectId);
-  if (existing.format === "data_carousel") {
+  if (existing.format === "data_carousel" || existing.format === "data_reel") {
     // Ein Bündel wird immer als Ganzes neu erzeugt, und immer über sein Leit-Stück:
     // die Mitglieder teilen sich die Assets, einzeln wäre das nicht konsistent zu halten.
     const bundleId = String(existing.meta["bundleId"] ?? existing.id);

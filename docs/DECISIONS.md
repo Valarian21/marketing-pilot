@@ -231,3 +231,49 @@ Regel sagt ausdrücklich, dass auch das Trennzeichen zum Zitat gehört.
 Das ist die allgemeine Form der Shot-6-Regel „Zahlen sind heilig": heilig ist nicht der Wert,
 sondern die **Zeichenkette**, die der Leser sieht. Deshalb bildet `changeLabel` die Pfeil-Zeile
 („▲ +38 % in 7 Tagen") auch nur einmal — Slide und Caption tragen dieselbe.
+
+## Die Länge des Reels wird entschieden, bevor der Text geschrieben wird (2026-09-01, Shot 8)
+
+Ein Reel muss unter 60 Sekunden bleiben. Der Plan sah vor, notfalls die Standzeit zu senken
+oder Karten zu kappen — beides tut `planSlideshow`. Der erste Livelauf zeigte, warum das
+allein nicht reicht: das Modell hatte „die Top 10" in Caption und Cover geschrieben, dann kappte
+der Job zwei Karten, und das Video zeigte acht. Eine falsche Zahl, erzeugt von der eigenen
+Mechanik — genau das, was die Regel „Zahlen sind heilig" verhindern soll.
+
+Deshalb läuft die Planung **zweimal**: einmal im Generator, vor dem einzigen Modellaufruf, mit
+geschätzten Sprechdauern — dort fallen Karten weg, und das Modell sieht von vornherein nur die
+Liste, die auch im Video steht. Und einmal im Job, mit den echten Dauern; dort darf nur noch die
+Standzeit nachgeben. Muss der Job doch kappen, korrigiert er zusätzlich `meta.cards`, damit die
+Prüfspur in der Freigabe dem Video entspricht.
+
+Damit die beiden Läufe zum selben Ergebnis kommen, bilden sie den gesprochenen Satz mit
+derselben Funktion (`reelCardLine`) und schätzen mit demselben Schätzer.
+
+## Sprechdauer wird pro Zeichen geschätzt, nicht pro Wort (2026-09-01, Shot 8)
+
+`estimateDurationMs` aus der Video-Fabrik rechnet 380 ms je Wort. Für Fließtext stimmt das; für
+Reel-Zeilen liegt es weit daneben, weil deutsche Zahlwörter beliebig lang werden:
+„sechshundertsechsundzwanzig" ist **ein** Wort und dauert fast zwei Sekunden.
+
+Gemessen an echten Läufen (eleven_v3, deutsch): ein Reel mit acht Karten dauerte 58 s, macht
+rund 6 s je Kartenzeile bei etwa 50 Zeichen — also **110 ms je Zeichen** (`MS_PER_SPOKEN_CHAR`).
+`estimateReelLineMs` nimmt den größeren der beiden Werte. Wer die Konstante anfasst, sollte
+vorher wieder messen: an ihr hängt, wie viele Karten überhaupt eingeplant werden.
+
+## Untertitel gehören bei Daten-Slides nach oben (2026-09-01, Shot 8)
+
+Reels setzen Wort-Captions üblicherweise ins untere Drittel, und genau das tut die
+Video-Fabrik (`layoutFor`). Auf einer Daten-Slide steht dort aber schon der Kartenname, der
+Preis und die Quellen-Fußzeile — der erste Render legte das Overlay quer über den Namen.
+
+`reelLayout` setzt die Captions deshalb auf 11 % der Höhe, direkt unter die Rang-Pille. Über dem
+Kartenbild ist der einzige verlässlich freie Streifen, und auf Hook- und Endkarte (Text mittig)
+stört er ebenfalls nicht.
+
+## Der Kritiker verträgt jetzt beide Antwortformen (2026-09-01, Shot 8)
+
+`gemini-2.5-flash` beantwortet `[task:ai-tell-critic]` mal mit `issues: ["Satz"]`, mal mit
+`issues: [{quote, why}]`. Das Zod-Schema verlangte Strings, der Retry half nicht, und der ganze
+Lauf endete mit 500 — nicht nur bei Daten-Formaten, sondern bei jedem Stück, das durch den
+Kritiker geht. Das Schema nimmt jetzt beides und faltet Objekte zu einer Zeile zusammen. Die
+Zeile landet ohnehin nur in den Hinweisen am Stück.

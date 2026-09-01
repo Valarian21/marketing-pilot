@@ -24,6 +24,7 @@ import { hashtagPolicy, linkRuleFor } from "../../../shared/channels.js";
 import { PLATFORM_LIMITS } from "../../util/utm.js";
 import { applyHashtagPolicy, loadHashtags, saveHashtags } from "../../hashtags.js";
 import { createProductDataProvider } from "../../data-source.js";
+import { estimateReelLineMs, planSlideshow, reelCardLine } from "../video/slideshow.js";
 import type { PriceMover, ProductDataProvider, RankedCard, ScopeCoverage } from "../../providers/product-data.js";
 import { dataFooterText, dataUrlFor, rankingCoverHtml, rankingCtaHtml, rankingSlideHtml, type RenderJob, type RankingSlide } from "./render.js";
 import { reviseWithCritic } from "./critic.js";
@@ -45,7 +46,10 @@ const SIZE_FOR: Record<string, { w: number; h: number; tag: string }> = {
   pinterest: { w: 1000, h: 1500, tag: "1000x1500" },
 };
 const DEFAULT_SIZE = { w: 1080, h: 1350, tag: "1080x1350" };
-export const sizeForPlatform = (platform: string) => SIZE_FOR[platform] ?? DEFAULT_SIZE;
+/** Reels sind immer hochkant 1080×1920 — die Plattform spielt dabei keine Rolle. */
+const REEL_SIZE = { w: 1080, h: 1920, tag: "1080x1920" };
+export const sizeForPlatform = (platform: string, format: "data_carousel" | "data_reel" = "data_carousel") =>
+  (format === "data_reel" ? REEL_SIZE : SIZE_FOR[platform] ?? DEFAULT_SIZE);
 
 /** Wie viele Karten über die gewünschte Zahl hinaus geholt werden, damit fehlende Bilder aufgefangen sind. */
 const IMAGE_SPARE = 5;
@@ -133,6 +137,7 @@ export async function generateDataBundle(
   opts: { leadPieceId?: string; language: "de" | "en"; addAsset: (pieceId: string, file: string, meta: Record<string, unknown>) => string; renderer: (jobs: RenderJob[]) => Promise<void>; screenshotPath: string | null },
 ): Promise<s.ContentPiece[]> {
   const q = s.DataQuery.parse(req.dataQuery ?? {});
+  const format: "data_carousel" | "data_reel" = req.format === "data_reel" ? "data_reel" : "data_carousel";
   const lang = opts.language;
   const provider = createProductDataProvider(ctx.db, ctx.env, base.project.id, { log: ctx.log });
   if (!provider) throw err("Dieses Projekt hat keine Produktdatenquelle — unter „Produktdaten“ eine auswählen.", 400);
@@ -140,6 +145,37 @@ export async function generateDataBundle(
   let data;
   try { data = await loadCards(provider, q, lang); } finally { provider.close(); }
   if (data.loaded.length < 3) throw err(`Zu wenige Karten mit Bild und Preis im gewählten Bereich (${data.loaded.length}).`);
+
+  /**
+   * Ein Reel muss unter 60 s bleiben. Die Entscheidung, wie viele Karten das
+   * hergibt, faellt **vor** dem Modellaufruf — sonst schriebe es „die Top 10“
+   * ueber ein Video, das nur acht zeigt. Geschaetzt wird mit demselben Satz und
+   * demselben Schaetzer, den der Job spaeter benutzt.
+   */
+  const reelOpts = s.ReelOptions.parse(req.reel ?? {});
+  const reelNotes: string[] = [];
+  if (format === "data_reel") {
+    const display = q.countdown ? [...data.loaded].reverse() : data.loaded;
+    const rankOfId = new Map(data.loaded.map((x, i) => [x.card.id, i + 1]));
+    const fit = planSlideshow(display.map((x) => ({
+      key: x.card.id,
+      ...(reelOpts.voiceover ? { voiceMs: estimateReelLineMs(reelCardLine({ rank: rankOfId.get(x.card.id)!, name: lang === "en" && x.card.nameEn ? x.card.nameEn : x.card.name, priceEur: x.card.priceEur }, lang)) } : {}),
+    })), {
+      secondsPerCard: reelOpts.secondsPerCard,
+      // Hook und Endkarte kommen erst vom Modell — mit Stimme brauchen sie
+      // erfahrungsgemaess je einen gesprochenen Satz. Wird das hier nicht
+      // reserviert, kappt der Job hinterher, was der Text schon angekuendigt hat.
+      ...(reelOpts.voiceover ? { hookMs: 4500, endMs: 4500 } : {}),
+    });
+    if (fit.dropped.length) {
+      const drop = new Set(fit.dropped);
+      const before = data.loaded.length;
+      data.loaded = data.loaded.filter((x) => !drop.has(x.card.id));
+      data.totalEur = Math.round(data.loaded.reduce((sum, x) => sum + x.card.priceEur, 0) * 100) / 100;
+      reelNotes.push(`Aus ${before} Karten wurden ${data.loaded.length} — mehr passt mit dieser Standzeit${reelOpts.voiceover ? " und Voiceover" : ""} nicht in 60 Sekunden.`);
+    }
+    if (fit.secondsPerCard < reelOpts.secondsPerCard) reelNotes.push(`Standzeit je Karte voraussichtlich ${fit.secondsPerCard.toFixed(1)} s statt ${reelOpts.secondsPerCard.toFixed(1)} s.`);
+  }
 
   const platforms = (req.bundlePlatforms.length ? req.bundlePlatforms : [req.platform ?? "instagram"]).map((p) => p.trim().toLowerCase()).filter((p, i, all) => p && all.indexOf(p) === i);
   const leadPlatform = platforms[0]!;
@@ -187,8 +223,10 @@ export async function generateDataBundle(
   // --- rendern: eine Datei je Größe, alle Plattformen teilen sie ------------
   const leadId = opts.leadPieceId ?? newId();
   const outDir = path.join(ctx.dataDir, "assets", base.project.id, "pieces", leadId);
-  const sizes = [...new Map(platforms.map((p) => [sizeForPlatform(p).tag, sizeForPlatform(p)])).values()];
-  const linkRules = [...new Set(platforms.map(linkRuleFor))];
+  const sizes = [...new Map(platforms.map((p) => [sizeForPlatform(p, format).tag, sizeForPlatform(p, format)])).values()];
+  // Ein Reel ist eine Datei fuer alle Plattformen - es kann nur eine CTA-Beschriftung tragen,
+  // und zwar die des Leit-Kanals. Beim Carousel bekommt jede Link-Regel ihre eigene Slide.
+  const linkRules = format === "data_reel" ? [linkRuleFor(leadPlatform)] : [...new Set(platforms.map(linkRuleFor))];
   const jobs: RenderJob[] = [];
   /** size-tag -> Dateien in Slide-Reihenfolge; CTA getrennt, weil er je Link-Regel anders lautet. */
   const bySize = new Map<string, string[]>();
@@ -223,28 +261,31 @@ export async function generateDataBundle(
   // --- Captions: Kritiker nur auf die des Leit-Stücks -----------------------
   const captionOf = (platform: string) => out.captions.find((c) => c.platform.trim().toLowerCase() === platform)?.caption.trim() ?? "";
   const leadCaption = captionOf(leadPlatform) || out.captions[0]?.caption.trim() || coverTitle;
-  const rev = await reviseWithCritic(ctx, usage, { body: leadCaption, language: lang, voiceProfile: base.voice, format: "data_carousel", platform: leadPlatform, limit: PLATFORM_LIMITS[leadPlatform] ?? 2000, maxRounds: 2 });
+  const rev = await reviseWithCritic(ctx, usage, { body: leadCaption, language: lang, voiceProfile: base.voice, format, platform: leadPlatform, limit: PLATFORM_LIMITS[leadPlatform] ?? 2000, maxRounds: 2 });
 
   const pools = loadHashtags(ctx.db, base.project.id);
   const notes = [rev.notes];
   if (data.skipped.length) notes.push(`Ohne ladbares Bild übersprungen (${data.skipped.length}): ${data.skipped.join(", ")}. Die Rangfolge ist die der veröffentlichten Liste.`);
   if (data.coverage && data.coverage.skipped > 0) notes.push(`${data.coverage.skipped} Karten im Bereich wurden nicht nachbepreist (Deckel je Abfrage).`);
   if (q.kind === "movers") notes.push(`Beruht auf ${data.withHistory} Karten mit Preisverlauf.`);
+  notes.push(...reelNotes);
 
   const ts = nowIso();
   const pieces: s.ContentPiece[] = [];
   platforms.forEach((platform, i) => {
     const id = i === 0 ? leadId : newId();
-    const size = sizeForPlatform(platform);
-    const rule = linkRuleFor(platform);
+    const size = sizeForPlatform(platform, format);
+    const rule = format === "data_reel" ? linkRuleFor(leadPlatform) : linkRuleFor(platform);
     const caption = i === 0 ? rev.body : (captionOf(platform) || rev.body);
     const suggested = out.captions.find((c) => c.platform.trim().toLowerCase() === platform)?.hashtags ?? [];
     const tags = applyHashtagPolicy(suggested, pools, platform, lang);
     const body = [stripTags(caption), tags.join(" ")].filter(Boolean).join("\n\n");
     const files = [...(bySize.get(size.tag) ?? []), ctaFiles.get(`${size.tag}:${rule}`) ?? ""].filter(Boolean);
     const assets = files.map((f) => assetIds.get(f)!).filter(Boolean);
+    // Reihenfolge der Slides = Reihenfolge im Video: Cover, Karten, CTA.
     const meta: Record<string, unknown> = {
       bundleId: leadId, bundleLead: i === 0, platform, language: lang, size: size.tag, linkRule: rule,
+      ...(format === "data_reel" ? { reel: reelOpts, slideAssets: assets } : {}),
       caption: body, hashtags: tags, hook: out.hook, coverTitle, ctaLine,
       dataQuery: q, scopeLabel: data.scopeLabel, priceStand: data.priceStand, totalEur: data.totalEur,
       footer, limit: PLATFORM_LIMITS[platform] ?? 2000,
@@ -253,9 +294,10 @@ export async function generateDataBundle(
     };
     const row = {
       id, projectId: base.project.id, taskId: i === 0 ? (req.taskId ?? null) : null,
-      channel: platform, format: "data_carousel" as const,
+      channel: platform, format,
       title: `${i === 0 ? out.title || coverTitle : coverTitle} · ${platform}`.slice(0, 120),
-      body, assets: toJson(assets), status: "review" as const, humanEdited: false,
+      // Ein Reel ist erst fertig, wenn der Worker die MP4 gebaut hat - bis dahin Entwurf.
+      body, assets: toJson(assets), status: (format === "data_reel" ? "draft" : "review") as s.ContentPiece["status"], humanEdited: false,
       publishedAt: null, externalUrl: null, utm: "{}", meta: toJson(meta),
       aiTellScore: i === 0 ? rev.score : null, aiTellNotes: i === 0 ? notes.filter(Boolean).join("\n") : "",
       rejectionReason: "", createdAt: ts, updatedAt: ts,

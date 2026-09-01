@@ -4,7 +4,16 @@ import { modelFor } from "../../../../config/models.js";
 import { chatJson, type AgentContext, type UsageCollector } from "../runner.js";
 import { criticPrompt, rewritePrompt } from "../prompts/studio.js";
 
-const Verdict = z.object({ score: z.number().min(0).max(10), issues: z.array(z.string()).default([]), suggestions: z.array(z.string()).default([]) });
+/**
+ * Kritikpunkte kommen mal als Satz, mal als Objekt (`{quote, why}`) — gemini-2.5-flash
+ * wechselt das je nach Laune und liess damit ganze Laeufe scheitern. Beides wird
+ * akzeptiert und zu einer Zeile gemacht; die Zeile landet ohnehin nur in den
+ * Hinweisen am Stueck.
+ */
+const CritiqueLine = z.union([z.string(), z.record(z.string(), z.unknown())])
+  .transform((v) => (typeof v === "string" ? v : Object.values(v).filter((x) => typeof x === "string" && x.trim()).join(" – ")))
+  .refine((v) => v.length > 0, "leer");
+const Verdict = z.object({ score: z.number().min(0).max(10), issues: z.array(CritiqueLine).default([]), suggestions: z.array(CritiqueLine).default([]) });
 const Rewritten = z.object({ body: z.string().min(1) });
 
 export interface CriticResult { body: string; score: number; rounds: number; notes: string }

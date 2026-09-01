@@ -19,6 +19,9 @@ import type { Brief, ContentPiece, PublishPackage } from "../src/shared/schemas.
 import { applyHashtagPolicy } from "../src/server/hashtags.js";
 import { hashtagPolicy, linkRuleFor } from "../src/shared/channels.js";
 import { PLATFORM_LIMITS } from "../src/server/util/utm.js";
+import { processNextJob, writeHeartbeat } from "../src/server/jobs.js";
+import { renderSlideshowJob } from "../src/server/agents/video/slideshow.js";
+import type { VideoContext } from "../src/server/agents/video/pipeline.js";
 import { fakeHost } from "./helpers.js";
 
 const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==", "base64");
@@ -34,6 +37,8 @@ const PRICES: Record<string, number> = {
   "swsh12-1": 626.08, "swsh12-2": 411.5, "swsh12-3": 199.99, "swsh12-4": 88.4, "swsh12-5": 42.05,
   "swsh12-6": 21.3, "swsh12-7": 12.75, "swsh12-8": 9.1,
 };
+
+const FILLERS: string[] = [];
 
 function buildFixture(): void {
   fs.mkdirSync(path.dirname(FIXTURE), { recursive: true });
@@ -60,10 +65,19 @@ function buildFixture(): void {
       `https://img/de/${id}`, `https://img/en/${id}`, null, "[]", "2022-11-11");
     price.run(id, eur, fresh, null);
   });
+  // Guenstige Fuellkarten: sie taucht keine Top-Liste auf, machen aber ein langes
+  // Reel moeglich (Test der 60-Sekunden-Grenze).
+  for (let i = 1; i <= 20; i++) {
+    const id = `swsh12-f${i}`;
+    card.run(id, "swsh12", String(i), i, `Fuellkarte ${i}`, `Filler ${i}`, null, "Common", "Illu B", "intl",
+      `https://img/de/${id}`, null, null, "[]", "2022-11-11");
+    price.run(id, 2 + i / 100, fresh, null);
+    FILLERS.push(id);
+  }
   db.close();
   // Bildcache vorfuellen: cardImage findet die Dateien lokal und geht nie ins Netz.
   fs.mkdirSync(IMAGES, { recursive: true });
-  for (const id of Object.keys(PRICES)) for (const lang of ["de", "en"]) fs.writeFileSync(path.join(IMAGES, `${id}.${lang}.webp`), PNG);
+  for (const id of [...Object.keys(PRICES), ...FILLERS]) for (const lang of ["de", "en"]) fs.writeFileSync(path.join(IMAGES, `${id}.${lang}.webp`), PNG);
 }
 
 const brief: Brief = { productName: "Binderplan", oneLiner: "Binder planen.", category: "collection planner", language: "de", features: ["Binder"], pricing: [], usp: [], tone: "Du", targetAudience: "Sammler", keywords: [], sources: [] };
@@ -269,3 +283,121 @@ describe("Hashtag-Vorräte", () => {
     expect(res.json().topics).toEqual({});
   });
 });
+
+
+describe("Daten-Reel (Shot 8)", () => {
+  /** ffmpeg-Attrappe: schreibt Platzhalter-Dateien und merkt sich jeden Aufruf. */
+  const calls: string[][] = [];
+  const fakeFfmpeg = async (args: string[]): Promise<string> => {
+    calls.push(args);
+    const out = args[args.length - 1]!;
+    if (/\.(mp4|mp3|png)$/.test(out)) { fs.mkdirSync(path.dirname(out), { recursive: true }); fs.writeFileSync(out, PNG); }
+    return "";
+  };
+  let reelLead: ContentPiece;
+
+  it("erzeugt ein Reel-Bündel als Entwurf und stellt den Render-Job ein", async () => {
+    writeHeartbeat(built.db);   // ohne lebenden Worker lehnt die API bewusst ab
+    const res = await built.app.inject({
+      method: "POST", url: `/api/mp/projects/${pid}/content`, headers: auth,
+      payload: { format: "data_reel", language: "de", bundlePlatforms: ["instagram", "tiktok"], reel: { voiceover: false, music: "none", secondsPerCard: 1.8 },
+        dataQuery: { kind: "top", set: "swsh12", n: 5, countdown: true } },
+    });
+    expect(res.statusCode).toBe(201);
+    reelLead = res.json();
+    expect(reelLead.format).toBe("data_reel");
+    // Bis die MP4 existiert, ist das Stück ein Entwurf - sonst stünde es freigabefertig ohne Video da.
+    expect(reelLead.status).toBe("draft");
+    const members: ContentPiece[] = (await built.app.inject({ method: "GET", url: `/api/mp/content/${reelLead.id}/bundle`, headers: auth })).json();
+    // Reels sind immer 1080x1920 - auch das Instagram-Stück
+    expect(members.every((p) => p.meta["size"] === "1080x1920")).toBe(true);
+    expect(members.every((p) => p.assets.length === 7)).toBe(true);
+  }, 60_000);
+
+  it("baut aus den Slides ein Video und hängt es an alle Stücke des Bündels", async () => {
+    const ctx: VideoContext = {
+      db: built.db, env: loadEnv({ MP_STANDALONE: "false", MP_DATA_DIR: DATA, MP_BINDERPLAN_DB: FIXTURE }),
+      dataDir: DATA, log: () => undefined, voice: null, renderer: fakeRenderer, ffmpeg: fakeFfmpeg,
+    };
+    const did = await processNextJob(ctx, { "video.slideshow": renderSlideshowJob });
+    expect(did).toBe(true);
+
+    const members: ContentPiece[] = (await built.app.inject({ method: "GET", url: `/api/mp/content/${reelLead.id}/bundle`, headers: auth })).json();
+    expect(members.length).toBe(2);
+    for (const p of members) {
+      expect(p.status).toBe("review");
+      // Nach dem Render zählt das Video, nicht mehr die 7 Slides.
+      expect(p.assets.length).toBe(2);
+      expect(p.meta["durationMs"]).toBe(members[0]!.meta["durationMs"]);
+    }
+    // Alle Mitglieder zeigen auf dieselbe Datei
+    expect(members[0]!.assets).toEqual(members[1]!.assets);
+
+    const pkg: PublishPackage = (await built.app.inject({ method: "GET", url: `/api/mp/content/${members[1]!.id}/package`, headers: auth })).json();
+    expect(pkg.assets.map((a) => a.filename).sort()).toEqual(["reel-thumb.png", "reel.mp4"]);
+  }, 60_000);
+
+  it("baut ein Segment je Slide, in Anzeigereihenfolge, und setzt am Ende zusammen", () => {
+    const segs = calls.filter((a) => a.includes("-filter_complex") && a[a.length - 1]!.includes("seg-"));
+    // Hook + Cover + 5 Karten + CTA
+    expect(segs.length).toBe(8);
+    expect(segs[0]![a0(segs[0]!)]).toContain("hook.png");
+    expect(segs[1]![a0(segs[1]!)]).toContain("00-cover.png");
+    // Countdown: die erste Karte im Video ist Platz 5
+    expect(segs[2]![a0(segs[2]!)]).toContain("rang5");
+    expect(segs[6]![a0(segs[6]!)]).toContain("rang1");
+    expect(segs[7]![a0(segs[7]!)]).toContain("cta");
+
+    const concat = calls.find((a) => a.includes("concat") && a.includes("-safe"));
+    expect(concat).toBeTruthy();
+    const compose = calls.find((a) => a.join(" ").includes("data slideshow"));
+    expect(compose).toBeTruthy();
+    // stumm gerendert: keine Sprachdatei, nur Stille je Segment
+    const filter = compose![compose!.indexOf("-filter_complex") + 1]!;
+    expect(filter).toContain("concat=n=8:v=0:a=1[voice]");
+    expect(filter).not.toContain("sidechaincompress");
+  });
+
+  it("hält die 60-Sekunden-Grenze ein", async () => {
+    const members: ContentPiece[] = (await built.app.inject({ method: "GET", url: `/api/mp/content/${reelLead.id}/bundle`, headers: auth })).json();
+    const plan = members[0]!.meta["reelPlan"] as { secondsPerCard: number; dropped: string[]; totalMs: number };
+    expect(plan.totalMs).toBeLessThanOrEqual(60_000);
+    expect(plan.dropped).toEqual([]);
+    expect(plan.secondsPerCard).toBe(1.8);
+    expect(members[0]!.meta["durationMs"]).toBe(plan.totalMs);
+  });
+
+  it("kürzt die Liste VOR dem Modellaufruf, wenn sie mit Stimme nicht in 60 s passt", async () => {
+    writeHeartbeat(built.db);
+    const res = await built.app.inject({
+      method: "POST", url: `/api/mp/projects/${pid}/content`, headers: auth,
+      payload: { format: "data_reel", bundlePlatforms: ["tiktok"], reel: { voiceover: true, music: "none", secondsPerCard: 2.5 },
+        dataQuery: { kind: "top", set: "swsh12", n: 20, countdown: true } },
+    });
+    expect(res.statusCode).toBe(201);
+    const piece: ContentPiece = res.json();
+    const cards = piece.meta["cards"] as { rank: number }[];
+    // Das Modell darf gar nicht erst „die Top 20" schreiben, wenn nur ein Teil ins Video passt.
+    expect(cards.length).toBeLessThan(20);
+    expect(cards[0]!.rank).toBe(1);
+    expect(cards[cards.length - 1]!.rank).toBe(cards.length);
+    expect(piece.aiTellNotes).toContain("passt mit dieser Standzeit und Voiceover nicht in 60 Sekunden");
+    // die Slides zeigen genau diese Karten: Cover + Karten + CTA
+    expect(piece.assets.length).toBe(cards.length + 2);
+  }, 60_000);
+
+  it("lehnt ein Reel ohne laufenden Worker ab, bevor das Modell Geld kostet", async () => {
+    built.db.run("DELETE FROM mp_settings WHERE key = 'worker:heartbeat'" as never);
+    const res = await built.app.inject({
+      method: "POST", url: `/api/mp/projects/${pid}/content`, headers: auth,
+      payload: { format: "data_reel", bundlePlatforms: ["tiktok"], dataQuery: { kind: "top", set: "swsh12", n: 5 } },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().detail).toContain("Render-Worker");
+  });
+});
+
+/** Index des Eingabe-Dateinamens in einem ffmpeg-Aufruf (das Argument nach dem letzten `-i`). */
+function a0(args: string[]): number {
+  return args.lastIndexOf("-i", args.indexOf("-filter_complex")) + 1;
+}

@@ -15,6 +15,8 @@ export const ContentFormat = z.enum([
   "text", "carousel", "image", "pin", "video", "article", "directory_entry", "community_reply", "ad_creative",
   /** Shot 7: Rangliste aus echten Produktdaten - Slides deterministisch, nur die Caption kommt vom LLM. */
   "data_carousel",
+  /** Shot 8: dieselben Slides als vertikales Countdown-Reel, ohne eine einzige Aufnahme. */
+  "data_reel",
 ]);
 export const ContentStatus = z.enum(["draft", "review", "approved", "published", "rejected"]);
 export const AssetKind = z.enum(["screenshot", "recording", "voiceover", "render", "image"]);
@@ -376,6 +378,18 @@ export const DataQuery = z.object({
   countdown: z.boolean().default(true),
 });
 
+/**
+ * Optionen des Daten-Reels (Shot 8). Der Standard ist bewusst **ohne** Musik:
+ * auf Instagram und TikTok kommt der Sound lizenzsauber aus der Plattform-
+ * Bibliothek (Entscheidung aus Shot 4).
+ */
+export const ReelOptions = z.object({
+  voiceover: z.boolean().default(false),
+  music: z.enum(["none", "bed"]).default("none"),
+  /** Standzeit je Karte in Sekunden; wird gesenkt, wenn das Reel sonst ueber 60 s liefe. */
+  secondsPerCard: z.number().min(1.4).max(2.5).default(1.8),
+});
+
 /** Sprache eines Stuecks. `both` erzeugt das Bundle doppelt (DE + EN). */
 export const ContentLanguage = z.enum(["de", "en", "both"]);
 
@@ -392,6 +406,8 @@ export const ContentRequest = z.object({
   screenshotAssetIds: z.array(Id).optional(),
   /** Nur fuer Daten-Formate: welcher Ausschnitt der Produktdaten die Slides fuellt. */
   dataQuery: DataQuery.optional(),
+  /** Nur fuer `data_reel`: wie aus den Slides ein Video wird. */
+  reel: ReelOptions.optional(),
   /** Ein Lauf, mehrere Plattform-Stuecke mit gemeinsamen Assets. Leer = nur `platform`. */
   bundlePlatforms: z.array(z.string()).default([]),
   language: ContentLanguage.default("de"),
@@ -660,6 +676,7 @@ export type ContentRequest = z.infer<typeof ContentRequest>;
 export type DataQuery = z.infer<typeof DataQuery>;
 export type ContentLanguage = z.infer<typeof ContentLanguage>;
 export type HashtagPools = z.infer<typeof HashtagPools>;
+export type ReelOptions = z.infer<typeof ReelOptions>;
 export type DirectoryDef = z.infer<typeof DirectoryDef>;
 export type DirectoryStatus = z.infer<typeof DirectoryStatus>;
 export type PublishPackage = z.infer<typeof PublishPackage>;

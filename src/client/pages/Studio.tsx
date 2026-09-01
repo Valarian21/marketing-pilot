@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
-import type { BrandKit, ContentPiece, DirectoryStatus, HashtagPools, ProductDataView, StudioView } from "../../shared/schemas.js";
+import type { BrandKit, ContentPiece, DirectoryStatus, HashtagPools, Job, ProductDataView, StudioView, VideoView } from "../../shared/schemas.js";
 import { api } from "../api.js";
 import { Button, Card, Notice, PageHeader, Pill, fmtDateTime, type PillKind } from "../components/ui.js";
 import { ProjectNav } from "../components/ProjectNav.js";
@@ -73,6 +73,7 @@ function CreateTab({ id, view, busy, run }: { id: string; view: StudioView; busy
   const [countdown, setCountdown] = useState(true);
   const [language, setLanguage] = useState("de");
   const [bundle, setBundle] = useState<string[]>(["instagram", "tiktok", "pinterest", "facebook"]);
+  const [reel, setReel] = useState<{ voiceover: boolean; music: "none" | "bed"; secondsPerCard: number }>({ voiceover: false, music: "none", secondsPerCard: 1.8 });
 
   useEffect(() => { void (async () => { try { setData(await api<ProductDataView>(`/projects/${id}/data`)); } catch { setData(null); } })(); }, [id]);
   useEffect(() => {
@@ -82,14 +83,16 @@ function CreateTab({ id, view, busy, run }: { id: string; view: StudioView; busy
   }, [data, scope]);
 
   const hasData = Boolean(data?.status.available);
+  const isData = format === "data_carousel" || format === "data_reel";
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    if (format === "data_carousel") {
+    if (isData) {
       const [art, wert] = scope.split(":");
       void run("create", () => api(`/projects/${id}/content`, { method: "POST", json: {
         format, topic, hint, language, bundlePlatforms: bundle,
         platform: bundle[0] ?? "instagram",
         dataQuery: { kind: "top", ...(art === "set" ? { set: wert } : { era: wert }), n, priceBasis: basis, countdown },
+        ...(format === "data_reel" ? { reel } : {}),
       } }));
       return;
     }
@@ -106,15 +109,16 @@ function CreateTab({ id, view, busy, run }: { id: string; view: StudioView; busy
               <select value={format} onChange={(e) => setFormat(e.target.value)}>
                 <option value="text">Text-Post</option><option value="carousel">Carousel (PNG 1080²/1080×1350)</option>
                 {hasData && <option value="data_carousel">Daten-Carousel (Rangliste)</option>}
+                {hasData && <option value="data_reel">Daten-Reel (Video 1080×1920)</option>}
                 <option value="pin">Pinterest-Pin (1000×1500)</option><option value="image">Bild / Thumbnail (KI)</option><option value="ad_creative">Ad-Hintergrund (KI)</option>
               </select></label>
             {format === "text" && <label className="mp-field mp-field--short"><span>Plattform</span><select value={platform} onChange={(e) => setPlatform(e.target.value)}>{["linkedin", "x", "threads", "bluesky", "facebook", "instagram"].map((p) => <option key={p} value={p}>{p}</option>)}</select></label>}
             {format === "carousel" && <><label className="mp-field mp-field--short"><span>Plattform</span><select value={platform} onChange={(e) => setPlatform(e.target.value)}><option value="instagram">instagram</option><option value="linkedin">linkedin</option></select></label>
               <label className="mp-field mp-field--short"><span>Layout</span><select value={template} onChange={(e) => setTemplate(e.target.value)}>{["clean", "bold", "screenshot", "list", "story"].map((t) => <option key={t} value={t}>{t}</option>)}</select></label></>}
-            {format !== "data_carousel" && <label className="mp-field"><span>Thema / Blickwinkel</span><input value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="z. B. „Sonntagabend-Vorbereitung in 10 Minuten“" /></label>}
+            {!isData && <label className="mp-field"><span>Thema / Blickwinkel</span><input value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="z. B. „Sonntagabend-Vorbereitung in 10 Minuten“" /></label>}
           </div>
 
-          {format === "data_carousel" && data && (
+          {isData && data && (
             <>
               <div className="mp-form mp-form--row">
                 <label className="mp-field"><span>Bereich</span>
@@ -128,8 +132,24 @@ function CreateTab({ id, view, busy, run }: { id: string; view: StudioView; busy
                 <label className="mp-field mp-field--short"><span>Reihenfolge</span><select value={countdown ? "1" : "0"} onChange={(e) => setCountdown(e.target.value === "1")}><option value="1">Countdown ({n} → 1)</option><option value="0">Platz 1 zuerst</option></select></label>
                 <label className="mp-field mp-field--short"><span>Sprache</span><select value={language} onChange={(e) => setLanguage(e.target.value)}><option value="de">Deutsch</option><option value="en">Englisch</option><option value="both">beide (zwei Bündel)</option></select></label>
               </div>
+              {format === "data_reel" && (
+                <div className="mp-form mp-form--row">
+                  <label className="mp-field mp-field--short"><span>Standzeit je Karte</span>
+                    <select value={reel.secondsPerCard} onChange={(e) => setReel({ ...reel, secondsPerCard: Number(e.target.value) })}>
+                      {[1.4, 1.6, 1.8, 2.0, 2.2, 2.5].map((v) => <option key={v} value={v}>{v.toFixed(1)} s</option>)}
+                    </select></label>
+                  <label className="mp-field mp-field--short"><span>Ton</span>
+                    <select value={reel.voiceover ? "voice" : "mute"} onChange={(e) => setReel({ ...reel, voiceover: e.target.value === "voice" })}>
+                      <option value="mute">stumm (Sound von der Plattform)</option><option value="voice">Voiceover</option>
+                    </select></label>
+                  <label className="mp-field mp-field--short"><span>Musik</span>
+                    <select value={reel.music} onChange={(e) => setReel({ ...reel, music: e.target.value as "none" | "bed" })}>
+                      <option value="none">keine</option><option value="bed">Musikbett</option>
+                    </select></label>
+                </div>
+              )}
               <fieldset className="mp-field">
-                <span>Plattformen im Bündel <span className="mp-muted mp-small">gleiche Slides, eigene Caption, eigene Hashtags</span></span>
+                <span>Plattformen im Bündel <span className="mp-muted mp-small">{format === "data_reel" ? "eine MP4 für alle, eigene Caption je Kanal" : "gleiche Slides, eigene Caption, eigene Hashtags"}</span></span>
                 <div className="mp-inline">{BUNDLE_PLATFORMS.map((p) => (
                   <label key={p} className="mp-inline mp-small"><input type="checkbox" checked={bundle.includes(p)} onChange={() => toggle(p)} /> {p}</label>
                 ))}</div>
@@ -138,19 +158,55 @@ function CreateTab({ id, view, busy, run }: { id: string; view: StudioView; busy
           )}
 
           <div className="mp-form mp-form--row">
-            {format === "data_carousel" && <label className="mp-field"><span>Thema / Blickwinkel (optional)</span><input value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="z. B. „für Wiedereinsteiger“" /></label>}
+            {isData && <label className="mp-field"><span>Thema / Blickwinkel (optional)</span><input value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="z. B. „für Wiedereinsteiger“" /></label>}
             <label className="mp-field"><span>Hinweis (optional)</span><input value={hint} onChange={(e) => setHint(e.target.value)} placeholder="Ton, Zahlen, was rein soll, was nicht" /></label>
-            <div className="mp-form-actions"><Button type="submit" variant="primary" disabled={busy !== null || !view.hasBrief || (format === "data_carousel" && (!scope || bundle.length === 0))}>{busy === "create" ? "Agent arbeitet …" : format === "data_carousel" ? "Bündel erzeugen" : "Entwurf erzeugen"}</Button></div>
+            <div className="mp-form-actions"><Button type="submit" variant="primary" disabled={busy !== null || !view.hasBrief || (isData && (!scope || bundle.length === 0))}>{busy === "create" ? "Agent arbeitet …" : isData ? "Bündel erzeugen" : "Entwurf erzeugen"}</Button></div>
           </div>
           <p className="mp-small mp-muted">
-            {format === "data_carousel"
-              ? "Rang, Name, Set und Preis kommen unverändert aus den Produktdaten — das Modell schreibt nur Titel, Caption und Hashtags. Jede Slide trägt die Preisquelle mit Stand-Datum."
+            {isData
+              ? format === "data_reel"
+                ? "Aus denselben Slides baut der Worker ein vertikales Countdown-Reel — ohne Aufnahme. Es bleibt unter 60 Sekunden; passt es nicht, sinkt zuerst die Standzeit, dann fallen die hintersten Plätze weg."
+                : "Rang, Name, Set und Preis kommen unverändert aus den Produktdaten — das Modell schreibt nur Titel, Caption und Hashtags. Jede Slide trägt die Preisquelle mit Stand-Datum."
               : `Jeder Entwurf durchläuft den AI-Tell-Prüfer (Score 0–10, unter 7 wird automatisch überarbeitet) und landet in der Freigabe. ${view.screenshots.length} Produkt-Screenshots stehen für Carousel und Pin bereit.`}
           </p>
         </form>
       </Card>
+      <ReelJobs id={id} />
       <PieceList id={id} pieces={view.recent} />
     </>
+  );
+}
+
+/**
+ * Reel-Renders laufen im Worker. Solange einer läuft, zeigt das Studio seinen
+ * Fortschritt — sonst verschwände das Stück bis zur Freigabe aus dem Blick.
+ */
+function ReelJobs({ id }: { id: string }) {
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const load = useCallback(async () => {
+    try { const v = await api<VideoView>(`/projects/${id}/video`); setJobs(v.jobs.filter((j) => j.kind === "video.slideshow").slice(0, 3)); }
+    catch { setJobs([]); }
+  }, [id]);
+  useEffect(() => { void load(); }, [load]);
+  const active = jobs.some((j) => j.status === "queued" || j.status === "running");
+  useEffect(() => {
+    if (!active) return;
+    const t = window.setInterval(() => void load(), 4000);
+    return () => window.clearInterval(t);
+  }, [active, load]);
+  if (!jobs.length) return null;
+  const STEP: Record<string, string> = { voice: "Stimme", overlays: "Overlays", video: "Video bauen", assets: "Speichern" };
+  return (
+    <Card>
+      <h2>Reel-Renders</h2>
+      <ul className="mp-plain-list">{jobs.map((j) => (
+        <li key={j.id} className="mp-small">
+          <Pill kind={j.status === "done" ? "done" : j.status === "failed" ? "review" : j.status === "running" ? "progress" : "todo"}>{j.status}</Pill>{" "}
+          {j.steps.map((st) => `${STEP[st.name] ?? st.name}: ${st.status}`).join(" · ")}
+          {j.error && <span className="mp-over"> — {j.error}</span>}
+        </li>
+      ))}</ul>
+    </Card>
   );
 }
 

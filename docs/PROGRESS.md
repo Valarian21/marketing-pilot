@@ -331,3 +331,59 @@ Offen:
   noch nicht; laut Plan gehört das zu Shot 8.
 - Die Kosten eines Bündels stehen vollständig am Leit-Stück, die Mitglieder zeigen 0,00 $. Das ist
   richtig (ein Lauf), in der Liste aber erklärungsbedürftig.
+
+## Shot 8 – Daten-Reel (Slideshow aus der Rangliste): **fertig** (2026-09-01)
+
+Erledigt:
+- **Neues Format `data_reel`** + `ReelOptions` (`voiceover`, `music`, `secondsPerCard` 1,4–2,5 s).
+  Ein Reel-Bündel entsteht über denselben Weg wie das Carousel — nur sind alle Slides
+  1080×1920, es gibt genau **eine** CTA-Slide (die des Leit-Kanals, weil alle Plattformen
+  dieselbe MP4 teilen), und die Stücke starten als `draft`, bis der Worker die Datei gebaut hat.
+- **Job-Typ `video.slideshow`** (`agents/video/slideshow.ts`), eigener Handler neben
+  `renderVideoJob`; die Aufnahme-Pipeline ist unberührt. Schritte: `voice → overlays → video →
+  assets`. Wiederverwendet werden Wort-Captions, Musik-Ducking, Lautheit (−14 LUFS) und die
+  MP4-Kennzeichnung; neu ist nur die Bildspur — je Slide ein Segment mit `zoompan` 1,00 → 1,06,
+  davor die Hook-Karte (1,5 s) und das Cover (1,8 s), am Ende die CTA-Slide (2,5 s).
+- **Zahlen für die Stimme**: `euroInWords` schreibt Preise aus („sechshundertsechsundzwanzig
+  Euro acht"), `germanNumber`/`englishNumber` die ganzen Zahlen. Gerechnet wird nichts — der
+  Wert kommt unverändert von der Slide.
+- **Zeitplan** `planSlideshow`: ein Reel bleibt unter 60 s. Erst sinkt die Standzeit (bis 1,4 s),
+  erst danach fallen Karten weg — und zwar vom Anfang der Anzeige, im Countdown also die
+  hintersten Plätze. **Diese Entscheidung fällt vor dem Modellaufruf** (siehe DECISIONS),
+  damit die Caption nie „die Top 10" über ein Video mit acht Karten schreibt.
+- **Aufgaben-Dispatch** (`agents/strategy/execute.ts`): Projekte mit Datenquelle erkennen
+  Rangleisten-Aufgaben („Die 15 teuersten Karten aus …") und erzeugen ein Daten-Format statt
+  eines erfundenen Textes; `dataQueryForTask` nimmt die im Titel genannte Ära, sonst das
+  neueste internationale Set, und liest die Anzahl aus dem Titel.
+- **UI**: Studio-Formular kennt „Daten-Reel" mit Standzeit, Ton (stumm/Voiceover) und Musik;
+  Karte „Reel-Renders" zeigt den Job-Fortschritt, solange einer läuft; die Freigabe zeigt das
+  Reel im Player samt Dauer, Standzeit und der Zahl der Karten.
+- **19 neue Tests** (Gesamt **137**): ausgeschriebene Zahlen (de/en), Sprechdauer-Schätzer,
+  Zeitplan in allen drei Stufen, ffmpeg-Argumente für Segment und Komposition (mit und ohne
+  Musik), Aufgaben-Dispatch, und ein Durchstich, der ein Reel-Bündel erzeugt, den Job mit
+  ffmpeg-Attrappe laufen lässt und prüft, dass beide Plattform-Stücke auf dieselbe MP4 zeigen.
+
+Live-Abnahme (2026-09-01, Binderplan, `swsh12`, Instagram + TikTok, mit Voiceover):
+- Slides in 24 s, Video im Worker in ~4 min. Ergebnis **H.264/AAC 1080×1920, 25 fps, 55 s,
+  12 MB**, Thumbnail = Platz-1-Slide. Kosten des ganzen Bündels **0,15 $** (davon der Löwenanteil
+  ElevenLabs).
+- Vorausplanung und Job stimmen überein: aus „Top 10" wurden vor dem Schreiben 7 Karten, der
+  Job kam ohne weiteres Kappen aus und hielt die gewünschten 1,8 s je Karte.
+
+Gelernt / nachgebessert (alles aus Livelaufen, nicht aus Tests):
+- **Erster Lauf**: das Reel kappte zwei Karten, *nachdem* das Modell „die Top 10" geschrieben
+  hatte. Seitdem entscheidet der Generator die Länge vorab.
+- **Zweiter Lauf**: der Wort-Schätzer aus `voice.ts` (380 ms/Wort) unterschätzt ausgeschriebene
+  Zahlen massiv — „sechshundertsechsundzwanzig" ist ein Wort. Gemessen: rund 110 ms je Zeichen
+  (`MS_PER_SPOKEN_CHAR`). Hook und Endkarte bekommen in der Vorausplanung je 4,5 s reserviert,
+  weil ihr Text erst später entsteht.
+- **Dritter Lauf**: die Untertitel lagen mitten auf dem Kartennamen (gewohnte Position im
+  unteren Drittel). Bei Daten-Slides ist unten der Text — die Captions sitzen jetzt oben.
+- **Kritiker-Absturz**: `gemini-2.5-flash` liefert `issues` mal als Sätze, mal als Objekte
+  (`{quote, why}`) — das ließ ganze Läufe mit 500 scheitern, *auch* bei den älteren Formaten.
+  Das Schema akzeptiert jetzt beides.
+
+Offen:
+- Musikbett: `assets/music/` enthält weiterhin nur den synthetischen Platzhalter.
+- Die Wort-Captions sind bei ausgeschriebenen Zahlen lang („sechshundertsechsundzwanzig") und
+  füllen die Zeile allein. Stört nicht, könnte aber eine eigene Umbruchregel vertragen.
