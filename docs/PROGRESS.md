@@ -542,3 +542,35 @@ Offen:
   Scroll-Video eine eigene Aufnahme-Strecke. Erst sinnvoll, wenn die Standbild-Variante läuft.
 - `MP_DEMO_*` ist weiterhin global, nicht je Projekt — gebraucht wird das erst für die
   Reel-Variante.
+
+## Nachbesserungen nach Marcels Rückmeldung (2026-09-01, Abend)
+
+- **Slides waren nicht ansehbar**: die Vorschau schnitt jede Slide auf 16:10 zu und zeigte nur den
+  oberen Streifen — den Preis, um den es geht, sah man gar nicht. Jetzt bleibt das Seitenverhältnis
+  erhalten, jede Slide trägt ihre Beschriftung („Platz 10 · Lavados & Zapdos & Arktos GX"), und ein
+  Klick öffnet sie im Vollbild (Pfeiltasten, Zähler, Link auf die Datei).
+- **Automatik auch für Reels**: ein Reel ist beim Serienlauf noch ein Entwurf. Es wird jetzt
+  eingeplant, sobald der Worker die MP4 gebaut hat. Die Regeln stehen in `publish/auto.ts` an einer
+  Stelle statt an zweien.
+- **Threads-Poster** (`graph.threads.net`, Zwei-Schritt-Fluss wie Instagram): für das eigene Konto
+  ohne App Review, 500 Zeichen, bis zu 20 Bilder.
+- **Plattform-Begründungen nachrecherchiert** (01.09.2026): Instagram/Threads ohne App Review fürs
+  eigene Konto; Pinterest-Trial erzeugt Pins, die **nur der Ersteller sieht**; TikTok erzwingt ohne
+  Audit SELF_ONLY.
+- **Token-Alter sichtbar**: Meta- und Threads-Zugänge halten 60 Tage. Beim Speichern wird ein
+  Zeitstempel mitgeschrieben, die Übersicht zeigt das Alter und warnt ab Tag 50.
+- **Social-Kit** (`agents/studio/socialkit.ts`): Profilbilder und Banner in sechs Zuschnitten aus
+  dem Brand-Kit, einzeln herunterladbar oder als ZIP mit Kurzanleitung („wohin gehört was"). Der
+  ZIP-Schreiber (`util/zip.ts`) ist eigener Code ohne Bibliothek — PNGs sind bereits komprimiert,
+  „stored" genügt; CRC32 gegen `zlib.crc32` geprüft.
+- **Logo-Erkennung repariert**: der Brand-Extraktor nahm das erste Header-Bild, bei Binderplan also
+  einen App-Screenshot. Jetzt werden Kandidaten mit ihren echten Maßen gesammelt, das **Web-Manifest**
+  wird gelesen, und gewählt wird das größte **nahezu quadratische** Icon.
+- **Einrichtungs-Aufgaben im Piloten**: neuer Aufgaben-Typ `setup` (Woche 0, „einmalig, ohne Frist"),
+  lange Anleitungen als aufklappbarer Markdown-Block. Die 17 Punkte, die zuerst im Dashboard lagen,
+  sind in `mp_tasks` des Binderplan-Projekts umgezogen.
+
+**Wichtiger Fund dabei:** Das Brand-Kit für Binderplan war nie extrahiert — **alle bis dahin
+erzeugten Stücke tragen das Standard-Grün des Piloten statt Binderplans Orange (#E85D43).** Seit
+der Extraktion stimmen Farben (Orange auf Creme), Schrift (Quicksand) und das echte App-Icon.
+Eine Aufgabe erinnert daran, die alten Entwürfe neu zu erzeugen oder zu verwerfen.

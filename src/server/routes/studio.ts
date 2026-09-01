@@ -18,6 +18,7 @@ import { loadHashtags, saveHashtags } from "../hashtags.js";
 import { listPersonas } from "../agents/analysis/personas.js";
 import { planChannelNames } from "../channels.js";
 import { revisePiece } from "../agents/revise.js";
+import { generateSocialKit, socialKit, socialKitZip } from "../agents/studio/socialkit.js";
 
 export function studioRoutes(app: FastifyInstance, db: Db, getCtx: () => StudioContext | null): void {
   const r = app.withTypeProvider<ZodTypeProvider>();
@@ -117,6 +118,27 @@ export function studioRoutes(app: FastifyInstance, db: Db, getCtx: () => StudioC
     const abs = path.resolve(dataDir, rel);
     if (!abs.startsWith(path.resolve(dataDir) + path.sep) || !fs.existsSync(abs)) return reply.code(404).send({ detail: "Datei fehlt." });
     return reply.type("text/html; charset=utf-8").header("Content-Disposition", `attachment; filename="${String(piece.meta["slug"] ?? "artikel")}.html"`).send(fs.readFileSync(abs, "utf8"));
+  });
+
+  // --- Social-Kit: Profilbilder und Banner ----------------------------------
+
+  r.get("/api/mp/projects/:projectId/socialkit", { schema: { params: P, response: { 200: z.array(s.SocialKitItem) } } },
+    async (req) => socialKit(db, req.params.projectId));
+
+  r.post("/api/mp/projects/:projectId/socialkit", { schema: { params: P, response: { 200: z.array(s.SocialKitItem), 404: s.ErrorBody } } }, async (req, reply) => {
+    if (!getProject(db, req.params.projectId)) return reply.code(404).send({ detail: "Projekt nicht gefunden." });
+    const ctx = getCtx();
+    const items = await generateSocialKit(db, fallbackCtx().dataDir, req.params.projectId, { ...(ctx?.renderer ? { renderer: ctx.renderer } : {}), log: (m) => app.log.info(m) });
+    writeAudit(db, { user: req.user, action: "socialkit.generate", entityType: "project", entityId: req.params.projectId, projectId: req.params.projectId, content: { formats: items.length } });
+    return items;
+  });
+
+  /** Alles in einer Datei — beim Einrichten will man nicht sechsmal klicken. */
+  app.get("/api/mp/projects/:projectId/socialkit.zip", async (req, reply) => {
+    const projectId = (req.params as { projectId: string }).projectId;
+    const zip = socialKitZip(db, fallbackCtx().dataDir, projectId);
+    if (!zip) return reply.code(404).send({ detail: "Noch kein Social-Kit erzeugt." });
+    return reply.type("application/zip").header("Content-Disposition", `attachment; filename="${zip.name}"`).send(zip.data);
   });
 
   // --- Hashtag-Vorraete (Shot 7) --------------------------------------------

@@ -222,3 +222,41 @@ describe("Lehreule-Gegenprobe: brief-basierte Flows bleiben unberuehrt", () => {
     expect(res.json().detail).toContain("Produktdatenquelle");
   });
 });
+
+
+describe("Logo-Auswahl aus einer Website", () => {
+  it("bevorzugt das Manifest-Icon vor Header-Bild und og:image", async () => {
+    const { pickLogo } = await import("../src/server/agents/studio/brandkit.js");
+    const fake = (async (url: string) => {
+      if (String(url).includes("manifest")) {
+        return new Response(JSON.stringify({ icons: [{ src: "icon-192.png", sizes: "192x192" }, { src: "icon-512.png", sizes: "512x512" }] }), { status: 200 });
+      }
+      return new Response("", { status: 404 });
+    }) as unknown as typeof fetch;
+    const cands = [
+      { url: "https://x.test/hero.png", w: 1200, h: 900, rank: 2 },   // App-Screenshot im Header
+      { url: "https://x.test/og.png", w: 0, h: 0, rank: 3 },
+    ];
+    // Das größte quadratische Icon gewinnt - nicht das erste Bild im Header.
+    expect(await pickLogo(cands, "https://x.test/manifest.webmanifest", fake)).toBe("https://x.test/icon-512.png");
+  });
+
+  it("nimmt ein quadratisches Header-Logo, wenn es kein Manifest gibt", async () => {
+    const { pickLogo } = await import("../src/server/agents/studio/brandkit.js");
+    const cands = [
+      { url: "https://x.test/hero.png", w: 1200, h: 900, rank: 2 },
+      { url: "https://x.test/logo.svg", w: 256, h: 256, rank: 2 },
+    ];
+    expect(await pickLogo(cands, null)).toBe("https://x.test/logo.svg");
+  });
+
+  it("fällt auf den ersten Kandidaten zurück, wenn nichts quadratisch ist", async () => {
+    const { pickLogo } = await import("../src/server/agents/studio/brandkit.js");
+    const cands = [
+      { url: "https://x.test/og.png", w: 0, h: 0, rank: 3 },
+      { url: "https://x.test/wortmarke.png", w: 900, h: 200, rank: 2 },
+    ];
+    expect(await pickLogo(cands, null)).toBe("https://x.test/wortmarke.png");
+    expect(await pickLogo([], null)).toBeNull();
+  });
+});

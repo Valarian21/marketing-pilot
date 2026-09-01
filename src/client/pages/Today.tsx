@@ -12,7 +12,7 @@ import { ChannelTag } from "../components/ChannelLink.js";
 import { PLATFORMS } from "../../shared/channels.js";
 
 const FORMAT_LABEL: Record<string, string> = { text: "Text-Post", carousel: "Carousel", pin: "Pin", image: "Bild", ad_creative: "Ad", article: "Artikel", directory_entry: "Verzeichnis", video: "Video", community_reply: "Antwort" };
-const TYPE_LABEL: Record<Task["type"], string> = { research: "Recherche", strategy: "Strategie", content: "Content", publish: "Posten", community: "Community", ads: "Ads", measure: "Messen" };
+const TYPE_LABEL: Record<Task["type"], string> = { research: "Recherche", strategy: "Strategie", content: "Content", publish: "Posten", community: "Community", ads: "Ads", measure: "Messen" , setup: "Einrichtung" };
 const PIECE_PILL: Record<string, PillKind> = { draft: "todo", review: "review", approved: "done", published: "done", rejected: "kind" };
 
 /** Where a task leads: its piece (review or package), or the studio with the format pre-filled. */

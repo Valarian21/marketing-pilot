@@ -342,3 +342,50 @@ describe("Voll automatisch", () => {
     expect(res.notes.join(" ")).toContain("Wochendeckel");
   });
 });
+
+describe("ZIP-Schreiber", () => {
+  it("baut ein Archiv, das ein Standard-Werkzeug lesen kann", async () => {
+    const { buildZip, crc32, safeName } = await import("../src/server/util/zip.js");
+    const zip = buildZip([{ name: "a.txt", data: Buffer.from("hallo") }, { name: "unter/b.bin", data: PNG }]);
+    // Signaturen an den richtigen Stellen
+    expect(zip.subarray(0, 4).toString("hex")).toBe("504b0304");
+    expect(zip.includes(Buffer.from("504b0102", "hex"))).toBe(true);   // Zentralverzeichnis
+    expect(zip.subarray(-22, -18).toString("hex")).toBe("504b0506");   // Ende
+    expect(zip.readUInt16LE(zip.length - 14)).toBe(2);                 // zwei Einträge
+    expect(zip.includes(Buffer.from("hallo"))).toBe(true);
+    // Gegen Nodes eigene Implementierung geprüft, statt gegen eine abgeschriebene Konstante
+    const zlib = await import("node:zlib");
+    for (const probe of ["", "hallo", "Binderplan", "x".repeat(1000)]) {
+      expect(crc32(Buffer.from(probe))).toBe(zlib.crc32(probe));
+    }
+    expect(safeName("Binderplan · Süß/Fies")).toBe("Binderplan-Suess-Fies");
+  });
+});
+
+describe("Social-Kit", () => {
+  it("erzeugt alle Formate, ersetzt den alten Satz und packt sie mit Anleitung", async () => {
+    const { generateSocialKit, socialKit, socialKitZip, SOCIAL_FORMATS } = await import("../src/server/agents/studio/socialkit.js");
+    const rendered: string[] = [];
+    const renderer = async (jobs: { html: string; file: string }[]) => {
+      for (const j of jobs) { fs.mkdirSync(path.dirname(j.file), { recursive: true }); fs.writeFileSync(j.file, PNG); rendered.push(j.html); }
+    };
+    const items = await generateSocialKit(built.db, DATA, pid, { renderer: renderer as never });
+    expect(items.length).toBe(SOCIAL_FORMATS.length);
+    expect(items.map((x) => x.format)).toContain("banner-youtube");
+    // Ohne Logo im Brand-Kit entsteht ein Monogramm
+    expect(rendered[0]).toContain(">B<");
+    // Der YouTube-Banner setzt den Text in die sichtbare Zone
+    expect(rendered.find((h) => h.includes("2560px"))).toContain("width:1546px");
+
+    // Ein zweiter Lauf ersetzt, statt zu häufen
+    await generateSocialKit(built.db, DATA, pid, { renderer: renderer as never });
+    expect(socialKit(built.db, pid).length).toBe(SOCIAL_FORMATS.length);
+
+    const zip = socialKitZip(built.db, DATA, pid)!;
+    expect(zip.name).toContain("social-kit.zip");
+    expect(zip.data.subarray(0, 4).toString("hex")).toBe("504b0304");
+    // Die Kurzanleitung liegt mit im Archiv
+    expect(zip.data.includes(Buffer.from("WOHIN-GEHOERT-WAS.txt"))).toBe(true);
+    expect(zip.data.includes(Buffer.from("1546 × 423", "utf8"))).toBe(true);
+  }, 60_000);
+});

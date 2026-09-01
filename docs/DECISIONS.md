@@ -404,3 +404,40 @@ Deshalb entscheidet nicht mehr die Absicht (`withPrices`) und auch nicht der Zus
 Schalters, sondern der Befund: steht im `.slots`-Bereich ein Eurobetrag, trägt die Slide die
 Preis-Fußzeile, sonst die neutrale. Dieselbe Haltung wie bei den Zahlen der Ranglisten — eine
 Angabe darf nur behaupten, was tatsächlich zu sehen ist.
+
+## Ein Logo ist nahezu quadratisch — ein Screenshot nicht (2026-09-01)
+
+Der Brand-Extraktor nahm bisher „das erste Bild im Header, sonst og:image, sonst das Favicon". Bei
+Binderplan lieferte das `hero.png` — einen App-Screenshot. Als Kachel im Banner und erst recht im
+runden Profilbild wurde daraus unlesbarer Brei.
+
+Die Auswahl sammelt jetzt Kandidaten **mit ihren echten Maßen** (`naturalWidth/Height`, `sizes` am
+Icon-Link) und liest zusätzlich das **Web-Manifest** — wer eine PWA hat, hinterlegt dort ein
+sauberes Icon in mehreren Größen, und das ist die verlässlichste Quelle überhaupt. Gewählt wird das
+größte nahezu quadratische Bild (Verhältnis 0,8–1,25) ab 96 px; erst wenn es keins gibt, greift die
+alte Reihenfolge.
+
+Zweite Regel im Social-Kit selbst: ein Logo wird im Profilbild **randlos** gesetzt statt mittig
+verkleinert. App-Icons bringen ihren eigenen Hintergrund mit; ein Quadrat auf einer zweiten Fläche
+sieht im runden Zuschnitt nach Fehler aus.
+
+## Ein ZIP ohne Kompression, dafür ohne Abhängigkeit (2026-09-01)
+
+Das Social-Kit soll als eine Datei herunterladbar sein. Naheliegend wäre eine Bibliothek gewesen —
+für sechs PNGs, die bereits komprimiert sind. Deflate hätte sie um Promille geschrumpft.
+
+`util/zip.ts` schreibt stattdessen ein ZIP mit Methode 0 („stored"): rund hundert Zeilen, von jedem
+Betriebssystem lesbar, keine neue Abhängigkeit. Die CRC32-Implementierung wird im Test gegen
+`zlib.crc32` geprüft, nicht gegen eine abgeschriebene Konstante — bei selbst gebauten Formaten ist
+die Gegenprobe wichtiger als der Code.
+
+## Einrichtungsschritte sind Aufgaben, aber keine Wochen-Aufgaben (2026-09-01)
+
+Marcels Einrichtungs-Anleitung lag zuerst im Dashboard, die Kampagnen-Aufgaben im Piloten — zwei
+Orte für dieselbe Frage „was muss ich als Nächstes tun?".
+
+Jetzt liegt alles in `mp_tasks`, aber mit dem eigenen Typ `setup` und **Woche 0**: die Aufgabenseite
+zeigt sie als eigenen Block „Einrichtung · einmalig, ohne Frist", der nie „vergangen" wird und keine
+Fortschrittswarnung auslöst. Die Freigabe-Stufe wird dort nicht angezeigt — sie sagt, wie viel der
+Agent allein darf, und bei einem Einrichtungsschritt gibt es keinen Agenten. Lange Anleitungen
+stehen als aufklappbarer Markdown-Block, damit die Liste lesbar bleibt.

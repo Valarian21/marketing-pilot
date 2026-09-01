@@ -8,6 +8,38 @@ import { mpAssets, mpProjects } from "../../db/schema.js";
 import { newId, nowIso, parseJson, toJson, type Db } from "../../db/index.js";
 import { USER_AGENT } from "../../providers/html.js";
 
+interface LogoCandidate { url: string; w: number; h: number; rank: number }
+
+/**
+ * Welches Bild wirklich das Logo ist.
+ *
+ * Der frühere Weg — „erstes Bild im Header, sonst og:image" — lieferte bei
+ * Binderplan einen App-Screenshot, der als Kachel im Banner unlesbar war. Ein
+ * Logo ist nahezu quadratisch; ein Screenshot nicht. Und die verlässlichste
+ * Quelle ist das Web-Manifest: wer eine PWA hat, hinterlegt dort ein sauberes
+ * Icon in mehreren Größen.
+ */
+export async function pickLogo(cands: LogoCandidate[], manifestUrl: string | null, fetchImpl: typeof fetch = fetch): Promise<string | null> {
+  const all = [...cands];
+  if (manifestUrl) {
+    try {
+      const res = await fetchImpl(manifestUrl, { headers: { "User-Agent": USER_AGENT }, signal: AbortSignal.timeout(8_000) });
+      if (res.ok) {
+        const man = (await res.json()) as { icons?: { src: string; sizes?: string }[] };
+        for (const icon of man.icons ?? []) {
+          const size = Number(/([0-9]+)x/.exec(icon.sizes ?? "")?.[1] ?? "0");
+          all.push({ url: new URL(icon.src, manifestUrl).toString(), w: size, h: size, rank: 0 });
+        }
+      }
+    } catch { /* ohne Manifest geht es auch */ }
+  }
+  const square = (c: LogoCandidate) => c.w > 0 && c.h > 0 && c.w / c.h >= 0.8 && c.w / c.h <= 1.25;
+  // Erst quadratische Kandidaten, dort die größten und aus der verlässlichsten Quelle.
+  const best = all.filter((c) => square(c) && Math.max(c.w, c.h) >= 96)
+    .sort((a, b) => a.rank - b.rank || Math.max(b.w, b.h) - Math.max(a.w, a.h))[0];
+  return best?.url ?? all.sort((a, b) => a.rank - b.rank)[0]?.url ?? null;
+}
+
 export interface BrandExtract { colors: string[]; primary: string | null; ink: string | null; background: string | null; logoUrl: string | null; fonts: string[] }
 export type BrandExtractor = (url: string) => Promise<BrandExtract>;
 
@@ -52,18 +84,31 @@ export const playwrightBrandExtractor: BrandExtractor = async (url) => {
         .map((b) => getComputedStyle(b).backgroundColor);
       const body = getComputedStyle(document.body);
       const theme = (document.querySelector('meta[name="theme-color"]') as HTMLMetaElement | null)?.content ?? null;
-      const logoEl = Array.from(document.querySelectorAll("header img, nav img, a[href='/'] img, img[alt*='logo' i], img[src*='logo' i], img[class*='logo' i]"))[0] as HTMLImageElement | undefined;
-      const og = (document.querySelector('meta[property="og:image"]') as HTMLMetaElement | null)?.content ?? null;
-      const icon = (document.querySelector('link[rel~="icon"], link[rel="apple-touch-icon"]') as HTMLLinkElement | null)?.href ?? null;
+      // Logo-Kandidaten mit ihren echten Massen sammeln - die Auswahl faellt
+      // spaeter in Node, weil dafuer noch das Web-Manifest gelesen wird.
+      const cands: { url: string; w: number; h: number; rank: number }[] = [];
+      const push = (url: string | null | undefined, w: number, h: number, rank: number) => { if (url) cands.push({ url, w, h, rank }); };
+      for (const el of Array.from(document.querySelectorAll("header img, nav img, a[href='/'] img, img[alt*='logo' i], img[src*='logo' i], img[class*='logo' i]")).slice(0, 8)) {
+        const img = el as HTMLImageElement;
+        push(img.src, img.naturalWidth, img.naturalHeight, 2);
+      }
+      for (const el of Array.from(document.querySelectorAll('link[rel="apple-touch-icon"], link[rel~="icon"]')).slice(0, 8)) {
+        const link = el as HTMLLinkElement;
+        const size = Number(/([0-9]+)x/.exec(link.getAttribute("sizes") ?? "")?.[1] ?? "0");
+        push(link.href, size, size, 1);
+      }
+      push((document.querySelector('meta[property="og:image"]') as HTMLMetaElement | null)?.content, 0, 0, 3);
+      const manifest = (document.querySelector('link[rel="manifest"]') as HTMLLinkElement | null)?.href ?? null;
       const fonts = new Set<string>();
       for (const el of Array.from(document.querySelectorAll("h1, h2, p, body")).slice(0, 40)) fonts.add(getComputedStyle(el).fontFamily.split(",")[0]!.replace(/["']/g, "").trim());
-      return { counts, buttons, bodyBg: body.backgroundColor, bodyColor: body.color, theme, logo: logoEl?.src ?? og ?? icon ?? null, fonts: Array.from(fonts) };
+      return { counts, buttons, bodyBg: body.backgroundColor, bodyColor: body.color, theme, cands, manifest, fonts: Array.from(fonts) };
     });
+    const logo = await pickLogo(raw.cands, raw.manifest);
     const counts = new Map<string, number>();
     for (const [c, n] of Object.entries(raw.counts)) { const h = toHex(c); if (h) counts.set(h, (counts.get(h) ?? 0) + n); }
     if (raw.theme) { const h = toHex(raw.theme); if (h) counts.set(h, (counts.get(h) ?? 0) + 50); }
     const buttons = raw.buttons.map(toHex).filter((c): c is string => Boolean(c));
-    return { ...pickPalette(counts, buttons, toHex(raw.bodyBg), toHex(raw.bodyColor)), logoUrl: raw.logo, fonts: raw.fonts.filter((f) => f && !/^(inherit|initial|system-ui|-apple-system)$/i.test(f)).slice(0, 4) };
+    return { ...pickPalette(counts, buttons, toHex(raw.bodyBg), toHex(raw.bodyColor)), logoUrl: logo, fonts: raw.fonts.filter((f) => f && !/^(inherit|initial|system-ui|-apple-system)$/i.test(f)).slice(0, 4) };
   } finally {
     await browser.close();
   }

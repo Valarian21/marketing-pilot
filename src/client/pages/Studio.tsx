@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
-import type { BrandKit, ContentPiece, DirectoryStatus, HashtagPools, Job, ProductDataView, StudioView, VideoView } from "../../shared/schemas.js";
+import type { BrandKit, ContentPiece, DirectoryStatus, HashtagPools, Job, ProductDataView, SocialKitItem, StudioView, VideoView } from "../../shared/schemas.js";
 import { api } from "../api.js";
 import { Button, Card, Notice, PageHeader, Pill, fmtDateTime, type PillKind } from "../components/ui.js";
 import { ProjectNav } from "../components/ProjectNav.js";
@@ -46,7 +46,7 @@ export function StudioPage() {
       </nav>
 
       {tab === "erstellen" && <CreateTab id={id} view={view} busy={busy} run={run} />}
-      {tab === "brand" && <BrandTab id={id} kit={view.brandKit} busy={busy} run={run} />}
+      {tab === "brand" && <><BrandTab id={id} kit={view.brandKit} busy={busy} run={run} /><SocialKitCard id={id} busy={busy} run={run} /></>}
       {tab === "hashtags" && <HashtagTab id={id} busy={busy} run={run} />}
       {tab === "verzeichnisse" && <DirectoriesTab id={id} dirs={view.directories} busy={busy} run={run} />}
       {tab === "geo" && <GeoTab id={id} view={view} busy={busy} run={run} />}
@@ -377,6 +377,57 @@ function HashtagTab({ id, busy, run }: { id: string; busy: string | null; run: R
         <label key={key} className="mp-field"><span>Thema „{key}“</span><input value={asText(list)} onChange={(e) => setTopic(key, e.target.value)} /></label>
       ))}
       <p className="mp-small mp-muted">{pools.suggestedAt ? `Vorschlag vom ${new Date(pools.suggestedAt).toLocaleDateString("de-DE")} — seitdem deine Liste.` : "Noch kein Vorschlag erzeugt."}</p>
+    </Card>
+  );
+}
+
+/**
+ * Social-Kit: Profilbilder und Banner für jeden Kanal, aus dem Brand-Kit.
+ *
+ * Ein neues Konto braucht als Erstes ein Bild — und jede Plattform will einen
+ * anderen Zuschnitt. Der Download als ZIP ist der eigentliche Punkt: beim
+ * Einrichten will man nicht sechsmal einzeln klicken.
+ */
+function SocialKitCard({ id, busy, run }: { id: string; busy: string | null; run: Run }) {
+  const [items, setItems] = useState<SocialKitItem[] | null>(null);
+  const load = useCallback(async () => { try { setItems(await api<SocialKitItem[]>(`/projects/${id}/socialkit`)); } catch { setItems([]); } }, [id]);
+  useEffect(() => { void load(); }, [load]);
+  return (
+    <Card>
+      <div className="mp-card-head">
+        <h2>Social-Kit <span className="mp-muted mp-small">Profilbilder &amp; Banner</span></h2>
+        <div className="mp-inline">
+          {items && items.length > 0 && <a className="mp-btn mp-btn--primary" href={`/api/mp/projects/${id}/socialkit.zip`}>Alle als ZIP</a>}
+          <Button disabled={busy !== null} onClick={() => void run("kit", async () => { setItems(await api<SocialKitItem[]>(`/projects/${id}/socialkit`, { method: "POST" })); })}>
+            {busy === "kit" ? "rendert …" : items && items.length ? "Neu erzeugen" : "Erzeugen"}
+          </Button>
+        </div>
+      </div>
+      <p className="mp-small mp-muted">
+        Farben, Logo und Einzeiler kommen aus dem Brand-Kit und dem Brief. Ohne Logo entsteht ein Monogramm.
+        Änderst du die Primärfarbe, erzeuge das Kit neu.
+      </p>
+      {!items || items.length === 0 ? (
+        <p className="mp-muted">Noch nichts erzeugt.</p>
+      ) : (
+        <>
+          <div className="mp-shots mp-shots--slides">
+            {items.map((it) => (
+              <figure key={it.format} className="mp-shot">
+                <a href={it.url} download={it.filename} title={`${it.size} · ${it.note}`}><img src={it.url} alt={it.label} loading="lazy" /></a>
+                <figcaption className="mp-small">
+                  <strong>{it.label}</strong> <span className="mp-muted">{it.size}</span>
+                  <div className="mp-muted">{it.usedFor}</div>
+                </figcaption>
+              </figure>
+            ))}
+          </div>
+          <p className="mp-small mp-muted">
+            Runde Zuschnitte beschneiden mittig — deshalb steht im Profilbild nichts am Rand. Im YouTube-Banner
+            liegt der Text in der Zone, die auf allen Geräten sichtbar ist (1546 × 423).
+          </p>
+        </>
+      )}
     </Card>
   );
 }

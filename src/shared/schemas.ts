@@ -6,7 +6,8 @@
 import { z } from "zod";
 
 export const ProjectStatus = z.enum(["draft", "active", "paused", "archived"]);
-export const TaskType = z.enum(["research", "strategy", "content", "publish", "community", "ads", "measure"]);
+/** `setup` sind einmalige Einrichtungsschritte (Konten, Zugaenge) - sie haengen an keiner Planwoche. */
+export const TaskType = z.enum(["research", "strategy", "content", "publish", "community", "ads", "measure", "setup"]);
 export const TaskStatus = z.enum(["todo", "in_progress", "review", "done", "skipped"]);
 export const Assignee = z.enum(["agent", "human"]);
 /** Approval level for anything with outside effect. Default is `review`. */
@@ -96,7 +97,7 @@ export const TaskCreate = z.object({
   type: TaskType,
   channel: z.string().default(""),
   dueAt: Iso.nullable().default(null),
-  week: z.number().int().min(1).max(52).default(1),
+  week: z.number().int().min(0).max(52).default(1),
   assignedTo: Assignee.default("human"),
   approvalLevel: ApprovalLevel.default("review"),
 });
@@ -105,7 +106,7 @@ export const TaskPatch = z.object({
   description: z.string().optional(),
   status: TaskStatus.optional(),
   dueAt: Iso.nullable().optional(),
-  week: z.number().int().min(1).max(52).optional(),
+  week: z.number().int().min(0).max(52).optional(),
   order: z.number().int().optional(),
   assignedTo: Assignee.optional(),
   approvalLevel: ApprovalLevel.optional(),
@@ -724,6 +725,12 @@ export const PublishPackage = z.object({
 });
 export const ScheduleRequest = z.object({ date: Iso });
 
+/** Ein Stück des Social-Kits (Shot 12). */
+export const SocialKitItem = z.object({
+  format: z.string(), label: z.string(), usedFor: z.string(), note: z.string(),
+  size: z.string(), assetId: Id, url: z.string(), filename: z.string(),
+});
+
 export const StudioView = z.object({
   brandKit: BrandKit,
   hasBrief: z.boolean(),
@@ -920,6 +927,7 @@ export type DataPreview = z.infer<typeof DataPreview>;
 export type ProductDataStatus = z.infer<typeof ProductDataStatus>;
 export type ProductDataView = z.infer<typeof ProductDataView>;
 export type StudioView = z.infer<typeof StudioView>;
+export type SocialKitItem = z.infer<typeof SocialKitItem>;
 export type VideoAction = z.infer<typeof VideoAction>;
 export type VideoScene = z.infer<typeof VideoScene>;
 export type VideoScript = z.infer<typeof VideoScript>;

@@ -5,9 +5,10 @@ import { api } from "../api.js";
 import { Button, Card, Notice, PageHeader, Pill, type PillKind } from "../components/ui.js";
 import { ProjectNav } from "../components/ProjectNav.js";
 import { ChannelTag } from "../components/ChannelLink.js";
+import { markdownToHtml } from "../../shared/markdown.js";
 import { taskTarget } from "./Today.js";
 
-const TYPE_LABEL: Record<Task["type"], string> = { research: "Recherche", strategy: "Strategie", content: "Content", publish: "Veröffentlichen", community: "Community", ads: "Ads", measure: "Messen" };
+const TYPE_LABEL: Record<Task["type"], string> = { research: "Recherche", strategy: "Strategie", content: "Content", publish: "Veröffentlichen", community: "Community", ads: "Ads", measure: "Messen", setup: "Einrichtung" };
 const APPROVAL: Record<Task["approvalLevel"], { label: string; kind: PillKind }> = { auto: { label: "auto", kind: "done" }, review: { label: "review", kind: "review" }, human_only: { label: "nur Mensch", kind: "kind" } };
 const fmtDate = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString("de-DE", { weekday: "short", day: "2-digit", month: "2-digit" }) : "");
 
@@ -113,11 +114,13 @@ export function TasksPage() {
         const pct = list.length ? Math.round((done / list.length) * 100) : 0;
         const isOpen = openWeeks?.has(week) ?? week === thisWeek;
         const runnable = list.filter(canRun);
-        const rel = week === thisWeek ? "diese Woche" : week < thisWeek ? "vergangen" : week === thisWeek + 1 ? "nächste Woche" : "";
+        // Woche 0 ist keine Woche, sondern die Einrichtung: sie laeuft nicht ab und wird nie „vergangen".
+        const setup = week === 0;
+        const rel = setup ? "einmalig" : week === thisWeek ? "diese Woche" : week < thisWeek ? "vergangen" : week === thisWeek + 1 ? "nächste Woche" : "";
         return (
-          <Card key={week} className={`mp-week${week === thisWeek ? " mp-week--now" : ""}${week < thisWeek && done < list.length ? " mp-week--late" : ""}`}>
+          <Card key={week} className={`mp-week${week === thisWeek ? " mp-week--now" : ""}${!setup && week < thisWeek && done < list.length ? " mp-week--late" : ""}`}>
             <div className="mp-card-head mp-week-head" onClick={() => setOpenWeeks((cur) => { const n = new Set(cur ?? [thisWeek]); if (n.has(week)) n.delete(week); else n.add(week); return n; })} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); (e.currentTarget as HTMLElement).click(); } }}>
-              <h2><span className="mp-week-caret" aria-hidden="true">{isOpen ? "▾" : "▸"}</span> Woche {week} <span className="mp-muted mp-small">{fmtDate(list[0]?.dueAt ?? null)}{rel && ` · ${rel}`}</span>{week < thisWeek && done < list.length && <Pill kind="review">{list.length - done} offen</Pill>}</h2>
+              <h2><span className="mp-week-caret" aria-hidden="true">{isOpen ? "▾" : "▸"}</span> {setup ? "Einrichtung" : `Woche ${week}`} <span className="mp-muted mp-small">{setup ? "einmalig, ohne Frist" : `${fmtDate(list[0]?.dueAt ?? null)}${rel ? ` · ${rel}` : ""}`}</span>{!setup && week < thisWeek && done < list.length && <Pill kind="review">{list.length - done} offen</Pill>}</h2>
               <div className="mp-inline" onClick={(e) => e.stopPropagation()}>
                 {isOpen && runnable.length > 1 && <Button disabled={executing !== null} onClick={() => void executeWeek(runnable)}>{executing === "week" ? "läuft …" : `Agent: alle ${runnable.length} ausführen`}</Button>}
                 <div className="mp-progress" title={`${done}/${list.length} erledigt`}><div className="mp-progress-bar" style={{ width: `${pct}%` }} /><span className="mp-label">{done}/{list.length}</span></div>
@@ -129,11 +132,17 @@ export function TasksPage() {
                   <button type="button" className={`mp-check${t.status === "done" ? " is-done" : ""}`} aria-label={t.status === "done" ? "Als offen markieren" : "Als erledigt markieren"} onClick={() => void toggleDone(t)} />
                   <div className="mp-task-body">
                     <div className="mp-task-title">{t.title}</div>
-                    {t.description && <div className="mp-small mp-muted">{t.description}</div>}
+                    {t.description && (t.description.length > 220 || t.description.includes("\n")
+                      // Einrichtungsschritte tragen eine ganze Anleitung - die gehoert nicht offen in die Liste.
+                      ? <details className="mp-details mp-small"><summary className="mp-label">Anleitung</summary>
+                          <div className="mp-article" dangerouslySetInnerHTML={{ __html: markdownToHtml(t.description) }} />
+                        </details>
+                      : <div className="mp-small mp-muted">{t.description}</div>)}
                     <div className="mp-task-meta">
                       <Pill kind="kind">{TYPE_LABEL[t.type]}</Pill>
                       <Pill kind={t.assignedTo === "agent" ? "progress" : "todo"}>{t.assignedTo === "agent" ? "Agent" : "Ich"}</Pill>
-                      <Pill kind={APPROVAL[t.approvalLevel].kind}>{APPROVAL[t.approvalLevel].label}</Pill>
+                      {/* Die Freigabe-Stufe sagt, wie viel der Agent allein darf - bei Einrichtungsschritten gibt es keinen Agenten. */}
+                      {t.type !== "setup" && <Pill kind={APPROVAL[t.approvalLevel].kind}>{APPROVAL[t.approvalLevel].label}</Pill>}
                       {t.channel && <ChannelTag name={t.channel} projectId={id} />}
                       {t.dueAt && <span className="mp-label">{fmtDate(t.dueAt)}</span>}
                       {t.status === "review" && <Pill kind="review">in Freigabe</Pill>}
