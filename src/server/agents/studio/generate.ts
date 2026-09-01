@@ -19,6 +19,7 @@ import { loadBrandKit, type BrandExtractor } from "./brandkit.js";
 import { voiceBlock } from "./voice.js";
 import { reviseWithCritic } from "./critic.js";
 import { carouselSlideHtml, dataUrlFor, framedScreenshotHtml, pinHtml, playwrightRenderer, type RenderJob, type Renderer } from "./render.js";
+import { clearBundle, generateDataBundle, type DataBase } from "./data-content.js";
 import { buildUtmUrl, deepLinkFor, PLATFORM_LIMITS, platformFromChannel, slugify } from "../../util/utm.js";
 import { canonicalChannel, channelLink, saneTitle } from "../../../shared/channels.js";
 import { loadProfiles, planChannelNames } from "../../channels.js";
@@ -107,7 +108,7 @@ async function draftFor(ctx: StudioContext, base: Base, req: s.ContentRequest, p
       const template = req.template ?? "clean";
       const chosen = (req.screenshotAssetIds?.length ? shots.filter((x) => req.screenshotAssetIds!.includes(x.id)) : shots).slice(0, 3);
       const out = await chatJson(ctx.llm, modelFor("content"), z.object({ title: z.string().default(""), caption: z.string().default(""), slides: z.array(z.object({ kind: z.enum(["text", "screenshot"]).default("text"), headline: z.string(), body: z.string().default(""), screenshotId: z.string().default("") })).min(3).max(10) }),
-        carouselPrompt({ ...common, screenshots: chosen.map((x) => ({ id: x.id, label: x.label })), slides: 7 }), usage, { maxTokens: 3000, temperature: 0.6 });
+        carouselPrompt({ ...common, screenshots: chosen.map((x) => ({ id: x.id, label: x.label })), slides: 7, platform: req.platform ?? "instagram" }), usage, { maxTokens: 3000, temperature: 0.6 });
       const slidesText = out.slides.map((sl, i) => `${i + 1}. ${sl.headline}${sl.body ? ` - ${sl.body}` : ""}`).join("\n");
       // Critic on the caption only: slides are structured (headline/body) and would break when rewritten as prose.
       const rev = await reviseWithCritic(ctx, usage, { body: out.caption || slidesText, language: base.language, voiceProfile: base.voice, format: "carousel", platform: req.platform ?? "instagram", maxRounds: 2 });
@@ -184,6 +185,9 @@ async function draftFor(ctx: StudioContext, base: Base, req: s.ContentRequest, p
       const file = path.join(outDir, `${slug}.html`); fs.mkdirSync(outDir, { recursive: true }); fs.writeFileSync(file, html);
       return { title: meta.title, body: rev.body, format: "article", channel: "website", meta: { kind, competitor: competitor ?? null, slug, metaDescription: meta.metaDescription, faq: meta.faq, jsonLd, htmlPath: path.relative(ctx.dataDir, file), request: req }, assets: [], score: rev.score, notes: rev.notes };
     }
+    case "data_carousel":
+      // laeuft nie hier durch - generateContent zweigt vorher nach data-content.ts ab
+      throw err("Daten-Carousels werden als Bündel erzeugt, nicht als Einzelstück.");
     default:
       throw err(`Format "${req.format}" kommt in einem späteren Shot (Video: Shot 4, Community-Antworten: Shot 5).`);
   }
@@ -211,8 +215,43 @@ function linkTask(db: Db, taskId: string, pieceId: string): void {
   if (task) db.update(t.mpTasks).set({ status: "review", outputRefs: toJson([...parseJson<string[]>(task.outputRefs, []), pieceId]), updatedAt: nowIso() }).where(eq(t.mpTasks.id, taskId)).run();
 }
 
+/**
+ * Daten-Bündel (Shot 7): ein Lauf je Sprache, jeder erzeugt mehrere Stücke mit
+ * gemeinsamen Assets. Zurück kommt das Leit-Stück des ersten Laufs — daran
+ * hängen Freigabe-Gruppierung, Kosten und jeder Link.
+ */
+async function generateDataPieces(ctx: StudioContext, base: Base, req: s.ContentRequest, user: HostUser, reuseLeadId?: string): Promise<s.ContentPiece> {
+  const languages: ("de" | "en")[] = req.language === "both" ? ["de", "en"] : [req.language === "en" ? "en" : "de"];
+  const renderer = ctx.renderer ?? playwrightRenderer;
+  const shot = projectScreenshots(ctx.db, base.project.id)[0];
+  const dataBase: DataBase = { db: ctx.db, project: base.project, brief: base.brief, personas: base.personas, kit: base.kit, voice: base.voice, language: base.language };
+  let lead: s.ContentPiece | null = null;
+  for (const [i, language] of languages.entries()) {
+    const leadId = i === 0 && reuseLeadId ? reuseLeadId : newId();
+    // Assets und Läufe haben Fremdschlüssel auf das Stück - die Zeile muss vorher stehen.
+    if (leadId !== reuseLeadId) insertPlaceholder(ctx.db, base.project.id, leadId, req, req.taskId ?? null);
+    try {
+      const { result } = await withRun(ctx.db, { task: `studio.data_carousel:${language}`, model: modelFor("content"), projectId: base.project.id, pieceId: leadId }, (usage) =>
+        generateDataBundle(ctx, dataBase, req, usage, {
+          leadPieceId: leadId, language,
+          addAsset: (pieceId, file, meta) => addAsset(ctx.db, ctx.dataDir, base.project.id, pieceId, "render", file, meta),
+          renderer,
+          screenshotPath: shot ? path.join(ctx.dataDir, shot.path) : null,
+        }));
+      writeAudit(ctx.db, { user, action: "content.generate", entityType: "content_piece", entityId: leadId, projectId: base.project.id, content: { format: "data_carousel", language, pieces: result.length, platforms: result.map((p) => p.channel) } });
+      if (i === 0) lead = withCosts(ctx.db, [result[0]!])[0]!;
+    } catch (e) {
+      if (leadId !== reuseLeadId) ctx.db.delete(t.mpContentPieces).where(eq(t.mpContentPieces.id, leadId)).run();
+      throw e;
+    }
+  }
+  if (req.taskId && lead) linkTask(ctx.db, req.taskId, lead.id);
+  return lead!;
+}
+
 export async function generateContent(ctx: StudioContext, projectId: string, req: s.ContentRequest, user: HostUser): Promise<s.ContentPiece> {
   const base = loadBase(ctx, projectId);
+  if (req.format === "data_carousel") return generateDataPieces(ctx, base, req, user);
   const pieceId = newId();
   insertPlaceholder(ctx.db, projectId, pieceId, req, req.taskId ?? null);
   const model = req.format === "article" ? modelFor("analysis") : modelFor("content");
@@ -242,9 +281,19 @@ export async function regenerateContent(ctx: StudioContext, pieceId: string, hin
     return existing;
   }
   const reqParsed = s.ContentRequest.safeParse(existing.meta["request"]);
-  const req: s.ContentRequest = reqParsed.success ? reqParsed.data : { format: existing.format, topic: existing.title, hint: "" };
+  const req: s.ContentRequest = reqParsed.success ? reqParsed.data : s.ContentRequest.parse({ format: existing.format, topic: existing.title, hint: "" });
   const merged = { ...req, hint: [req.hint, hint].filter(Boolean).join(" | ") };
   const base = loadBase(ctx, existing.projectId);
+  if (existing.format === "data_carousel") {
+    // Ein Bündel wird immer als Ganzes neu erzeugt, und immer über sein Leit-Stück:
+    // die Mitglieder teilen sich die Assets, einzeln wäre das nicht konsistent zu halten.
+    const bundleId = String(existing.meta["bundleId"] ?? existing.id);
+    if (!getPiece(ctx.db, bundleId)) throw err("Leit-Stück des Bündels fehlt - bitte neu im Studio erzeugen.", 404);
+    clearBundle(ctx.db, existing.projectId, bundleId, (rel) => { try { fs.unlinkSync(path.join(ctx.dataDir, rel)); } catch { /* gone */ } });
+    const lead = await generateDataPieces(ctx, base, merged, user, bundleId);
+    writeAudit(ctx.db, { user, action: "content.regenerate", entityType: "content_piece", entityId: bundleId, projectId: existing.projectId, content: { hint, bundle: true } });
+    return lead;
+  }
   const old = ctx.db.select().from(t.mpAssets).where(eq(t.mpAssets.contentPieceId, pieceId)).all();
   for (const a of old) { try { fs.unlinkSync(path.join(ctx.dataDir, a.path)); } catch { /* gone */ } }
   ctx.db.delete(t.mpAssets).where(eq(t.mpAssets.contentPieceId, pieceId)).run();
@@ -263,7 +312,13 @@ export function buildPackage(ctx: StudioContext, piece: s.ContentPiece): s.Publi
   const profile = channelLink(piece.channel || platform, loadProfiles(ctx.db, piece.projectId));
   const utmLink = project && piece.format !== "article" ? buildUtmUrl(project.url, { source: platform, medium, campaign, content: piece.id }) : null;
   const dl = piece.format === "directory_entry" ? { url: String(piece.meta["deepLink"] ?? ""), label: `Formular bei ${piece.channel} öffnen` } : deepLinkFor(platform);
-  const assets = ctx.db.select().from(t.mpAssets).where(eq(t.mpAssets.contentPieceId, piece.id)).all().map((a) => {
+  // Bündel-Mitglieder tragen fremde Assets (die Dateien hängen am Leit-Stück), deshalb
+  // zählt die Liste am Stück - und nur ersatzweise die Zuordnung in der Asset-Zeile.
+  const own = ctx.db.select().from(t.mpAssets).where(eq(t.mpAssets.contentPieceId, piece.id)).all();
+  const listed = piece.assets.length
+    ? piece.assets.map((id) => own.find((a) => a.id === id) ?? ctx.db.select().from(t.mpAssets).where(eq(t.mpAssets.id, id)).get()).filter((a): a is typeof t.mpAssets.$inferSelect => Boolean(a))
+    : own;
+  const assets = listed.map((a) => {
     const meta = parseJson<Record<string, unknown>>(a.meta, {});
     const size = a.path.endsWith(".png") ? pngSize(path.join(ctx.dataDir, a.path)) : null;
     return { id: a.id, kind: a.kind, url: `/api/mp/assets/${a.id}/file`, filename: path.basename(a.path), width: size?.width ?? null, height: size?.height ?? null, aiGenerated: Boolean(meta["aiGenerated"]) };

@@ -54,6 +54,84 @@ export function carouselSlideHtml(kit: BrandKit, template: CarouselTemplate, sli
   }
 }
 
+/** Eine Zeile der Rangliste, so wie sie auf die Slide kommt. Zahlen kommen fertig aus dem Provider. */
+export interface RankingSlide {
+  rank: number;
+  name: string;
+  setLine: string;
+  /** Fertig formatiert („626,08 €“) — der Renderer rechnet nichts. */
+  price: string;
+  /** Nur bei Preis-Bewegungen: „▲ +38 % in 7 Tagen“. */
+  change?: string;
+  imageDataUrl: string | null;
+  index: number;
+  total: number;
+}
+
+/** Fußzeile, die laut Plan auf JEDER Daten-Slide steht — Quelle, Stand, Herkunft. */
+export const dataFooterText = (priceStand: string, source: string): string =>
+  `Preise: Cardmarket-Trend · Stand ${priceStand} · ${source}`;
+
+const dataFoot = (w: number, footer: string) =>
+  `<div class="dfoot" style="font-family:var(--f-mono);font-size:${Math.round(w * 0.019)}px;letter-spacing:.02em;opacity:.6;text-align:center">${esc(footer)}</div>`;
+
+const dataCss = (w: number) => `
+.dwrap{width:100%;height:100%;display:flex;flex-direction:column;gap:${Math.round(w * 0.025)}px}
+.dhead{display:flex;align-items:center;justify-content:space-between;gap:${Math.round(w * 0.02)}px}
+.drank{font-family:var(--f-mono);font-weight:500;font-size:${Math.round(w * 0.075)}px;line-height:1;padding:.12em .38em;border-radius:${Math.round(w * 0.02)}px;background:var(--b-primary);color:var(--b-on-primary);font-variant-numeric:tabular-nums}
+.dbrand{font-family:var(--f-mono);font-size:${Math.round(w * 0.022)}px;letter-spacing:.08em;text-transform:uppercase;opacity:.7}
+.dcard{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;position:relative}
+.dcard::after{content:"";position:absolute;width:62%;height:52%;border-radius:50%;background:var(--b-primary);opacity:.16;filter:blur(${Math.round(w * 0.06)}px);z-index:0}
+.dcard img{position:relative;z-index:1;max-width:100%;max-height:100%;object-fit:contain;filter:drop-shadow(0 ${Math.round(w * 0.02)}px ${Math.round(w * 0.045)}px rgba(0,0,0,.35))}
+.dname{font-family:var(--f-display);font-weight:700;font-size:${Math.round(w * 0.062)}px;line-height:1.1;text-wrap:balance}
+.dset{font-family:var(--f-mono);font-size:${Math.round(w * 0.026)}px;opacity:.7;margin-top:.35em}
+.dprice{font-family:var(--f-display);font-weight:700;font-size:${Math.round(w * 0.115)}px;line-height:1;font-variant-numeric:tabular-nums;letter-spacing:-.02em;margin-top:${Math.round(w * 0.02)}px}
+.dchange{font-family:var(--f-mono);font-size:${Math.round(w * 0.03)}px;margin-top:.4em;color:var(--b-primary)}
+.dfan{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;position:relative}
+.dfan img{position:absolute;max-height:74%;max-width:40%;object-fit:contain;border-radius:${Math.round(w * 0.012)}px;box-shadow:0 ${Math.round(w * 0.02)}px ${Math.round(w * 0.05)}px rgba(0,0,0,.35)}
+.dtotal{font-family:var(--f-mono);font-size:${Math.round(w * 0.03)}px;opacity:.75;font-variant-numeric:tabular-nums}
+.dshot{flex:1;min-height:0;border-radius:${Math.round(w * 0.02)}px;overflow:hidden;background:var(--b-soft);box-shadow:0 ${Math.round(w * 0.02)}px ${Math.round(w * 0.05)}px rgba(0,0,0,.2)}
+.dshot img{width:100%;height:100%;object-fit:cover;object-position:top}`;
+
+/** Rangkarte: Bild groß, Preis groß, alles andere leise. */
+export function rankingSlideHtml(kit: BrandKit, slide: RankingSlide, w: number, h: number, brand: string, footer: string): string {
+  const body = `<div class="slide" style="background:linear-gradient(170deg,var(--b-soft),var(--b-bg))"><div class="dwrap">
+<div class="dhead"><span class="drank">${slide.rank}</span><span class="dbrand">${esc(brand)}</span></div>
+<div class="dcard">${slide.imageDataUrl ? `<img src="${slide.imageDataUrl}">` : ""}</div>
+<div><div class="dname">${esc(slide.name)}</div><div class="dset">${esc(slide.setLine)}</div>
+<div class="dprice">${esc(slide.price)}</div>${slide.change ? `<div class="dchange">${esc(slide.change)}</div>` : ""}</div>
+${dataFoot(w, footer)}</div></div>`;
+  return base(kit, w, h, body, dataCss(w));
+}
+
+/** Cover: worum es geht, was die Liste zusammen wert ist, drei Karten angedeutet. */
+export function rankingCoverHtml(kit: BrandKit, a: { title: string; totalLabel: string; images: (string | null)[] }, w: number, h: number, brand: string, footer: string): string {
+  const imgs = a.images.filter((x): x is string => Boolean(x)).slice(0, 3);
+  // Der Versatz bleibt bewusst klein: bei 0,26·w ragten die aeusseren Karten
+  // ueber den Slide-Rand hinaus und wurden abgeschnitten.
+  const fan = imgs.map((src, i) => {
+    const off = (i - (imgs.length - 1) / 2) * 0.17;
+    const mid = i === Math.floor(imgs.length / 2);
+    return `<img src="${src}" style="transform:translateX(${Math.round(off * w)}px) rotate(${(off * 30).toFixed(1)}deg) scale(${mid ? 1 : 0.9});z-index:${mid ? 2 : 1}">`;
+  }).join("");
+  const body = `<div class="slide" style="background:var(--b-primary);color:var(--b-on-primary)"><div class="dwrap">
+<div class="dhead"><span class="dbrand">${esc(brand)}</span></div>
+<div class="dfan">${fan}</div>
+<div><h1 style="font-size:${Math.round(w * 0.085)}px">${esc(a.title)}</h1><div class="dtotal" style="margin-top:.6em">${esc(a.totalLabel)}</div></div>
+${dataFoot(w, footer)}</div></div>`;
+  return base(kit, w, h, body, dataCss(w));
+}
+
+/** Abschluss: Produkt-Screenshot, ein Satz, der Link bzw. der Bio-Hinweis. */
+export function rankingCtaHtml(kit: BrandKit, a: { line: string; linkLabel: string; imageDataUrl: string | null }, w: number, h: number, brand: string, footer: string): string {
+  const body = `<div class="slide"><div class="dwrap">
+<div class="dhead"><span class="dbrand">${esc(brand)}</span></div>
+${a.imageDataUrl ? `<div class="dshot"><img src="${a.imageDataUrl}"></div>` : `<div class="dfan"></div>`}
+<div><h1 style="font-size:${Math.round(w * (a.line.length > 70 ? 0.056 : a.line.length > 45 ? 0.064 : 0.072))}px">${esc(a.line)}</h1><div class="dset" style="opacity:.85">${esc(a.linkLabel)}</div></div>
+${dataFoot(w, footer)}</div></div>`;
+  return base(kit, w, h, body, dataCss(w));
+}
+
 export function pinHtml(kit: BrandKit, overlay: string, brand: string, url: string, imageDataUrl: string | null): string {
   const w = 1000, h = 1500;
   return base(kit, w, h, `<div class="slide" style="background:var(--b-primary);color:var(--b-on-primary)"><div class="meta"><span>${esc(brand)}</span></div>${imageDataUrl ? `<div class="img"><img src="${imageDataUrl}"></div>` : `<div style="flex:1"></div>`}<div><h1 style="font-size:${Math.round(w * 0.085)}px">${esc(overlay)}</h1><p style="opacity:.85">${esc(url.replace(/^https?:\/\//, ""))}</p></div></div>`);

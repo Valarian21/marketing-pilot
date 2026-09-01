@@ -264,3 +264,70 @@ Offen:
   beschränkt wird – siehe DECISIONS.
 - Der Schnappschuss ist stündlich; ein Set, das Binderplan gerade erst synchronisiert hat, ist im
   Pilot also bis zu eine Stunde später sichtbar. Für Content unkritisch.
+
+## Shot 7 – Daten-Carousel + Plattform-Pakete: **fertig** (2026-09-01)
+
+Erledigt:
+- **Neues Format `data_carousel`** (`shared/schemas.ts`), dazu `DataQuery` (Bereich, Umfang,
+  Preisbasis, Countdown) und an `ContentRequest` die Felder `dataQuery`, `bundlePlatforms`,
+  `language` (`de|en|both`). Ein Lauf erzeugt ein **Bündel**: mehrere ContentPieces mit
+  gemeinsamen Slides, aber je Plattform eigener Caption, eigenem Hashtag-Satz und eigener
+  Link-Regel. Zusammengehalten über `meta.bundleId` (= ID des Leit-Stücks).
+- **Ranking-Vorlagen** in `agents/studio/render.ts`: `rankingSlideHtml` (Kartenbild groß mit
+  weichem Glow, Rang-Pill in DM Mono, Preis in `tabular-nums`, Pfeil-Variante für Bewegungen),
+  `rankingCoverHtml` (Titel, Gesamtwert, drei gefächerte Karten), `rankingCtaHtml`
+  (Produkt-Screenshot, ein Satz, Link bzw. „Link in Bio“). Auf **jeder** Slide die Fußzeile
+  `Preise: Cardmarket-Trend · Stand TT.MM.JJJJ · binderplan.app`.
+- **Generator** `agents/studio/data-content.ts`: Provider-Abfrage → Bilder laden → Slides
+  deterministisch bauen → **ein** LLM-Aufruf für Titel, Cover-Titel, Hook, CTA-Zeile und je
+  Plattform Caption + Hashtags → Kritiker-Runde nur auf die Caption des Leit-Stücks. Die
+  Zahlen gehen bereits **fertig formatiert** in den Prompt („626,08 €“), damit das Modell sie
+  zitiert statt sie zu rechnen; die Rangliste liegt zusätzlich als Prüfspur in `meta.cards`.
+- **Größen je Plattform** statt der festen `SIZES`: 1080×1350 (Instagram/Facebook/LinkedIn/X/
+  Threads/Bluesky), 1080×1920 (TikTok/YouTube), 1000×1500 (Pinterest). Gleiche Größe = gleiche
+  Datei; nur die CTA-Slide gibt es zweimal, weil „Link in Bio“ und die Domain sich unterscheiden.
+- **Hashtag-Politik** zentral in `shared/channels.ts` (`HASHTAG_POLICY`): Instagram 6–10,
+  TikTok 3–6, YouTube 3–5, Facebook/LinkedIn/X/Threads/Bluesky 0–2, Pinterest 0. Die
+  Schreibregeln in `prompts/voice.ts` sind entsprechend parametrisiert — die bisherige globale
+  Regel „max 2 Hashtags“ ist weg. Vorrat je Projekt in `mp_settings hashtags:<projectId>`
+  (`src/server/hashtags.ts`), einmal per LLM vorgeschlagen, danach im Studio-Reiter „Hashtags“
+  editierbar. `applyHashtagPolicy` stutzt auf das Maximum und füllt nur bis zum **Minimum** aus
+  dem Vorrat auf.
+- **`PLATFORM_LIMITS`** um `tiktok: 2200` und `youtube: 5000` ergänzt.
+- **API**: `GET/PUT /projects/:id/hashtags`, `POST /projects/:id/hashtags/suggest`,
+  `GET /content/:id/bundle`, `POST /content/:id/bundle/status` („Alle freigeben“ als ein
+  Vorgang mit einem Audit-Eintrag).
+- **UI**: Studio-Formular kennt „Daten-Carousel“ (nur bei vorhandener Datenquelle) mit Bereich,
+  Umfang, Preisbasis, Reihenfolge, Sprache und Plattform-Auswahl; neuer Reiter „Hashtags“;
+  Freigabe gruppiert Bündel (Plattform-Reiter, „Alle N freigeben“, „Bündel ablehnen“) und zeigt
+  bei Daten-Stücken die Rangliste als aufklappbare Prüfspur; „Zuletzt erzeugt“ zeigt ein Bündel
+  als eine Zeile mit `+n`.
+- **16 neue Tests** (Gesamt **117**): Plattform-Politik, Hashtag-Stutzen/Auffüllen, Bündel-Erzeugung
+  gegen eine Fixture-Datenbank mit vorgefülltem Bildcache (kein Netz), Größen/Caption/Tags je
+  Plattform, geteilte Dateien, exakte Zahlen auf den Slides, CTA nach Link-Regel, Publish-Paket
+  eines Bündel-Mitglieds, Bündel-Freigabe samt Audit, Ablehnung ohne Datenquelle.
+
+Live-Abnahme (2026-09-01, Projekt „Binderplan“, Set `swsh12`, Top 15, vier Plattformen):
+- Erster Lauf **2 min 41 s** (Preise kalt), Neu-Erzeugung danach **1 min 42 s** (54 Dateien).
+  Gesamtwert 867,46 €, Platz 1 Lugia V 186 mit 626,08 € — Zahl für Zahl identisch mit der
+  Vorschau aus Shot 6. Instagram 10 Tags, TikTok 5, Facebook 2, Pinterest 0.
+- Kosten des ganzen Bündels: **0,02 $** (ein Content-Aufruf + zwei Kritiker-Runden).
+- Slides visuell geprüft (Cover, Rang 1, CTA in beiden Link-Varianten, 1080×1350 und 1080×1920).
+- Der Hashtag-Vorschlag lieferte für Binderplan sechs Themengruppen (sammeln, organisation,
+  preise, kaufverkauf, nostalgie, digital) plus DE/EN-Listen.
+
+Gelernt / nachgebessert:
+- Der erste Livelauf schrieb „626.08 €“ in die Caption: der Prompt hatte `toFixed(2)` geliefert.
+  Zahlen gehen jetzt lokalisiert in den Prompt, mit der ausdrücklichen Regel, das Trennzeichen
+  mit zu übernehmen. Ebenso das Datum: `31.8.2026` → `31.08.2026` (zweistellig).
+- Eine Kritiker-Runde reichte nicht (Caption blieb bei 6/10); zwei Runden wie beim Carousel
+  bringen sie auf 7/10.
+- Das Kartenfächer-Cover schnitt die äußeren Karten ab (Versatz 0,26·Breite, Höhe statt Breite
+  begrenzt). Jetzt Versatz 0,17·Breite, `max-width: 40 %`, äußere Karten auf 0,9 skaliert.
+
+Offen:
+- `data_reel` (Shot 8) fehlt noch — der Hook aus diesem Lauf liegt bereits in `meta.hook` bereit.
+- Der Format-Dispatch in „Jetzt ausführen“ (`agents/strategy/execute.ts`) kennt die Daten-Formate
+  noch nicht; laut Plan gehört das zu Shot 8.
+- Die Kosten eines Bündels stehen vollständig am Leit-Stück, die Mitglieder zeigen 0,00 $. Das ist
+  richtig (ein Lauf), in der Liste aber erklärungsbedürftig.

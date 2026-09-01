@@ -1,15 +1,17 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
-import type { BrandKit, ContentPiece, DirectoryStatus, StudioView } from "../../shared/schemas.js";
+import type { BrandKit, ContentPiece, DirectoryStatus, HashtagPools, ProductDataView, StudioView } from "../../shared/schemas.js";
 import { api } from "../api.js";
 import { Button, Card, Notice, PageHeader, Pill, fmtDateTime, type PillKind } from "../components/ui.js";
 import { ProjectNav } from "../components/ProjectNav.js";
 import { fmtUsd } from "../components/Revise.js";
 import { ChannelTag } from "../components/ChannelLink.js";
 
-const TABS = [{ id: "erstellen", label: "Erstellen" }, { id: "brand", label: "Brand-Kit & Stimme" }, { id: "verzeichnisse", label: "Verzeichnisse" }, { id: "geo", label: "GEO-Artikel" }] as const;
+const TABS = [{ id: "erstellen", label: "Erstellen" }, { id: "brand", label: "Brand-Kit & Stimme" }, { id: "hashtags", label: "Hashtags" }, { id: "verzeichnisse", label: "Verzeichnisse" }, { id: "geo", label: "GEO-Artikel" }] as const;
 type Tab = (typeof TABS)[number]["id"];
-const FORMAT_LABEL: Record<string, string> = { text: "Text-Post", carousel: "Carousel", pin: "Pinterest-Pin", image: "Bild (KI)", ad_creative: "Ad-Hintergrund (KI)", article: "GEO-Artikel", directory_entry: "Directory-Eintrag", video: "Video", community_reply: "Community-Antwort" };
+const FORMAT_LABEL: Record<string, string> = { text: "Text-Post", carousel: "Carousel", pin: "Pinterest-Pin", image: "Bild (KI)", ad_creative: "Ad-Hintergrund (KI)", article: "GEO-Artikel", directory_entry: "Directory-Eintrag", video: "Video", community_reply: "Community-Antwort", data_carousel: "Daten-Carousel" };
+/** Plattformen, die ein Daten-Bündel bedienen kann - Reihenfolge = Vorschlag im Formular. */
+const BUNDLE_PLATFORMS = ["instagram", "tiktok", "pinterest", "facebook", "bluesky", "x"] as const;
 const STATUS: Record<ContentPiece["status"], { label: string; kind: PillKind }> = { draft: { label: "Entwurf", kind: "todo" }, review: { label: "in Freigabe", kind: "review" }, approved: { label: "freigegeben", kind: "done" }, published: { label: "veröffentlicht", kind: "done" }, rejected: { label: "abgelehnt", kind: "kind" } };
 
 export function StudioPage() {
@@ -45,6 +47,7 @@ export function StudioPage() {
 
       {tab === "erstellen" && <CreateTab id={id} view={view} busy={busy} run={run} />}
       {tab === "brand" && <BrandTab id={id} kit={view.brandKit} busy={busy} run={run} />}
+      {tab === "hashtags" && <HashtagTab id={id} busy={busy} run={run} />}
       {tab === "verzeichnisse" && <DirectoriesTab id={id} dirs={view.directories} busy={busy} run={run} />}
       {tab === "geo" && <GeoTab id={id} view={view} busy={busy} run={run} />}
     </>
@@ -61,10 +64,39 @@ function CreateTab({ id, view, busy, run }: { id: string; view: StudioView; busy
   const [template, setTemplate] = useState("clean");
   const [topic, setTopic] = useState(params.get("topic") ?? "");
   const [hint, setHint] = useState(params.get("hint") ?? "");
+
+  // Daten-Carousel: Bereich, Umfang und Bündel-Plattformen
+  const [data, setData] = useState<ProductDataView | null>(null);
+  const [scope, setScope] = useState("");
+  const [n, setN] = useState(15);
+  const [basis, setBasis] = useState("max");
+  const [countdown, setCountdown] = useState(true);
+  const [language, setLanguage] = useState("de");
+  const [bundle, setBundle] = useState<string[]>(["instagram", "tiktok", "pinterest", "facebook"]);
+
+  useEffect(() => { void (async () => { try { setData(await api<ProductDataView>(`/projects/${id}/data`)); } catch { setData(null); } })(); }, [id]);
+  useEffect(() => {
+    if (scope || !data?.sets.length) return;
+    const first = data.sets.find((x) => x.region === "intl") ?? data.sets[0]!;
+    setScope(`set:${first.id}`);
+  }, [data, scope]);
+
+  const hasData = Boolean(data?.status.available);
   const submit = (e: FormEvent) => {
     e.preventDefault();
+    if (format === "data_carousel") {
+      const [art, wert] = scope.split(":");
+      void run("create", () => api(`/projects/${id}/content`, { method: "POST", json: {
+        format, topic, hint, language, bundlePlatforms: bundle,
+        platform: bundle[0] ?? "instagram",
+        dataQuery: { kind: "top", ...(art === "set" ? { set: wert } : { era: wert }), n, priceBasis: basis, countdown },
+      } }));
+      return;
+    }
     void run("create", () => api(`/projects/${id}/content`, { method: "POST", json: { format, platform: format === "pin" ? "pinterest" : platform, template, topic, hint } }));
   };
+  const toggle = (p: string) => setBundle((cur) => (cur.includes(p) ? cur.filter((x) => x !== p) : [...cur, p]));
+
   return (
     <>
       <Card className="mp-form-card">
@@ -72,18 +104,49 @@ function CreateTab({ id, view, busy, run }: { id: string; view: StudioView; busy
           <div className="mp-form mp-form--row">
             <label className="mp-field mp-field--short"><span>Format</span>
               <select value={format} onChange={(e) => setFormat(e.target.value)}>
-                <option value="text">Text-Post</option><option value="carousel">Carousel (PNG 1080²/1080×1350)</option><option value="pin">Pinterest-Pin (1000×1500)</option><option value="image">Bild / Thumbnail (KI)</option><option value="ad_creative">Ad-Hintergrund (KI)</option>
+                <option value="text">Text-Post</option><option value="carousel">Carousel (PNG 1080²/1080×1350)</option>
+                {hasData && <option value="data_carousel">Daten-Carousel (Rangliste)</option>}
+                <option value="pin">Pinterest-Pin (1000×1500)</option><option value="image">Bild / Thumbnail (KI)</option><option value="ad_creative">Ad-Hintergrund (KI)</option>
               </select></label>
             {format === "text" && <label className="mp-field mp-field--short"><span>Plattform</span><select value={platform} onChange={(e) => setPlatform(e.target.value)}>{["linkedin", "x", "threads", "bluesky", "facebook", "instagram"].map((p) => <option key={p} value={p}>{p}</option>)}</select></label>}
             {format === "carousel" && <><label className="mp-field mp-field--short"><span>Plattform</span><select value={platform} onChange={(e) => setPlatform(e.target.value)}><option value="instagram">instagram</option><option value="linkedin">linkedin</option></select></label>
               <label className="mp-field mp-field--short"><span>Layout</span><select value={template} onChange={(e) => setTemplate(e.target.value)}>{["clean", "bold", "screenshot", "list", "story"].map((t) => <option key={t} value={t}>{t}</option>)}</select></label></>}
-            <label className="mp-field"><span>Thema / Blickwinkel</span><input value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="z. B. „Sonntagabend-Vorbereitung in 10 Minuten“" /></label>
+            {format !== "data_carousel" && <label className="mp-field"><span>Thema / Blickwinkel</span><input value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="z. B. „Sonntagabend-Vorbereitung in 10 Minuten“" /></label>}
           </div>
+
+          {format === "data_carousel" && data && (
+            <>
+              <div className="mp-form mp-form--row">
+                <label className="mp-field"><span>Bereich</span>
+                  <select value={scope} onChange={(e) => setScope(e.target.value)}>
+                    <optgroup label="Ären">{data.eras.map((x) => <option key={x.id} value={`era:${x.id}`}>{x.name} ({x.setCount} Sets)</option>)}</optgroup>
+                    <optgroup label="Sets (international)">{data.sets.filter((x) => x.region === "intl").map((x) => <option key={x.id} value={`set:${x.id}`}>{x.name} · {x.releaseDate.slice(0, 4)}</option>)}</optgroup>
+                    <optgroup label="Sets (Japan)">{data.sets.filter((x) => x.region === "jp").map((x) => <option key={x.id} value={`set:${x.id}`}>{x.name} · {x.releaseDate.slice(0, 4)}</option>)}</optgroup>
+                  </select></label>
+                <label className="mp-field mp-field--short"><span>Umfang</span><select value={n} onChange={(e) => setN(Number(e.target.value))}>{[10, 15, 20].map((v) => <option key={v} value={v}>Top {v}</option>)}</select></label>
+                <label className="mp-field mp-field--short"><span>Preisbasis</span><select value={basis} onChange={(e) => setBasis(e.target.value)}><option value="max">teuerste Variante</option><option value="normal">normal</option><option value="holo">holo</option></select></label>
+                <label className="mp-field mp-field--short"><span>Reihenfolge</span><select value={countdown ? "1" : "0"} onChange={(e) => setCountdown(e.target.value === "1")}><option value="1">Countdown ({n} → 1)</option><option value="0">Platz 1 zuerst</option></select></label>
+                <label className="mp-field mp-field--short"><span>Sprache</span><select value={language} onChange={(e) => setLanguage(e.target.value)}><option value="de">Deutsch</option><option value="en">Englisch</option><option value="both">beide (zwei Bündel)</option></select></label>
+              </div>
+              <fieldset className="mp-field">
+                <span>Plattformen im Bündel <span className="mp-muted mp-small">gleiche Slides, eigene Caption, eigene Hashtags</span></span>
+                <div className="mp-inline">{BUNDLE_PLATFORMS.map((p) => (
+                  <label key={p} className="mp-inline mp-small"><input type="checkbox" checked={bundle.includes(p)} onChange={() => toggle(p)} /> {p}</label>
+                ))}</div>
+              </fieldset>
+            </>
+          )}
+
           <div className="mp-form mp-form--row">
+            {format === "data_carousel" && <label className="mp-field"><span>Thema / Blickwinkel (optional)</span><input value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="z. B. „für Wiedereinsteiger“" /></label>}
             <label className="mp-field"><span>Hinweis (optional)</span><input value={hint} onChange={(e) => setHint(e.target.value)} placeholder="Ton, Zahlen, was rein soll, was nicht" /></label>
-            <div className="mp-form-actions"><Button type="submit" variant="primary" disabled={busy !== null || !view.hasBrief}>{busy === "create" ? "Agent schreibt …" : "Entwurf erzeugen"}</Button></div>
+            <div className="mp-form-actions"><Button type="submit" variant="primary" disabled={busy !== null || !view.hasBrief || (format === "data_carousel" && (!scope || bundle.length === 0))}>{busy === "create" ? "Agent arbeitet …" : format === "data_carousel" ? "Bündel erzeugen" : "Entwurf erzeugen"}</Button></div>
           </div>
-          <p className="mp-small mp-muted">Jeder Entwurf durchläuft den AI-Tell-Prüfer (Score 0–10, unter 7 wird automatisch überarbeitet) und landet in der Freigabe. {view.screenshots.length} Produkt-Screenshots stehen für Carousel und Pin bereit.</p>
+          <p className="mp-small mp-muted">
+            {format === "data_carousel"
+              ? "Rang, Name, Set und Preis kommen unverändert aus den Produktdaten — das Modell schreibt nur Titel, Caption und Hashtags. Jede Slide trägt die Preisquelle mit Stand-Datum."
+              : `Jeder Entwurf durchläuft den AI-Tell-Prüfer (Score 0–10, unter 7 wird automatisch überarbeitet) und landet in der Freigabe. ${view.screenshots.length} Produkt-Screenshots stehen für Carousel und Pin bereit.`}
+          </p>
         </form>
       </Card>
       <PieceList id={id} pieces={view.recent} />
@@ -91,7 +154,14 @@ function CreateTab({ id, view, busy, run }: { id: string; view: StudioView; busy
   );
 }
 
-export function PieceList({ id, pieces }: { id: string; pieces: ContentPiece[] }) {
+/** Die ID des Bündels, zu dem ein Stück gehört — oder null für Einzelstücke. */
+export const bundleIdOf = (p: ContentPiece): string | null => (typeof p.meta["bundleId"] === "string" ? p.meta["bundleId"] : null);
+
+export function PieceList({ id, pieces: all }: { id: string; pieces: ContentPiece[] }) {
+  // Ein Bündel ist eine Zeile: das Leit-Stück, die Geschwister nur als Zahl.
+  const members = new Map<string, number>();
+  for (const p of all) { const b = bundleIdOf(p); if (b) members.set(b, (members.get(b) ?? 0) + 1); }
+  const pieces = all.filter((p) => { const b = bundleIdOf(p); return !b || b === p.id; });
   if (!pieces.length) return <Card className="mp-empty"><h2>Noch keine Stücke</h2><p>Erzeuge oben einen Entwurf oder führe eine Agent-Aufgabe aus.</p></Card>;
   return (
     <Card>
@@ -102,7 +172,7 @@ export function PieceList({ id, pieces }: { id: string; pieces: ContentPiece[] }
           <tr key={p.id}>
             <td>{p.title || "(ohne Titel)"}</td>
             <td><Pill kind="kind">{FORMAT_LABEL[p.format] ?? p.format}</Pill></td>
-            <td className="mp-small"><ChannelTag name={p.channel} projectId={id} className="" /></td>
+            <td className="mp-small"><ChannelTag name={p.channel} projectId={id} className="" />{(members.get(p.id) ?? 0) > 1 && <span className="mp-muted"> +{members.get(p.id)! - 1}</span>}</td>
             <td className="mp-small" title={`Zuletzt bearbeitet ${fmtDateTime(p.updatedAt)}`}>{fmtDateTime(p.createdAt)}</td>
             <td className="mp-num-cell">{p.aiTellScore === null ? "–" : `${p.aiTellScore}/10`}</td>
             <td className="mp-num-cell">{fmtUsd(p.costUsd)}</td>
@@ -213,5 +283,44 @@ function GeoTab({ id, view, busy, run }: { id: string; view: StudioView; busy: s
       </Card>
       <PieceList id={id} pieces={articles} />
     </>
+  );
+}
+
+/**
+ * Hashtag-Vorräte: einmal per Modell vorschlagen lassen, danach von Hand
+ * pflegen. Wie viele Tags ein Stück bekommt, steht hier bewusst nicht —
+ * das entscheidet die Plattform (Instagram 6–10, LinkedIn höchstens 2).
+ */
+function HashtagTab({ id, busy, run }: { id: string; busy: string | null; run: Run }) {
+  const [pools, setPools] = useState<HashtagPools | null>(null);
+  const load = useCallback(async () => { setPools(await api<HashtagPools>(`/projects/${id}/hashtags`)); }, [id]);
+  useEffect(() => { void load(); }, [load]);
+  if (!pools) return <Card><p className="mp-muted">lädt …</p></Card>;
+
+  const asText = (list: string[]) => list.join(" ");
+  const toList = (v: string) => v.split(/[\s,]+/).filter(Boolean);
+  const set = (patch: Partial<HashtagPools>) => setPools({ ...pools, ...patch });
+  const setTopic = (key: string, value: string) => set({ topics: { ...pools.topics, [key]: toList(value) } });
+
+  return (
+    <Card>
+      <div className="mp-card-head">
+        <h2>Hashtag-Vorräte</h2>
+        <div className="mp-inline">
+          <Button disabled={busy !== null} onClick={() => void run("tags-suggest", async () => { setPools(await api<HashtagPools>(`/projects/${id}/hashtags/suggest`, { method: "POST" })); })}>{busy === "tags-suggest" ? "schlägt vor …" : pools.suggestedAt ? "Neu vorschlagen" : "Vorschlagen lassen"}</Button>
+          <Button variant="primary" disabled={busy !== null} onClick={() => void run("tags-save", async () => { setPools(await api<HashtagPools>(`/projects/${id}/hashtags`, { method: "PUT", json: pools })); })}>Speichern</Button>
+        </div>
+      </div>
+      <p className="mp-small mp-muted">Ohne „#“, durch Leerzeichen getrennt. Wie viele davon in einem Beitrag landen, entscheidet die Plattform: Instagram 6–10, TikTok 3–6, Facebook 0–2, LinkedIn/X höchstens 2, Pinterest keine.</p>
+      <label className="mp-field"><span>Marke</span><input value={asText(pools.brand)} onChange={(e) => set({ brand: toList(e.target.value) })} placeholder="binderplan pokemonbinder" /></label>
+      <div className="mp-form mp-form--row">
+        <label className="mp-field"><span>Deutsch</span><input value={asText(pools.byLanguage.de)} onChange={(e) => set({ byLanguage: { ...pools.byLanguage, de: toList(e.target.value) } })} /></label>
+        <label className="mp-field"><span>Englisch</span><input value={asText(pools.byLanguage.en)} onChange={(e) => set({ byLanguage: { ...pools.byLanguage, en: toList(e.target.value) } })} /></label>
+      </div>
+      {Object.entries(pools.topics).map(([key, list]) => (
+        <label key={key} className="mp-field"><span>Thema „{key}“</span><input value={asText(list)} onChange={(e) => setTopic(key, e.target.value)} /></label>
+      ))}
+      <p className="mp-small mp-muted">{pools.suggestedAt ? `Vorschlag vom ${new Date(pools.suggestedAt).toLocaleDateString("de-DE")} — seitdem deine Liste.` : "Noch kein Vorschlag erzeugt."}</p>
+    </Card>
   );
 }

@@ -7,6 +7,7 @@ import { Button, Card, Notice, PageHeader, Pill, fmtDateTime, type PillKind } fr
 import { ProjectNav } from "../components/ProjectNav.js";
 import { markdownToHtml } from "../../shared/markdown.js";
 import { VideoGallery } from "./Video.js";
+import { bundleIdOf } from "./Studio.js";
 import { ReviseBox, fmtUsd } from "../components/Revise.js";
 
 const STATUS: Record<ContentPiece["status"], { label: string; kind: PillKind }> = { draft: { label: "Entwurf", kind: "todo" }, review: { label: "in Freigabe", kind: "review" }, approved: { label: "freigegeben", kind: "done" }, published: { label: "veröffentlicht", kind: "done" }, rejected: { label: "abgelehnt", kind: "kind" } };
@@ -24,10 +25,23 @@ export function ReviewPage() {
   const load = useCallback(async () => { try { setPieces(await api<ContentPiece[]>(`/projects/${id}/content`)); } catch (e) { setError(e instanceof Error ? e.message : "Fehler"); } }, [id]);
   useEffect(() => { void load(); }, [load]);
 
-  const queue = useMemo(() => pieces.filter((p) => p.status === "review"), [pieces]);
+  // Ein Bündel (Shot 7) steht als ein Eintrag in der Warteschlange: vier Plattform-
+  // Stücke aus einem Lauf sind eine Entscheidung, nicht vier.
+  const queue = useMemo(() => {
+    const seen = new Set<string>();
+    return pieces.filter((p) => p.status === "review").filter((p) => {
+      const b = bundleIdOf(p);
+      if (!b) return true;
+      if (seen.has(b)) return false;
+      seen.add(b);
+      return true;
+    });
+  }, [pieces]);
   const focusId = params.get("piece");
   const current = pieces.find((p) => p.id === focusId) ?? queue[0] ?? null;
-  const idx = current ? queue.findIndex((p) => p.id === current.id) : -1;
+  const bundleId = current ? bundleIdOf(current) : null;
+  const siblings = useMemo(() => (bundleId ? pieces.filter((p) => bundleIdOf(p) === bundleId).sort((a, b) => (a.id === bundleId ? -1 : b.id === bundleId ? 1 : a.channel.localeCompare(b.channel))) : []), [pieces, bundleId]);
+  const idx = current ? queue.findIndex((p) => p.id === current.id || (bundleId !== null && bundleIdOf(p) === bundleId)) : -1;
   useEffect(() => setDraft(null), [current?.id]);
 
   const go = (p: ContentPiece | undefined) => { if (p) setParams({ piece: p.id }); else setParams({}); };
@@ -46,6 +60,19 @@ export function ReviewPage() {
       await load();
       if (status === "approved" && thenPackage) { void navigate(`/projects/${id}/publish/${current.id}`); return; }
       if (status === "approved" || status === "rejected") go(queue[idx + 1] ?? queue.find((p) => p.id !== current.id));
+    } catch (e) { setError(e instanceof Error ? e.message : "Fehler"); }
+    finally { setBusy(false); }
+  };
+  /** Ein Klick fuer das ganze Buendel - serverseitig ein Audit-Eintrag statt vier. */
+  const actBundle = async (status: "approved" | "rejected") => {
+    if (!current || !bundleId) return;
+    const reason = status === "rejected" ? window.prompt(`Grund der Ablehnung für alle ${siblings.length} Stücke (wird protokolliert):`) : "";
+    if (status === "rejected" && !reason) return;
+    setBusy(true); setError(null);
+    try {
+      await api(`/content/${current.id}/bundle/status`, { method: "POST", json: { status, reason: reason ?? "" } });
+      await load();
+      go(queue.find((p) => bundleIdOf(p) !== bundleId && p.id !== current.id));
     } catch (e) { setError(e instanceof Error ? e.message : "Fehler"); }
     finally { setBusy(false); }
   };
@@ -72,6 +99,11 @@ export function ReviewPage() {
                 {idx >= 0 && <span className="mp-label">{idx + 1}/{queue.length}</span>}
               </div>
             </div>
+            {siblings.length > 1 && (
+              <nav className="mp-subnav" aria-label="Plattformen im Bündel">
+                {siblings.map((p) => <button key={p.id} type="button" className={`mp-subnav-item mp-linkbtn${p.id === current.id ? " is-active" : ""}`} onClick={() => go(p)}>{p.channel}{p.status !== "review" && ` · ${STATUS[p.status].label}`}</button>)}
+              </nav>
+            )}
             <Preview piece={current} text={draft ?? current.body} />
             {current.format === "video" ? (
               <details className="mp-details mp-small"><summary className="mp-label">Skript als Text (bearbeiten in der <Link to={`/projects/${id}/studio/video?piece=${current.id}`}>Video-Fabrik</Link>)</summary><pre className="mp-pre">{current.body}</pre></details>
@@ -81,7 +113,8 @@ export function ReviewPage() {
               </label>
             )}
             <div className="mp-form-actions mp-review-actions">
-              {current.status === "review" && <><Button variant="primary" disabled={busy} onClick={() => void act("approved", true)}>Freigeben &amp; posten</Button><Button disabled={busy} onClick={() => void act("approved")}>Nur freigeben</Button><Button variant="danger" disabled={busy} onClick={() => void act("rejected")}>Ablehnen</Button></>}
+              {current.status === "review" && siblings.length > 1 && <><Button variant="primary" disabled={busy} onClick={() => void actBundle("approved")}>Alle {siblings.length} freigeben</Button><Button variant="danger" disabled={busy} onClick={() => void actBundle("rejected")}>Bündel ablehnen</Button></>}
+              {current.status === "review" && <><Button variant="primary" disabled={busy} onClick={() => void act("approved", true)}>{siblings.length > 1 ? "Nur dieses freigeben & posten" : "Freigeben & posten"}</Button><Button disabled={busy} onClick={() => void act("approved")}>Nur freigeben</Button><Button variant="danger" disabled={busy} onClick={() => void act("rejected")}>Ablehnen</Button></>}
               {current.status !== "published" && <Button disabled={busy} onClick={() => void act("regenerate")}>{busy ? "…" : "Neu generieren"}</Button>}
               {draft !== null && draft !== current.body && current.status !== "published" && <Button disabled={busy} onClick={() => void saveText()}>Text speichern</Button>}
               {(current.status === "approved" || current.status === "published") && <Link className="mp-btn mp-btn--primary" to={`/projects/${id}/publish/${current.id}`}>Publish-Paket</Link>}
@@ -106,6 +139,25 @@ export function ReviewPage() {
 /** Preview roughly the way the platform shows it. */
 function Preview({ piece, text }: { piece: ContentPiece; text: string }) {
   const platform = String(piece.meta["platform"] ?? piece.channel).toLowerCase();
+  if (piece.format === "data_carousel") {
+    // Alle Slides dieses Stuecks haben dieselbe Groesse - die Plattform bestimmt sie.
+    const cards = Array.isArray(piece.meta["cards"]) ? (piece.meta["cards"] as { rank: number; name: string; setName: string; localId: string; priceEur: number }[]) : [];
+    return (
+      <div className="mp-preview">
+        <div className="mp-shots">{piece.assets.map((a) => <figure key={a} className="mp-shot"><img src={`/api/mp/assets/${a}/file`} alt="" loading="lazy" /></figure>)}</div>
+        <p className="mp-small mp-muted">{String(piece.meta["scopeLabel"] ?? "")} · {String(piece.meta["size"] ?? "")} · {cards.length} Karten · {String(piece.meta["footer"] ?? "")}</p>
+        {cards.length > 0 && (
+          <details className="mp-details mp-small"><summary className="mp-label">Zahlen der Rangliste (kommen so aus den Produktdaten)</summary>
+            <table className="mp-table"><tbody>{cards.map((c) => (
+              <tr key={c.rank}><td className="mp-nowrap mp-muted">{c.rank}</td><td>{c.name}</td><td className="mp-muted">{c.setName} {c.localId}</td>
+                <td className="mp-num-cell">{c.priceEur.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €</td></tr>))}
+            </tbody></table>
+          </details>
+        )}
+        <div className="mp-post"><p>{text}</p></div>
+      </div>
+    );
+  }
   if (piece.format === "carousel" || piece.format === "pin" || piece.format === "image" || piece.format === "ad_creative" || piece.format === "directory_entry") {
     const sizes = piece.format === "carousel" ? ["1080x1080"] : null;
     return (

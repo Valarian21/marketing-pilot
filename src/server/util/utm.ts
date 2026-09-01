@@ -19,4 +19,4 @@ export function platformFromChannel(channel: string, fallback = "other"): string
   return platformKey(channel) ?? fallback;
 }
 
-export const PLATFORM_LIMITS: Record<string, number> = { x: 280, threads: 500, bluesky: 300, linkedin: 3000, facebook: 2000, instagram: 2200, pinterest: 500, other: 2000 };
+export const PLATFORM_LIMITS: Record<string, number> = { x: 280, threads: 500, bluesky: 300, linkedin: 3000, facebook: 2000, instagram: 2200, tiktok: 2200, youtube: 5000, pinterest: 500, other: 2000 };

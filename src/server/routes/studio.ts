@@ -12,7 +12,11 @@ import { finishRun, startRun, writeAudit } from "../audit.js";
 import { getProject } from "../repo/projects.js";
 import { extractBrandKit, loadBrandKit, saveBrandKit } from "../agents/studio/brandkit.js";
 import { deriveVoiceProfile } from "../agents/studio/voice.js";
-import { buildPackage, directoriesFor, generateContent, getPiece, regenerateContent, studioView, type StudioContext } from "../agents/studio/generate.js";
+import { buildPackage, directoriesFor, generateContent, getPiece, pieceOf, regenerateContent, studioView, withCosts, type StudioContext } from "../agents/studio/generate.js";
+import { bundlePieces, suggestHashtagPools } from "../agents/studio/data-content.js";
+import { loadHashtags, saveHashtags } from "../hashtags.js";
+import { listPersonas } from "../agents/analysis/personas.js";
+import { planChannelNames } from "../channels.js";
 import { revisePiece } from "../agents/revise.js";
 
 export function studioRoutes(app: FastifyInstance, db: Db, getCtx: () => StudioContext | null): void {
@@ -115,6 +119,52 @@ export function studioRoutes(app: FastifyInstance, db: Db, getCtx: () => StudioC
     return reply.type("text/html; charset=utf-8").header("Content-Disposition", `attachment; filename="${String(piece.meta["slug"] ?? "artikel")}.html"`).send(fs.readFileSync(abs, "utf8"));
   });
 
+  // --- Hashtag-Vorraete (Shot 7) --------------------------------------------
+  // Wie viele Tags ein Stueck traegt, entscheidet die Plattform-Politik in
+  // shared/channels.ts. Hier steht nur, aus welchem Vorrat sie kommen duerfen.
+
+  r.get("/api/mp/projects/:projectId/hashtags", { schema: { params: P, response: { 200: s.HashtagPools } } }, async (req) => loadHashtags(db, req.params.projectId));
+
+  r.put("/api/mp/projects/:projectId/hashtags", { schema: { params: P, body: s.HashtagPools, response: { 200: s.HashtagPools } } }, async (req) => {
+    const saved = saveHashtags(db, req.params.projectId, req.body);
+    writeAudit(db, { user: req.user, action: "hashtags.edit", entityType: "project", entityId: req.params.projectId, projectId: req.params.projectId, content: { brand: saved.brand.length, topics: Object.keys(saved.topics).length } });
+    return saved;
+  });
+
+  r.post("/api/mp/projects/:projectId/hashtags/suggest", { schema: { params: P, response: { 200: s.HashtagPools, 400: s.ErrorBody, 503: s.ErrorBody } } }, async (req, reply) => {
+    const ctx = getCtx(); if (!ctx) return noKey(reply);
+    const project = getProject(db, req.params.projectId);
+    const brief = s.Brief.safeParse(project?.brief);
+    if (!brief.success) return reply.code(400).send({ detail: "Erst die Analyse ausführen (Brief nötig)." });
+    return suggestHashtagPools(ctx, req.params.projectId, { brief: brief.data, personas: listPersonas(ctx, req.params.projectId), channels: planChannelNames(db, req.params.projectId) });
+  });
+
+  // --- Buendel (Shot 7): ein Lauf, mehrere Plattform-Stuecke -----------------
+
+  r.get("/api/mp/content/:id/bundle", { schema: { params: s.IdParams, response: { 200: z.array(s.ContentPiece), 404: s.ErrorBody } } }, async (req, reply) => {
+    const piece = getPiece(db, req.params.id);
+    if (!piece) return reply.code(404).send({ detail: "Stück nicht gefunden." });
+    const bundleId = String(piece.meta["bundleId"] ?? "");
+    if (!bundleId) return [piece];
+    return withCosts(db, bundlePieces(db, piece.projectId, bundleId).map(pieceOf));
+  });
+
+  /** „Alle freigeben“: ein Klick, ein Audit-Eintrag, statt vier einzelner PATCHes. */
+  r.post("/api/mp/content/:id/bundle/status", { schema: { params: s.IdParams, body: z.object({ status: z.enum(["approved", "rejected"]), reason: z.string().default("") }), response: { 200: z.array(s.ContentPiece), 400: s.ErrorBody, 404: s.ErrorBody } } }, async (req, reply) => {
+    const piece = getPiece(db, req.params.id);
+    if (!piece) return reply.code(404).send({ detail: "Stück nicht gefunden." });
+    const bundleId = String(piece.meta["bundleId"] ?? "");
+    if (!bundleId) return reply.code(400).send({ detail: "Dieses Stück gehört zu keinem Bündel." });
+    if (req.body.status === "rejected" && !req.body.reason.trim()) return reply.code(400).send({ detail: "Ablehnen braucht einen Grund." });
+    const rows = bundlePieces(db, piece.projectId, bundleId).filter((x) => x.status !== "published");
+    const ts = nowIso();
+    for (const row of rows) {
+      db.update(t.mpContentPieces).set({ status: req.body.status, rejectionReason: req.body.reason, updatedAt: ts }).where(eq(t.mpContentPieces.id, row.id)).run();
+    }
+    writeAudit(db, { user: req.user, action: `content.bundle.${req.body.status}`, entityType: "content_piece", entityId: bundleId, projectId: piece.projectId, content: { pieces: rows.map((x) => x.id), platforms: rows.map((x) => x.channel), reason: req.body.reason } });
+    return withCosts(db, bundlePieces(db, piece.projectId, bundleId).map(pieceOf));
+  });
+
   r.get("/api/mp/projects/:projectId/directories", { schema: { params: P, response: { 200: z.array(s.DirectoryDef) } } }, async (req) => directoriesFor(db, req.params.projectId));
 
   r.put("/api/mp/projects/:projectId/directories", { schema: { params: P, body: z.array(s.DirectoryDef), response: { 200: z.array(s.DirectoryDef) } } }, async (req) => {
@@ -125,6 +175,6 @@ export function studioRoutes(app: FastifyInstance, db: Db, getCtx: () => StudioC
 
   r.post("/api/mp/projects/:projectId/directories/:slug/prepare", { schema: { params: P.extend({ slug: z.string() }), response: { 201: s.ContentPiece, 400: s.ErrorBody, 503: s.ErrorBody } } }, async (req, reply) => {
     const ctx = getCtx(); if (!ctx) return noKey(reply);
-    return reply.code(201).send(await generateContent(ctx, req.params.projectId, { format: "directory_entry", directory: req.params.slug, topic: "", hint: "" }, req.user));
+    return reply.code(201).send(await generateContent(ctx, req.params.projectId, s.ContentRequest.parse({ format: "directory_entry", directory: req.params.slug }), req.user));
   });
 }

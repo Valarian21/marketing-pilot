@@ -13,6 +13,8 @@ export const Assignee = z.enum(["agent", "human"]);
 export const ApprovalLevel = z.enum(["auto", "review", "human_only"]);
 export const ContentFormat = z.enum([
   "text", "carousel", "image", "pin", "video", "article", "directory_entry", "community_reply", "ad_creative",
+  /** Shot 7: Rangliste aus echten Produktdaten - Slides deterministisch, nur die Caption kommt vom LLM. */
+  "data_carousel",
 ]);
 export const ContentStatus = z.enum(["draft", "review", "approved", "published", "rejected"]);
 export const AssetKind = z.enum(["screenshot", "recording", "voiceover", "render", "image"]);
@@ -354,6 +356,29 @@ export const VoiceSampleCreate = z.object({ text: z.string().trim().min(40, "Min
 export const Platform = z.enum(["x", "threads", "bluesky", "linkedin", "facebook", "instagram", "pinterest", "youtube", "tiktok", "website", "other"]);
 export const ArticleKind = z.enum(["comparison", "best_tools", "faq"]);
 export const CarouselTemplate = z.enum(["clean", "bold", "screenshot", "list", "story"]);
+/**
+ * Abfrage an den Produktdaten-Provider (Shot 6), so wie sie an einem Stueck
+ * haengen bleibt. Genau dieses Objekt erzeugt spaeter auch die Serien-Engine,
+ * deshalb steht es hier und nicht in den Routen-Schemata.
+ */
+export const DataQuery = z.object({
+  kind: z.enum(["top", "movers"]).default("top"),
+  set: z.string().default(""),
+  era: z.string().default(""),
+  region: z.enum(["intl", "jp"]).default("intl"),
+  n: z.number().int().min(3).max(20).default(15),
+  priceBasis: z.enum(["max", "normal", "holo"]).default("max"),
+  minPrice: z.number().min(0).optional(),
+  days: z.union([z.literal(7), z.literal(30)]).default(7),
+  direction: z.enum(["up", "down"]).default("up"),
+  minBaseEur: z.number().min(0).default(5),
+  /** Countdown 15 -> 1 (Spannung) statt Platz 1 zuerst. */
+  countdown: z.boolean().default(true),
+});
+
+/** Sprache eines Stuecks. `both` erzeugt das Bundle doppelt (DE + EN). */
+export const ContentLanguage = z.enum(["de", "en", "both"]);
+
 export const ContentRequest = z.object({
   format: ContentFormat,
   platform: Platform.optional(),
@@ -365,6 +390,23 @@ export const ContentRequest = z.object({
   directory: z.string().optional(),
   template: CarouselTemplate.optional(),
   screenshotAssetIds: z.array(Id).optional(),
+  /** Nur fuer Daten-Formate: welcher Ausschnitt der Produktdaten die Slides fuellt. */
+  dataQuery: DataQuery.optional(),
+  /** Ein Lauf, mehrere Plattform-Stuecke mit gemeinsamen Assets. Leer = nur `platform`. */
+  bundlePlatforms: z.array(z.string()).default([]),
+  language: ContentLanguage.default("de"),
+});
+
+/**
+ * Hashtag-Vorrat je Projekt (`mp_settings` `hashtags:<projectId>`). Wie viele
+ * davon ein Stueck traegt, entscheidet die Plattform-Politik in
+ * `shared/channels.ts` - nicht das Modell.
+ */
+export const HashtagPools = z.object({
+  brand: z.array(z.string()).default([]),
+  topics: z.record(z.string(), z.array(z.string())).default({}),
+  byLanguage: z.object({ de: z.array(z.string()).default([]), en: z.array(z.string()).default([]) }).default({ de: [], en: [] }),
+  suggestedAt: Iso.nullable().default(null),
 });
 export const RegenerateRequest = z.object({ hint: z.string().default("") });
 
@@ -615,6 +657,9 @@ export type Platform = z.infer<typeof Platform>;
 export type ArticleKind = z.infer<typeof ArticleKind>;
 export type CarouselTemplate = z.infer<typeof CarouselTemplate>;
 export type ContentRequest = z.infer<typeof ContentRequest>;
+export type DataQuery = z.infer<typeof DataQuery>;
+export type ContentLanguage = z.infer<typeof ContentLanguage>;
+export type HashtagPools = z.infer<typeof HashtagPools>;
 export type DirectoryDef = z.infer<typeof DirectoryDef>;
 export type DirectoryStatus = z.infer<typeof DirectoryStatus>;
 export type PublishPackage = z.infer<typeof PublishPackage>;

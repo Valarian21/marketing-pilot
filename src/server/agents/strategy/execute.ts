@@ -51,7 +51,7 @@ export async function executeTask(ctx: AgentContext, taskId: string, user: HostU
   }
   // directory entries need a directory slug - they are prepared from the studio's "Verzeichnisse" tab
   if (task.type === "content" && (format === "text" || format === "carousel" || format === "pin")) {
-    const req: s.ContentRequest = { format, topic: task.title, hint: task.description, taskId: task.id, ...(platform && s.Platform.safeParse(platform).success ? { platform: platform as s.ContentRequest["platform"] } : {}) };
+    const req = s.ContentRequest.parse({ format, topic: task.title, hint: task.description, taskId: task.id, ...(platform && s.Platform.safeParse(platform).success ? { platform } : {}) });
     return generateContent(ctx as unknown as StudioContext, task.projectId, req, user);
   }
   ctx.db.update(t.mpTasks).set({ status: "in_progress", updatedAt: nowIso() }).where(eq(t.mpTasks.id, taskId)).run();

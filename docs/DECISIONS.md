@@ -174,3 +174,60 @@ bleibt der alte Wert stehen, statt die Karte aus der Liste zu werfen — dieselb
 Binderplan selbst anwendet. Ehrlich bleibt das, weil `priceStand` einer Liste immer den **ältesten**
 Stand ihrer Karten trägt, nicht den jüngsten: die Fußzeile einer Slide sagt damit im Zweifel ein
 älteres Datum, nie ein zu schönes.
+
+## Ein Bündel teilt seine Slides, nicht seine Captions (2026-09-01, Shot 7)
+
+Der Plan wollte „einmal erzeugen, überall posten". Die Frage war, wie fein geschnitten wird.
+Entschieden: **Slides sind gemeinsam, Text ist es nie.** Alle Plattform-Stücke eines Laufs
+zeigen auf dieselben PNG-Dateien; unterschiedlich sind Caption, Hashtag-Zahl, Link-Regel und
+Textlängen-Limit. Nur zwei Dinge zwingen zu einer zweiten Datei: eine andere Bildgröße
+(TikTok 1080×1920, Pinterest 1000×1500) und die CTA-Slide, weil auf Instagram/TikTok „Link in
+Bio" steht und sonst die Domain.
+
+Damit trägt jedes Mitglied fremde Asset-IDs. `buildPackage` löst Assets deshalb jetzt über die
+Liste **am Stück** auf (`piece.assets`) und nur ersatzweise über `mp_assets.content_piece_id` —
+die Dateien selbst hängen am Leit-Stück, damit Speicher-Tab und Aufräumen eine klare Heimat
+haben. Neu erzeugt wird ein Bündel immer als Ganzes und immer über sein Leit-Stück, dessen ID
+dabei erhalten bleibt (sonst brächen alle Links auf das Stück).
+
+**Nicht umgesetzt:** eine Plattform in zwei Größen. Der Plan las sich stellenweise so, als
+bekäme Instagram 1080×1350 *und* 1080×1920. Hochgeladen wird aber ein Seitenverhältnis; ein
+Story-Schnitt wäre ein eigenes Stück mit eigener Caption. Das kommt, wenn Shot 10 Slots je
+Kanal kennt — vorher wären es nur unbenutzte Dateien.
+
+## Hashtags sind Plattform-Politik, kein Modell-Geschmack (2026-09-01, Shot 7)
+
+Bis Shot 6 stand „max 2 Hashtags" fest in den Schreibregeln — richtig für LinkedIn und X, falsch
+für Instagram und TikTok, wo die Nischen-Discovery genau darüber läuft. Die Zahl steht jetzt in
+`HASHTAG_POLICY` (`shared/channels.ts`) und geht von dort in den Prompt.
+
+Was das Modell vorschlägt, wird trotzdem nachbearbeitet: `applyHashtagPolicy` stutzt auf das
+Maximum und füllt aus dem Projekt-Vorrat **nur bis zum Minimum** auf. Der Grund für die
+Asymmetrie: die Vorschläge des Modells passen zum konkreten Text, der Vorrat ist allgemein.
+Bis zum Maximum aufzufüllen würde jeden Beitrag mit denselben zehn Tags enden lassen.
+
+Der Vorrat selbst wird einmal per LLM vorgeschlagen und gehört danach dem Menschen — es gibt
+bewusst keinen Weg, auf dem er sich selbst nachschärft.
+
+## Ohne Kartenbild keine Slide — und die Rangfolge ist die der Liste (2026-09-01, Shot 7)
+
+`topCards` liefert die Rangfolge; ein Bild lädt der Provider aber nicht immer (alte Sets, Lücken
+im TCGdex-Bestand). Eine Slide ohne Karte ist wertlos, also wird über den Bedarf hinaus geholt
+(n + 5) und übersprungen, was kein Bild hergibt.
+
+Damit ist Rang 3 auf der Slide der dritte Platz **der veröffentlichten Liste**, nicht zwingend
+der dritte des Sets. Die Alternative — Ränge der Abfrage beibehalten und Lücken zeigen (1, 2, 4,
+…) — wäre auf einer Slide schlicht ein Fehler. Ehrlich bleibt es, weil die übersprungenen Karten
+namentlich in den Hinweisen am Stück stehen und der Gesamtwert über die tatsächlich gezeigten
+Karten gerechnet wird, nicht über die ursprüngliche Abfrage.
+
+## Zahlen gehen fertig formatiert in den Prompt (2026-09-01, Shot 7)
+
+Der erste Livelauf schrieb „626.08 €" in die Instagram-Caption, obwohl auf der Slide „626,08 €"
+stand: der Prompt hatte die Preise mit `toFixed(2)` übergeben, und das Modell hat brav zitiert,
+was es bekam. Preise, Gesamtwert und Datum werden jetzt vor dem Prompt lokalisiert, und die
+Regel sagt ausdrücklich, dass auch das Trennzeichen zum Zitat gehört.
+
+Das ist die allgemeine Form der Shot-6-Regel „Zahlen sind heilig": heilig ist nicht der Wert,
+sondern die **Zeichenkette**, die der Leser sieht. Deshalb bildet `changeLabel` die Pfeil-Zeile
+(„▲ +38 % in 7 Tagen") auch nur einmal — Slide und Caption tragen dieselbe.

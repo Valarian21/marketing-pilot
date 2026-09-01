@@ -99,3 +99,46 @@ export function saneTitle(title: string, body: string, fallback = ""): string {
   const line = body.split("\n").map((l) => l.replace(/^[#>*\-\s]+/, "").trim()).find((l) => l.length >= 4) ?? "";
   return (line.slice(0, 80) || fallback || t || "(ohne Titel)").trim();
 }
+
+/**
+ * Wie viele Hashtags auf welcher Plattform sinnvoll sind (Shot 7).
+ *
+ * Bis Shot 6 galt global „max 2“ — richtig für LinkedIn und X, falsch für
+ * Instagram und TikTok, wo die Nischen-Discovery über genau diese Tags läuft.
+ * Die Zahlen stehen zentral hier, damit Prompt, Renderer und Publish-Paket
+ * dieselbe Politik lesen.
+ */
+export interface HashtagPolicy { min: number; max: number; note: string }
+
+export const HASHTAG_POLICY: Record<string, HashtagPolicy> = {
+  instagram: { min: 6, max: 10, note: "Discovery läuft über Hashtags — Mischung aus Marke, Thema und Sprache." },
+  tiktok: { min: 3, max: 6, note: "Wenige, präzise Tags; der Text selbst ist das stärkere Signal." },
+  youtube: { min: 3, max: 5, note: "Tags in die Beschreibung, nicht in den Titel." },
+  pinterest: { min: 0, max: 0, note: "Keine Hashtags — Pinterest sucht über Titel und Beschreibung." },
+  facebook: { min: 0, max: 2, note: "Höchstens zwei, sonst wirkt es wie Spam." },
+  linkedin: { min: 0, max: 2, note: "Höchstens zwei, nur echte Community-Tags." },
+  x: { min: 0, max: 2, note: "Höchstens zwei, nur echte Community-Tags." },
+  threads: { min: 0, max: 2, note: "Höchstens zwei." },
+  bluesky: { min: 0, max: 2, note: "Höchstens zwei." },
+  reddit: { min: 0, max: 0, note: "Keine Hashtags — Reddit kennt sie nicht." },
+  website: { min: 0, max: 0, note: "Keine Hashtags." },
+  directory: { min: 0, max: 0, note: "Keine Hashtags." },
+  newsletter: { min: 0, max: 0, note: "Keine Hashtags." },
+};
+
+export const DEFAULT_HASHTAG_POLICY: HashtagPolicy = { min: 0, max: 2, note: "Höchstens zwei." };
+
+export function hashtagPolicy(platform: string): HashtagPolicy {
+  return HASHTAG_POLICY[platform.trim().toLowerCase()] ?? DEFAULT_HASHTAG_POLICY;
+}
+
+/** Ein Tag normalisiert: genau ein führendes #, keine Leerzeichen. */
+export function normalizeHashtag(raw: string): string {
+  const body = raw.trim().replace(/^#+/, "").replace(/\s+/g, "");
+  return body ? `#${body}` : "";
+}
+
+/** Wie der Link in den Beitrag kommt: bei App-Uploads gibt es keinen klickbaren Link. */
+export function linkRuleFor(platform: string): "bio" | "link" {
+  return PLATFORMS[platform.trim().toLowerCase()]?.appOnly ? "bio" : "link";
+}
