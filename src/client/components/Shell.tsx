@@ -13,6 +13,7 @@ const NAV: { group: string; to: string; label: string; icon: IconName; end?: boo
   { group: "Planung", to: "/timeline", label: "Timeline", icon: "timeline" },
   { group: "Planung", to: "/tasks", label: "Aufgaben", icon: "tasks" },
   { group: "Inhalte", to: "/studio", label: "Content Studio", icon: "studio" },
+  { group: "Inhalte", to: "/series", label: "Serien", icon: "series" },
   { group: "Inhalte", to: "/media", label: "Medien", icon: "media" },
   { group: "Inhalte", to: "/review", label: "Freigaben", icon: "review" },
   { group: "Wachstum", to: "/community", label: "Community", icon: "community" },

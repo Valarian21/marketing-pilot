@@ -299,3 +299,27 @@ export const mpCardPrices = sqliteTable("mp_card_prices", {
   source: text("source").notNull().default("tcgdex"),
   fetchedAt: text("fetched_at").notNull(),
 }, (t) => [index("mp_card_prices_fetched").on(t.fetchedAt)]);
+
+// --- Serien (Shot 9) -----------------------------------------------------------
+
+/**
+ * Wiederkehrender Content: „jeden Montag ein Top-Set-Carousel". Die Serie hält
+ * ihren eigenen Zustand — wann sie zuletzt lief und welche Sets/Ären sie schon
+ * verbraucht hat (`coverage`), damit sich nichts wiederholt.
+ */
+export const mpContentSeries = sqliteTable("mp_content_series", {
+  id: text("id").primaryKey(),
+  projectId: projectRef(),
+  name: text("name").notNull(),
+  /** top_set | top_era | price_movers | new_set | artist_spotlight | guess_the_price | binder_showcase | custom */
+  kind: text("kind").notNull(),
+  params: text("params").notNull().default("{}"),
+  /** { days: ["mon","thu"], hour: 9 } - Wochentage und Stunde in Europe/Berlin. */
+  cadence: text("cadence").notNull().default("{}"),
+  status: text("status").notNull().default("active"),
+  lastRunAt: text("last_run_at"),
+  /** { used: [{ key, at }] } - was die Serie schon gezeigt hat. */
+  coverage: text("coverage").notNull().default("{}"),
+  createdAt: createdAt(),
+  updatedAt: text("updated_at").notNull(),
+}, (t) => [index("mp_series_project").on(t.projectId)]);

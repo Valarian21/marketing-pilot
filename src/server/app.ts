@@ -19,6 +19,7 @@ import { strategyRoutes } from "./routes/strategy.js";
 import { taskRoutes } from "./routes/tasks.js";
 import { studioRoutes } from "./routes/studio.js";
 import { videoRoutes } from "./routes/video.js";
+import { seriesRoutes } from "./routes/series.js";
 import { loopRoutes, EVENTS_PUBLIC_PATH } from "./routes/loop.js";
 import { storageRoutes } from "./routes/storage.js";
 import { mediaRoutes } from "./routes/media.js";
@@ -83,6 +84,7 @@ export async function buildApp(env: Env, opts: { host?: HostAdapter; dbFile?: st
   taskRoutes(app, db, () => ctx);
   studioRoutes(app, db, () => ctx);
   videoRoutes(app, db, () => ctx);
+  seriesRoutes(app, db);
   loopRoutes(app, db, env, () => ctx);
   storageRoutes(app, db, () => env.MP_DATA_DIR);
   mediaRoutes(app, db, () => env.MP_DATA_DIR);

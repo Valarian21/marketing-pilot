@@ -320,11 +320,13 @@ export class BinderplanProvider implements ProductDataProvider {
       `SELECT h.card_id,
               (SELECT eur FROM price_history WHERE card_id = h.card_id AND datum >= ? ORDER BY datum ASC  LIMIT 1) base,
               (SELECT eur FROM price_history WHERE card_id = h.card_id AND datum >= ? ORDER BY datum DESC LIMIT 1) last,
-              (SELECT max(datum) FROM price_history WHERE card_id = h.card_id AND datum >= ?) stand
+              (SELECT max(datum) FROM price_history WHERE card_id = h.card_id AND datum >= ?) stand,
+              (SELECT count(*) FROM price_history WHERE card_id = h.card_id AND datum >= ?) points
        FROM (SELECT DISTINCT card_id FROM price_history WHERE datum >= ?) h`,
-    ).all(since, since, since, since) as { card_id: string; base: number | null; last: number | null; stand: string | null }[];
+    ).all(since, since, since, since, since) as { card_id: string; base: number | null; last: number | null; stand: string | null; points: number }[];
 
-    const withHistory = rows.filter((r) => r.base !== null && r.last !== null && r.base !== r.last);
+    const minPoints = Math.max(2, q.minPoints ?? 2);
+    const withHistory = rows.filter((r) => r.base !== null && r.last !== null && r.base !== r.last && r.points >= minPoints);
     const moves = withHistory
       .filter((r) => (r.base as number) >= q.minBaseEur)
       .map((r) => ({ id: r.card_id, base: r.base as number, last: r.last as number, stand: r.stand ?? "", delta: (r.last as number) - (r.base as number) }))

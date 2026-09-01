@@ -21,6 +21,11 @@ import { hashtagPolicy, linkRuleFor } from "../src/shared/channels.js";
 import { PLATFORM_LIMITS } from "../src/server/util/utm.js";
 import { processNextJob, writeHeartbeat } from "../src/server/jobs.js";
 import { renderSlideshowJob } from "../src/server/agents/video/slideshow.js";
+import { SERIES_STEPS } from "../src/server/agents/series/job.js";
+import { seriesRunJob } from "../src/server/agents/series/job.js";
+import { getSeries, jammedSeries } from "../src/server/agents/series/series.js";
+import { berlinParts } from "../src/server/agents/series/time.js";
+import { enqueueDue } from "../src/server/scheduler.js";
 import type { VideoContext } from "../src/server/agents/video/pipeline.js";
 import { fakeHost } from "./helpers.js";
 
@@ -401,3 +406,123 @@ describe("Daten-Reel (Shot 8)", () => {
 function a0(args: string[]): number {
   return args.lastIndexOf("-i", args.indexOf("-filter_complex")) + 1;
 }
+
+
+describe("Serien (Shot 9)", () => {
+  let seriesId = "";
+  /** Der Slideshow-Job wird hier nicht gebraucht - er darf die Warteschlange nur nicht blockieren. */
+  const handlers = { "series.run": seriesRunJob, "video.slideshow": async () => ({ übersprungen: true }) };
+  const drain = async () => { for (let i = 0; i < 6; i++) if (!(await processNextJob(built.ctx!, handlers))) break; };
+
+  it("legt eine Serie aus dem Katalog an", async () => {
+    const res = await built.app.inject({
+      method: "POST", url: `/api/mp/projects/${pid}/series`, headers: auth,
+      payload: { name: "Top-Set montags", kind: "top_set", cadence: { days: ["mon"], hour: 9 }, params: { n: 5, formats: ["data_carousel"], platforms: ["instagram"] } },
+    });
+    expect(res.statusCode).toBe(201);
+    const series = res.json();
+    seriesId = series.id;
+    expect(series.status).toBe("active");
+    expect(series.nextRunAt).not.toBeNull();
+    expect(series.coverage.used).toEqual([]);
+    // Vorgaben aus dem Katalog werden ergänzt, nicht überschrieben
+    expect(series.params.minWeeksBetweenRepeats).toBe(26);
+  });
+
+  it("lehnt Vorlagen ab, die es noch nicht gibt", async () => {
+    const res = await built.app.inject({
+      method: "POST", url: `/api/mp/projects/${pid}/series`, headers: auth,
+      payload: { name: "Artist", kind: "artist_spotlight" },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().detail).toContain("Shot 11");
+  });
+
+  it("ändert beim PATCH nur, was genannt wurde", async () => {
+    // Live-Falle vom 01.09.: `SeriesParams.partial()` lieferte fuer weggelassene
+    // Felder trotzdem die Vorgabewerte - ein PATCH der Sperrfrist setzte damit
+    // Umfang und Plattformen zurueck.
+    const vorher = getSeries(built.db, seriesId)!;
+    expect(vorher.params.n).toBe(5);
+    expect(vorher.params.platforms).toEqual(["instagram"]);
+    const res = await built.app.inject({ method: "PATCH", url: `/api/mp/series/${seriesId}`, headers: auth, payload: { params: { minWeeksBetweenRepeats: 4 } } });
+    expect(res.statusCode).toBe(200);
+    const nachher = res.json();
+    expect(nachher.params.minWeeksBetweenRepeats).toBe(4);
+    expect(nachher.params.n).toBe(5);
+    expect(nachher.params.platforms).toEqual(["instagram"]);
+    expect(nachher.cadence.days).toEqual(["mon"]);
+  });
+
+  it("erzeugt beim Lauf ein Bündel, eine Aufgabe und merkt sich den Bereich", async () => {
+    writeHeartbeat(built.db);
+    const res = await built.app.inject({ method: "POST", url: `/api/mp/series/${seriesId}/run`, headers: auth, payload: { preview: false } });
+    expect(res.statusCode).toBe(202);
+    expect(res.json().steps.map((x: { name: string }) => x.name)).toEqual(SERIES_STEPS);
+    await drain();
+
+    const series = getSeries(built.db, seriesId)!;
+    expect(series.lastRunAt).not.toBeNull();
+    expect(series.coverage.used.map((u) => u.key)).toEqual(["swsh12"]);
+
+    const pieces: ContentPiece[] = (await built.app.inject({ method: "GET", url: `/api/mp/projects/${pid}/content`, headers: auth })).json();
+    const fromSeries = pieces.filter((p) => (p.meta["request"] as { seriesId?: string } | undefined)?.seriesId === seriesId);
+    expect(fromSeries.length).toBe(1);
+    expect(fromSeries[0]!.status).toBe("review");
+
+    const tasks = (await built.app.inject({ method: "GET", url: `/api/mp/projects/${pid}/tasks`, headers: auth })).json() as { title: string; type: string; outputRefs: string[] }[];
+    const posten = tasks.find((t) => t.title.startsWith("Posten:"));
+    expect(posten?.type).toBe("publish");
+    expect(posten?.outputRefs).toContain(fromSeries[0]!.id);
+  }, 60_000);
+
+  it("verbraucht bei einer Vorschau die Rotation nicht", async () => {
+    const vorher = getSeries(built.db, seriesId)!;
+    const res = await built.app.inject({ method: "POST", url: `/api/mp/series/${seriesId}/run`, headers: auth, payload: { preview: true } });
+    expect(res.statusCode).toBe(202);
+    await drain();
+    const nachher = getSeries(built.db, seriesId)!;
+    expect(nachher.lastRunAt).toBe(vorher.lastRunAt);
+    expect(nachher.coverage.used).toEqual(vorher.coverage.used);
+    // ein Stück ist trotzdem entstanden - nur ohne Aufgabe
+    const pieces: ContentPiece[] = (await built.app.inject({ method: "GET", url: `/api/mp/projects/${pid}/content`, headers: auth })).json();
+    expect(pieces.filter((p) => (p.meta["request"] as { seriesId?: string } | undefined)?.seriesId === seriesId && p.meta["bundleLead"] === true).length).toBe(2);
+  }, 60_000);
+
+  it("meldet einen Stau, sobald zwei Ausgaben unfreigegeben liegen", () => {
+    const jam = jammedSeries(built.db, pid);
+    expect(jam.length).toBe(1);
+    expect(jam[0]!.pending).toBe(2);
+    expect(jam[0]!.name).toBe("Top-Set montags");
+  });
+
+  it("zeigt den Stau im Cockpit", async () => {
+    const today = (await built.app.inject({ method: "GET", url: `/api/mp/projects/${pid}/today`, headers: auth })).json();
+    expect(today.seriesStuck.length).toBe(1);
+    expect(today.seriesStuck[0].pending).toBe(2);
+  });
+
+  it("wird vom Scheduler eingeplant, wenn ihr Slot erreicht ist — und nur einmal am Tag", async () => {
+    const now = new Date();
+    const heute = berlinParts(now);
+    // Kadenz auf jetzt stellen und den letzten Lauf zurückdatieren
+    await built.app.inject({ method: "PATCH", url: `/api/mp/series/${seriesId}`, headers: auth, payload: { cadence: { days: [heute.day], hour: heute.hour } } });
+    built.db.run(`UPDATE mp_content_series SET last_run_at = '2020-01-01T00:00:00.000Z' WHERE id = '${seriesId}'` as never);
+    built.db.run("DELETE FROM mp_settings WHERE key LIKE 'sched:series:%'" as never);
+
+    const erste = enqueueDue(built.db, now).filter((d) => d.kind === "series.run");
+    expect(erste.map((d) => d.seriesId)).toContain(seriesId);
+    // zweiter Takt am selben Tag: nichts mehr
+    const zweite = enqueueDue(built.db, now).filter((d) => d.kind === "series.run");
+    expect(zweite).toEqual([]);
+  });
+
+  it("pausiert, führt nicht mehr aus und löscht wieder", async () => {
+    const paused = (await built.app.inject({ method: "PATCH", url: `/api/mp/series/${seriesId}`, headers: auth, payload: { status: "paused" } })).json();
+    expect(paused.status).toBe("paused");
+    expect(paused.nextRunAt).toBeNull();
+    const del = await built.app.inject({ method: "DELETE", url: `/api/mp/series/${seriesId}`, headers: auth });
+    expect(del.statusCode).toBe(200);
+    expect(getSeries(built.db, seriesId)).toBeNull();
+  });
+});

@@ -89,6 +89,12 @@ export interface PriceMoversQuery {
   minBaseEur: number;
   n: number;
   region?: "intl" | "jp";
+  /**
+   * Mindestzahl an Messpunkten im Fenster. Zwei Punkte ergeben rechnerisch eine
+   * Bewegung, aber keine Aussage — bei duenn gehandelten Karten schwankt der
+   * Trendpreis wild. Default 2 (alles), Serien setzen mehr.
+   */
+  minPoints?: number;
 }
 
 export interface PriceMover extends RankedCard {

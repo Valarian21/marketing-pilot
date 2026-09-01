@@ -10,13 +10,16 @@ import * as t from "./db/schema.js";
 import { nowIso, parseJson, type Db } from "./db/index.js";
 import { enqueueJob, hasActiveJob } from "./jobs.js";
 import { currentVersion } from "./agents/strategy/plan.js";
+import { dueSeries } from "./agents/series/series.js";
+import { SERIES_STEPS } from "./agents/series/job.js";
+import { berlinParts } from "./agents/series/time.js";
 
 const DAY = 86_400_000;
 const stampKey = (kind: string, pid: string) => `sched:${kind}:${pid}`;
 const lastRun = (db: Db, kind: string, pid: string): number => { const r = db.select().from(t.mpSettings).where(eq(t.mpSettings.key, stampKey(kind, pid))).get(); return r ? Date.parse(r.value) : 0; };
 const stamp = (db: Db, kind: string, pid: string, at: string): void => { db.insert(t.mpSettings).values({ key: stampKey(kind, pid), value: at, updatedAt: nowIso() }).onConflictDoUpdate({ target: t.mpSettings.key, set: { value: at, updatedAt: nowIso() } }).run(); };
 
-export interface Due { kind: "community.scan" | "weekly.report" | "geo.measure"; projectId: string }
+export interface Due { kind: "community.scan" | "weekly.report" | "geo.measure" | "series.run"; projectId: string; seriesId?: string }
 
 /** Pure: which jobs are due right now. */
 export function dueJobs(db: Db, now = new Date()): Due[] {
@@ -32,6 +35,14 @@ export function dueJobs(db: Db, now = new Date()): Due[] {
     // Sunday from 18:00 UTC on, once per week
     if (hasPlan && now.getUTCDay() === 0 && now.getUTCHours() >= 18 && now.getTime() - lastRun(db, "weekly.report", p.id) > 6 * DAY) due.push({ kind: "weekly.report", projectId: p.id });
   }
+  // Serien bringen ihre Faelligkeit selbst mit (Kadenz in Europe/Berlin, Shot 9).
+  // Der Zeitstempel hier ist nur die Bremse gegen Dauerschleifen: ein Lauf, der
+  // scheitert oder bewusst ausfaellt, wird erst am naechsten Tag wieder versucht.
+  for (const series of dueSeries(db, now)) {
+    const last = lastRun(db, `series:${series.id}`, series.projectId);
+    if (last && berlinParts(new Date(last)).date === berlinParts(now).date) continue;
+    due.push({ kind: "series.run", projectId: series.projectId, seriesId: series.id });
+  }
   return due;
 }
 
@@ -39,6 +50,12 @@ export function enqueueDue(db: Db, now = new Date()): Due[] {
   const out: Due[] = [];
   for (const d of dueJobs(db, now)) {
     if (hasActiveJob(db, d.projectId, d.kind)) continue;
+    if (d.kind === "series.run" && d.seriesId) {
+      enqueueJob(db, { projectId: d.projectId, kind: d.kind, payload: { seriesId: d.seriesId, scheduled: true }, steps: SERIES_STEPS });
+      stamp(db, `series:${d.seriesId}`, d.projectId, now.toISOString());
+      out.push(d);
+      continue;
+    }
     enqueueJob(db, { projectId: d.projectId, kind: d.kind, payload: { projectId: d.projectId, scheduled: true }, steps: [d.kind === "community.scan" ? "scan" : d.kind === "weekly.report" ? "report" : "geo"] });
     stamp(db, d.kind, d.projectId, now.toISOString());
     out.push(d);

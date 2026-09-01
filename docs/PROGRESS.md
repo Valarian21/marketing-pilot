@@ -387,3 +387,60 @@ Offen:
 - Musikbett: `assets/music/` enthält weiterhin nur den synthetischen Platzhalter.
 - Die Wort-Captions sind bei ausgeschriebenen Zahlen lang („sechshundertsechsundzwanzig") und
   füllen die Zeile allein. Stört nicht, könnte aber eine eigene Umbruchregel vertragen.
+
+## Shot 9 – Serien-Engine (wiederkehrender Content): **fertig** (2026-09-01)
+
+Erledigt:
+- **Tabelle `mp_content_series`** (Migration `0010`) mit Name, Art, Parametern, Kadenz, Status,
+  `lastRunAt` und `coverage`. Die `coverage` ist der eigentliche Kern: sie merkt sich, welche
+  Sets und Ären schon dran waren.
+- **Zeitrechnung in Europe/Berlin** (`agents/series/time.ts`): `berlinParts`, `berlinInstant`,
+  `nextRunAt`, `isDue`. „Montags um 9" heißt neun Uhr in Berlin, sommers wie winters — in UTC
+  gerechnet wanderte der Slot zweimal im Jahr. Der Doppellauf-Schutz ist der Vergleich des
+  **Berliner Datums** des letzten Laufs; er überlebt jeden Neustart.
+- **Katalog** (`agents/series/catalog.ts`) mit acht Vorlagen. Fünf laufen (Top-Set, Top-Ära,
+  Neues Set, Preis-Raketen, Fester Bereich), drei stehen mit Begründung als „kommt mit Shot 11"
+  drin (Artist Spotlight, Errate den Preis, Binder-Showcase).
+- **Rotation** (`pickScope`): Sets nach Erscheinungsdatum, neueste zuerst; alles innerhalb der
+  Sperrfrist (Default 26 Wochen) fällt raus; ist nichts mehr frei, kommt das am längsten
+  Ungezeigte — lieber eine Wiederholung nach einem Jahr als ein ausgefallener Slot. „Neues Set"
+  feuert nur bei Sets unter 60 Tagen und fällt sonst bewusst aus.
+- **Lauf** (`runSeries`): Bereich wählen → Bündel über denselben `generateContent`-Weg wie von
+  Hand → Publish-Aufgabe je Bündel (`mp_tasks`, mit `outputRefs` aufs Leit-Stück) → Coverage und
+  `lastRunAt` fortschreiben → Audit. `preview: true` erzeugt dasselbe, **verbraucht die Rotation
+  aber nicht**.
+- **Job `series.run`** im Worker; der Scheduler plant fällige Serien ein (ein Versuch je Tag und
+  Serie, damit ein Fehlschlag keine Dauerschleife wird). Ein bewusst ausgefallener Lauf endet
+  als **erfolgreicher** Job mit Begründung — sonst stünde jede Woche ein rotes „fehlgeschlagen",
+  wo alles richtig lief.
+- **Stau-Erkennung**: liegen zwei Leit-Stücke einer Serie unfreigegeben herum, sagt das Cockpit
+  das leise („entweder freigeben oder die Kadenz senken") und die Serien-Seite markiert die Zeile.
+- **UI** `/mp/projects/:id/series` (+ Sidebar-Eintrag „Serien"): laufende Serien mit Kadenz,
+  letztem und nächstem Lauf, Zahl der gezeigten Bereiche, Pausieren/Fortsetzen/Löschen,
+  „Jetzt ausführen" und „Vorschau"; darunter die letzten Läufe und der Katalog mit Anlege-Formular.
+- **22 neue Tests** (Gesamt **160**): Berliner Zeitrechnung inkl. Sommer/Winter, Fälligkeit und
+  Doppellauf-Schutz, Rotation über simulierte Wochen (inkl. Rückgriff und Sperrfrist),
+  Ären-Rotation, Ausfall von „Neues Set", Katalog-Vollständigkeit, sowie ein Durchstich über die
+  API: anlegen → laufen lassen → Aufgabe und Coverage prüfen → Vorschau ohne Zustandsänderung →
+  Stau → Scheduler-Einplanung → pausieren und löschen.
+
+Live-Abnahme (2026-09-01, Binderplan): zwei Serien angelegt („Top-Set montags",
+„Preis-Raketen samstags"), beide Läufe über den Worker durchgeführt.
+
+**Die offene Frage aus Shot 6 ist damit beantwortet** — und der erste Lauf hat gezeigt, warum
+sie wichtig war: „Preis-Raketen" lieferte Nachtara +416 %, Absol +437 %, Simsala +508 %. Alles
+korrekt gemessen, alles unbrauchbar. Die Serie filtert jetzt auf mindestens 4 Messpunkte je
+Karte **und** höchstens 200 % Ausschlag; bleiben zu wenige übrig, fällt der Lauf aus. Danach
+führte Glurak (Grundset) mit +18,4 % auf 672,50 € — eine Aussage, die man posten kann.
+
+Gelernt / nachgebessert:
+- **PATCH setzte stillschweigend zurück**: `SeriesParams.partial()` liefert für weggelassene
+  Felder trotzdem die Vorgabewerte, ein PATCH der Sperrfrist setzte damit Umfang und Plattformen
+  zurück. Create und Patch nehmen jetzt lose Teilmengen und prüfen erst das Ergebnis.
+- Auch die Prozentzahl der Bewegung wird lokalisiert („+18,4 %" statt „+18.4 %") — dieselbe
+  Falle wie bei den Preisen in Shot 7.
+
+Offen:
+- Marcel sollte die beiden Grenzwerte (4 Messpunkte, 200 %) gegenlesen. Sie sind konservativ
+  gewählt; wer eine echte Rakete verpassen will, hebt `maxChangePct`.
+- Der Katalog wartet auf Shot 11 für Artist Spotlight, Errate den Preis und Binder-Showcase.

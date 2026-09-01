@@ -71,6 +71,13 @@
       "when": 1788175000188,
       "tag": "0009_unusual_nova",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1788263294071,
+      "tag": "0010_ambitious_ironclad",
+      "breakpoints": true
     }
   ]
 }

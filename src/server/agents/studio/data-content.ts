@@ -65,9 +65,15 @@ const fmtDate = (iso: string, lang: "de" | "en") => {
   return d.toLocaleDateString(lang === "de" ? "de-DE" : "en-GB", { day: "2-digit", month: "2-digit", year: "numeric" });
 };
 
-/** „▲ +38 % in 7 Tagen“ — dieselbe Zeile für Slide und Caption. */
-const changeLabel = (m: PriceMover, lang: "de" | "en") =>
-  `${m.changePct > 0 ? "▲ +" : "▼ "}${m.changePct} % ${lang === "de" ? `in ${m.days} Tagen` : `in ${m.days} days`}`;
+/**
+ * „▲ +38,2 % in 7 Tagen“ — dieselbe Zeile für Slide und Caption.
+ * Auch die Prozentzahl wird lokalisiert: sonst schreibt das Modell sie ab und
+ * es steht „+416.2 %“ in einem deutschen Beitrag.
+ */
+const changeLabel = (m: PriceMover, lang: "de" | "en") => {
+  const pct = Math.abs(m.changePct).toLocaleString(lang === "de" ? "de-DE" : "en-GB", { maximumFractionDigits: 1 });
+  return `${m.changePct > 0 ? "▲ +" : "▼ −"}${pct} % ${lang === "de" ? `in ${m.days} Tagen` : `in ${m.days} days`}`;
+};
 
 const Out = z.object({
   title: z.string().default(""),
@@ -95,8 +101,13 @@ async function loadCards(
 ): Promise<{ loaded: Loaded[]; skipped: string[]; scopeLabel: string; totalEur: number; priceStand: string; coverage: ScopeCoverage | null; withHistory: number }> {
   const want = q.n + IMAGE_SPARE;
   if (q.kind === "movers") {
-    const res = await provider.priceMovers({ days: q.days, direction: q.direction, minBaseEur: q.minBaseEur, n: want, region: q.region });
-    const { loaded, skipped } = await withImages(provider, res.cards, q.n, lang);
+    const res = await provider.priceMovers({ days: q.days, direction: q.direction, minBaseEur: q.minBaseEur, n: want, region: q.region, minPoints: q.minPoints });
+    // Ausreisser aussortieren: ein Trendpreis, der sich in einer Woche vervierfacht,
+    // misst bei duenn gehandelten Karten die Datenlage, nicht den Markt.
+    const plausible = q.maxChangePct > 0 ? res.cards.filter((c) => Math.abs(c.changePct) <= q.maxChangePct) : res.cards;
+    const verworfen = res.cards.length - plausible.length;
+    const { loaded, skipped } = await withImages(provider, plausible, q.n, lang);
+    if (verworfen > 0) skipped.push(`${verworfen} Karten mit über ${q.maxChangePct} % Ausschlag verworfen (unglaubwürdig bei dieser Datenlage)`);
     return { loaded, skipped, scopeLabel: res.scopeLabel, totalEur: 0, priceStand: res.priceStand, coverage: null, withHistory: res.withHistory };
   }
   if (!q.set && !q.era) throw err("Bereich fehlt: Set oder Ära wählen.");

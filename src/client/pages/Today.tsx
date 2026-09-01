@@ -89,6 +89,8 @@ export function TodayPage() {
   if (v.setup.profilesMissing > 0) setupHints.push({ text: `${v.setup.profilesMissing} Kanal-Profil${v.setup.profilesMissing > 1 ? "e" : ""} ohne URL – unten unter „Kanäle & Profile“ eintragen, dann führen alle Kanal-Links direkt auf deine Seiten.`, to: "#profile" });
   if (!v.setup.voiceProfile && v.setup.briefConfirmed) setupHints.push({ text: "Kein Voice-Profil – Texte klingen generisch. 5–20 eigene Texte im Studio hinterlegen.", to: `/projects/${id}/studio?tab=brand` });
   if (!v.setup.eventsSeen && v.setup.planVersion) setupHints.push({ text: "Noch kein Signup gemessen – Snippet/Webhook aus den Insights ins Produkt einbauen.", to: `/projects/${id}/insights` });
+  // Stau statt Fehler: die Serie liefert schneller, als freigegeben wird.
+  for (const st of v.seriesStuck) setupHints.push({ text: `Serie „${st.name}“: ${st.pending} Ausgaben liegen unfreigegeben – entweder freigeben oder die Kadenz senken.`, to: `/projects/${id}/series` });
 
   return (
     <>

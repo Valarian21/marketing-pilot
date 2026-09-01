@@ -277,3 +277,56 @@ stört er ebenfalls nicht.
 Lauf endete mit 500 — nicht nur bei Daten-Formaten, sondern bei jedem Stück, das durch den
 Kritiker geht. Das Schema nimmt jetzt beides und faltet Objekte zu einer Zeile zusammen. Die
 Zeile landet ohnehin nur in den Hinweisen am Stück.
+
+## Serien-Slots rechnen in Berlin, nicht in UTC (2026-09-01, Shot 9)
+
+Zeitstempel bleiben überall UTC — das ist richtig und bleibt so. Ein Serien-Slot ist aber keine
+Zeitmessung, sondern eine Verabredung: „montags um 9" heißt neun Uhr in Berlin. In UTC gerechnet
+wanderte der Beitrag zweimal im Jahr um eine Stunde, und das an einem Tag, an dem niemand daran
+denkt.
+
+`agents/series/time.ts` rechnet deshalb konsequent über `Intl` in `Europe/Berlin`. Der
+Doppellauf-Schutz ist bewusst kein Minutenvergleich, sondern die Frage „lief die Serie heute
+(Berliner Datum) schon?" — das übersteht jeden Neustart und jede Uhrverstellung. Nicht behandelt
+ist die doppelte Stunde der Zeitumstellung; ein Slot um 2 Uhr nachts kann an genau zwei Tagen im
+Jahr eine Stunde danebenliegen. Für Redaktionsslots am Vormittag ohne Belang.
+
+## Lieber eine Wiederholung nach einem Jahr als ein ausgefallener Slot (2026-09-01, Shot 9)
+
+Die Rotation sperrt jedes Set für 26 Wochen. Was passiert, wenn alle Sets gesperrt sind? Zwei
+Möglichkeiten: den Lauf ausfallen lassen oder die Sperre brechen.
+
+Entschieden für **das am längsten Ungezeigte** — bei einem wöchentlichen Kanal ist eine
+Wiederholung nach über einem halben Jahr unauffällig, ein stiller Montag dagegen fällt auf.
+Anders bei „Neues Set": dort ist der Ausfall die richtige Antwort, weil die Serie eine Aussage
+über Aktualität macht. Fällt sie aus, endet der Job **erfolgreich** mit Begründung — ein rotes
+„fehlgeschlagen" für „es gab nichts Neues" wäre eine Lüge über den eigenen Zustand.
+
+## Preis-Raketen brauchen zwei Filter, nicht einen (2026-09-01, Shot 9)
+
+Shot 6 hatte die Frage offen gelassen, ob Binderplans dünner Preisverlauf für eine wöchentliche
+Serie reicht. Der erste echte Lauf hat sie beantwortet: Nachtara +416 %, Absol +437 %, Simsala
++508 % — auf Karten mit drei Messpunkten. Die Zahlen sind korrekt gemessen und trotzdem
+unbrauchbar; bei dünn gehandelten Karten misst der Cardmarket-Trendpreis die Datenlage, nicht
+den Markt.
+
+Ein Filter allein genügt nicht: mehr Messpunkte zu verlangen entfernt die stillen Karten, nicht
+die wilden. Deshalb **beide** Grenzen — mindestens 4 Messpunkte im 7-Tage-Fenster *und*
+höchstens 200 % Ausschlag (`minHistoryPoints`, `maxChangePct`, beide je Serie einstellbar).
+Bleiben danach weniger als fünf Karten übrig, fällt der Lauf aus. Mit den Grenzen führte
+dieselbe Abfrage Glurak mit +18,4 % auf 672,50 € an — eine Aussage, die man posten kann.
+
+Die Alternative aus Shot 6, eine eigene dichtere Preisreihe aufzubauen, bleibt möglich (der
+Nachlader schreibt ohnehin täglich in `mp_card_prices`), ist aber erst in Monaten aussagekräftig.
+
+## Teil-Änderungen dürfen nichts zurücksetzen (2026-09-01, Shot 9)
+
+`SeriesParams.partial()` schien der offensichtliche Typ für einen PATCH — ist er aber nicht: ein
+optionales Feld mit `.default()` liefert beim Parsen trotzdem den Vorgabewert. Ein PATCH, der nur
+die Sperrfrist ändern sollte, setzte damit Umfang und Plattformen still zurück (live passiert und
+erst an den Ausgabedaten aufgefallen).
+
+`SeriesCreate` und `SeriesPatch` nehmen jetzt lose Teilmengen (`z.record`) und prüfen erst das
+**zusammengeführte** Ergebnis gegen `SeriesParams`. Die Validierung geht nicht verloren, sie
+greift eine Ebene später. Wer anderswo im Piloten einen PATCH auf ein Objekt mit Defaults baut,
+sollte dieselbe Falle im Kopf haben.

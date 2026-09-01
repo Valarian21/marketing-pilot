@@ -300,6 +300,8 @@ export const TodayView = z.object({
   agentTasks: z.array(Task),
   progress: z.object({ done: z.number().int(), total: z.number().int() }),
   setup: z.object({ briefConfirmed: z.boolean(), planVersion: z.number().int().nullable(), profilesMissing: z.number().int(), voiceProfile: z.boolean(), eventsSeen: z.boolean() }),
+  /** Serien, deren Ausgaben sich in der Freigabe stapeln (Shot 9). */
+  seriesStuck: z.array(z.object({ id: Id, name: z.string(), pending: z.number().int() })).default([]),
 });
 
 export const ProjectOverview = Project.extend({
@@ -374,6 +376,14 @@ export const DataQuery = z.object({
   days: z.union([z.literal(7), z.literal(30)]).default(7),
   direction: z.enum(["up", "down"]).default("up"),
   minBaseEur: z.number().min(0).default(5),
+  /** Mindestzahl an Messpunkten je Karte im Fenster. */
+  minPoints: z.number().int().min(2).max(30).default(2),
+  /**
+   * Obergrenze der Veraenderung in Prozent, ab der eine „Rakete" nicht mehr
+   * glaubwuerdig ist (0 = keine Grenze). Bei duenn gehandelten Karten springt
+   * der Trendpreis um mehrere hundert Prozent, ohne dass jemand gehandelt haette.
+   */
+  maxChangePct: z.number().min(0).default(0),
   /** Countdown 15 -> 1 (Spannung) statt Platz 1 zuerst. */
   countdown: z.boolean().default(true),
 });
@@ -408,6 +418,8 @@ export const ContentRequest = z.object({
   dataQuery: DataQuery.optional(),
   /** Nur fuer `data_reel`: wie aus den Slides ein Video wird. */
   reel: ReelOptions.optional(),
+  /** Von welcher Serie der Lauf kam (Shot 9) — leer bei Handarbeit. */
+  seriesId: z.string().default(""),
   /** Ein Lauf, mehrere Plattform-Stuecke mit gemeinsamen Assets. Leer = nur `platform`. */
   bundlePlatforms: z.array(z.string()).default([]),
   language: ContentLanguage.default("de"),
@@ -489,6 +501,109 @@ export const ProductDataView = z.object({
   status: ProductDataStatus,
   sets: z.array(ProductSet).default([]),
   eras: z.array(ProductEra).default([]),
+});
+
+// --- Serien (Shot 9) ---------------------------------------------------------
+
+export const SeriesKind = z.enum([
+  "top_set", "top_era", "price_movers", "new_set", "artist_spotlight", "guess_the_price", "binder_showcase", "custom",
+]);
+export const SeriesStatus = z.enum(["active", "paused"]);
+export const Weekday = z.enum(["mon", "tue", "wed", "thu", "fri", "sat", "sun"]);
+
+/** Wochentage und Stunde in **Europe/Berlin** — nicht UTC, sonst wandert der Slot mit der Sommerzeit. */
+export const SeriesCadence = z.object({
+  days: z.array(Weekday).min(1).default(["mon"]),
+  hour: z.number().int().min(0).max(23).default(9),
+});
+
+export const SeriesParams = z.object({
+  region: z.enum(["intl", "jp"]).default("intl"),
+  n: z.number().int().min(3).max(20).default(15),
+  priceBasis: z.enum(["max", "normal", "holo"]).default("max"),
+  language: ContentLanguage.default("de"),
+  formats: z.array(z.enum(["data_carousel", "data_reel"])).min(1).default(["data_carousel"]),
+  platforms: z.array(z.string()).min(1).default(["instagram", "tiktok"]),
+  countdown: z.boolean().default(true),
+  /** Reel-Optionen, greifen nur wenn `formats` ein `data_reel` enthaelt. */
+  secondsPerCard: z.number().min(1.4).max(2.5).default(1.8),
+  voiceover: z.boolean().default(false),
+  music: z.enum(["none", "bed"]).default("none"),
+  /** Rotation: ein Set/eine Aera fruehestens nach so vielen Wochen wieder. */
+  minWeeksBetweenRepeats: z.number().int().min(0).max(104).default(26),
+  /** `new_set`: nur Sets, die juenger sind als das. */
+  maxAgeDays: z.number().int().min(7).max(365).default(60),
+  /** `price_movers`. */
+  days: z.union([z.literal(7), z.literal(30)]).default(7),
+  direction: z.enum(["up", "down"]).default("up"),
+  minBaseEur: z.number().min(0).default(5),
+  /** Mindestzahl an Messpunkten je Karte — ohne die ist eine „Preis-Rakete" Rauschen. */
+  minHistoryPoints: z.number().int().min(2).max(30).default(4),
+  /** Sprünge darüber sind bei diesen Datenmengen Artefakte, keine Nachrichten (0 = alles zeigen). */
+  maxChangePct: z.number().min(0).default(200),
+  /** `custom`: fester Bereich, keine Rotation. */
+  set: z.string().default(""),
+  era: z.string().default(""),
+});
+
+/** Was die Serie schon gezeigt hat — Grundlage der Rotation. */
+export const SeriesCoverage = z.object({
+  used: z.array(z.object({ key: z.string(), label: z.string().default(""), at: Iso })).default([]),
+});
+
+export const ContentSeries = z.object({
+  id: Id, projectId: Id,
+  name: z.string(), kind: SeriesKind,
+  params: SeriesParams, cadence: SeriesCadence,
+  status: SeriesStatus,
+  lastRunAt: Iso.nullable(),
+  nextRunAt: Iso.nullable().default(null),
+  coverage: SeriesCoverage,
+  /** Stuecke der letzten beiden Laeufe, die noch in der Freigabe liegen (Stau-Erkennung). */
+  pendingReview: z.number().int().default(0),
+  createdAt: Iso, updatedAt: Iso,
+});
+
+/**
+ * Angelegt und geaendert wird mit **Teilmengen** von `SeriesParams`.
+ *
+ * Bewusst als lose Ablage und nicht als `SeriesParams.partial()`: ein optionales
+ * Feld mit `.default()` liefert beim Parsen trotzdem den Vorgabewert, und ein
+ * PATCH, der nur die Sperrfrist aendern sollte, setzte damit stillschweigend
+ * Umfang und Plattformen zurueck (live passiert, 01.09.). Die zusammengefuehrten
+ * Werte werden anschliessend gegen `SeriesParams` geprueft — die Validierung
+ * geht also nicht verloren, sie greift nur eine Ebene spaeter.
+ */
+const PartialParams = z.record(z.string(), z.unknown());
+
+export const SeriesCreate = z.object({
+  name: z.string().trim().min(1).max(120),
+  kind: SeriesKind,
+  params: PartialParams.default({}),
+  cadence: PartialParams.default({}),
+});
+export const SeriesPatch = z.object({
+  name: z.string().trim().min(1).max(120).optional(),
+  params: PartialParams.optional(),
+  cadence: PartialParams.optional(),
+  status: SeriesStatus.optional(),
+});
+
+export const SeriesCatalogEntry = z.object({
+  kind: SeriesKind,
+  name: z.string(), description: z.string(),
+  defaults: SeriesParams,
+  cadence: SeriesCadence,
+  /** Was heute schon geht — der Rest steht im Katalog, damit man sieht, was kommt. */
+  available: z.boolean(),
+  note: z.string().default(""),
+});
+
+export const SeriesView = z.object({
+  series: z.array(ContentSeries),
+  catalog: z.array(SeriesCatalogEntry),
+  hasData: z.boolean(),
+  workerAlive: z.boolean(),
 });
 
 export const ChannelProfile = z.object({ platform: z.string().min(1), label: z.string().default(""), url: z.string().default("") });
@@ -677,6 +792,16 @@ export type DataQuery = z.infer<typeof DataQuery>;
 export type ContentLanguage = z.infer<typeof ContentLanguage>;
 export type HashtagPools = z.infer<typeof HashtagPools>;
 export type ReelOptions = z.infer<typeof ReelOptions>;
+export type SeriesKind = z.infer<typeof SeriesKind>;
+export type SeriesCadence = z.infer<typeof SeriesCadence>;
+export type SeriesParams = z.infer<typeof SeriesParams>;
+export type SeriesCoverage = z.infer<typeof SeriesCoverage>;
+export type ContentSeries = z.infer<typeof ContentSeries>;
+export type SeriesCreate = z.infer<typeof SeriesCreate>;
+export type SeriesPatch = z.infer<typeof SeriesPatch>;
+export type SeriesCatalogEntry = z.infer<typeof SeriesCatalogEntry>;
+export type SeriesView = z.infer<typeof SeriesView>;
+export type Weekday = z.infer<typeof Weekday>;
 export type DirectoryDef = z.infer<typeof DirectoryDef>;
 export type DirectoryStatus = z.infer<typeof DirectoryStatus>;
 export type PublishPackage = z.infer<typeof PublishPackage>;
