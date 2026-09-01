@@ -17,6 +17,8 @@ export const ContentFormat = z.enum([
   "data_carousel",
   /** Shot 8: dieselben Slides als vertikales Countdown-Reel, ohne eine einzige Aufnahme. */
   "data_reel",
+  /** Shot 11: echte Seiten aus einem geteilten Binder — Produkt statt Nachbildung. */
+  "showcase_carousel",
 ]);
 export const ContentStatus = z.enum(["draft", "review", "approved", "published", "rejected"]);
 export const AssetKind = z.enum(["screenshot", "recording", "voiceover", "render", "image"]);
@@ -366,9 +368,11 @@ export const CarouselTemplate = z.enum(["clean", "bold", "screenshot", "list", "
  * deshalb steht es hier und nicht in den Routen-Schemata.
  */
 export const DataQuery = z.object({
-  kind: z.enum(["top", "movers"]).default("top"),
+  kind: z.enum(["top", "movers", "guess"]).default("top"),
   set: z.string().default(""),
   era: z.string().default(""),
+  /** Bereich „alle Karten dieses Illustrators" (Shot 11). */
+  illustrator: z.string().default(""),
   region: z.enum(["intl", "jp"]).default("intl"),
   n: z.number().int().min(3).max(20).default(15),
   priceBasis: z.enum(["max", "normal", "holo"]).default("max"),
@@ -400,6 +404,15 @@ export const ReelOptions = z.object({
   secondsPerCard: z.number().min(1.4).max(2.5).default(1.8),
 });
 
+/** Binder-Showcase (Shot 11). */
+export const ShowcaseOptions = z.object({
+  /** Share-Link der oeffentlichen Binder-Ansicht (`…/app#ansicht/<id>`). */
+  url: z.string().default(""),
+  maxPages: z.number().int().min(1).max(12).default(5),
+  /** Preise in der Ansicht einblenden — sie sind der eigentliche Haken. */
+  withPrices: z.boolean().default(true),
+});
+
 /** Sprache eines Stuecks. `both` erzeugt das Bundle doppelt (DE + EN). */
 export const ContentLanguage = z.enum(["de", "en", "both"]);
 
@@ -418,6 +431,8 @@ export const ContentRequest = z.object({
   dataQuery: DataQuery.optional(),
   /** Nur fuer `data_reel`: wie aus den Slides ein Video wird. */
   reel: ReelOptions.optional(),
+  /** Nur fuer `showcase_carousel`: welcher geteilte Binder abfotografiert wird. */
+  showcase: ShowcaseOptions.optional(),
   /** Von welcher Serie der Lauf kam (Shot 9) — leer bei Handarbeit. */
   seriesId: z.string().default(""),
   /** Ein Lauf, mehrere Plattform-Stuecke mit gemeinsamen Assets. Leer = nur `platform`. */
@@ -544,6 +559,12 @@ export const SeriesParams = z.object({
   /** `custom`: fester Bereich, keine Rotation. */
   set: z.string().default(""),
   era: z.string().default(""),
+  /** `artist_spotlight`: fester Illustrator, sonst rotiert die Serie durch die haeufigsten. */
+  illustrator: z.string().default(""),
+  /** `binder_showcase`: Share-Links der Vorzeige-Binder, die abwechselnd drankommen. */
+  binderUrls: z.array(z.string()).default([]),
+  maxPages: z.number().int().min(1).max(12).default(5),
+  withPrices: z.boolean().default(true),
 });
 
 /** Was die Serie schon gezeigt hat — Grundlage der Rotation. */
@@ -863,6 +884,7 @@ export type DataQuery = z.infer<typeof DataQuery>;
 export type ContentLanguage = z.infer<typeof ContentLanguage>;
 export type HashtagPools = z.infer<typeof HashtagPools>;
 export type ReelOptions = z.infer<typeof ReelOptions>;
+export type ShowcaseOptions = z.infer<typeof ShowcaseOptions>;
 export type SeriesKind = z.infer<typeof SeriesKind>;
 export type SeriesCadence = z.infer<typeof SeriesCadence>;
 export type SeriesParams = z.infer<typeof SeriesParams>;

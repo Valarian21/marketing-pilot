@@ -240,7 +240,28 @@ export class BinderplanProvider implements ProductDataProvider {
       ).all(region, ...filter.params) as CardRow[];
       return { rows, label: era.name, labelEn: era.nameEn };
     }
-    throw new Error("Bereich fehlt: set oder era angeben.");
+    if (q.scope.illustrator) {
+      const region = q.scope.region ?? "intl";
+      const rows = this.sqlite.prepare(
+        `${select} WHERE cards.illustrator = ? AND cards.set_id IN (SELECT id FROM sets WHERE region = ?)`,
+      ).all(q.scope.illustrator, region) as CardRow[];
+      if (!rows.length) throw new Error(`Kein Kartenbestand fuer Illustrator: ${q.scope.illustrator}`);
+      return { rows, label: q.scope.illustrator, labelEn: q.scope.illustrator };
+    }
+    throw new Error("Bereich fehlt: set, era oder illustrator angeben.");
+  }
+
+  /**
+   * Die haeufigsten Illustratoren. Ein Mindestbestand haelt Ein-Karten-Kuenstler
+   * heraus, aus denen sich keine Zehnerliste bauen laesst.
+   */
+  topIllustrators(n: number, region: "intl" | "jp" = "intl"): { name: string; cards: number }[] {
+    return this.sqlite.prepare(
+      `SELECT illustrator name, count(*) cards FROM cards
+       WHERE illustrator IS NOT NULL AND trim(illustrator) <> ''
+         AND set_id IN (SELECT id FROM sets WHERE region = ?)
+       GROUP BY illustrator HAVING cards >= 12 ORDER BY cards DESC LIMIT ?`,
+    ).all(region, Math.max(1, Math.min(n, 100))) as { name: string; cards: number }[];
   }
 
   private cardName(r: CardRow): { de: string; en: string } {

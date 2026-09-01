@@ -23,6 +23,7 @@ import { generateContent, pieceOf, type StudioContext } from "../studio/generate
 import { autoScheduleBundle } from "../../publish/auto.js";
 import { catalogFor, isAvailable } from "./catalog.js";
 import { isDue, nextRunAt } from "./time.js";
+import { shareIdOf } from "./binder.js";
 import type { HostUser } from "../../../host-adapter.js";
 
 const err = (msg: string, statusCode = 400) => Object.assign(new Error(msg), { statusCode });
@@ -100,7 +101,11 @@ export function deleteSeries(db: Db, id: string): boolean {
 
 // --- Rotation ----------------------------------------------------------------
 
-export interface Scope { key: string; label: string; query: s.DataQuery }
+export interface Scope {
+  key: string; label: string; query: s.DataQuery;
+  /** Nur beim Binder-Showcase: der Share-Link, der abfotografiert wird. */
+  showcaseUrl?: string;
+}
 
 /**
  * Worüber der nächste Lauf geht.
@@ -146,6 +151,27 @@ export function pickScope(provider: ProductDataProvider, series: s.ContentSeries
     };
   }
 
+  if (kind === "binder_showcase") {
+    const urls = params.binderUrls.map((x) => x.trim()).filter(Boolean);
+    if (!urls.length) throw err("Für den Binder-Showcase fehlen die Share-Links der Binder.", 409);
+    const keyOf = (u: string) => shareIdOf(u) ?? u;
+    const free = urls.filter((u) => !blocked(keyOf(u)));
+    const pick = free[0] ?? [...urls].sort((a, b) => (usedAt.get(keyOf(a)) ?? 0) - (usedAt.get(keyOf(b)) ?? 0))[0]!;
+    // Der Bereich ist hier kein Datenausschnitt, sondern ein Binder — die Abfrage bleibt leer.
+    return { key: keyOf(pick), label: `Binder ${keyOf(pick)}`, query: s.DataQuery.parse({}), showcaseUrl: pick };
+  }
+
+  if (kind === "artist_spotlight") {
+    if (params.illustrator.trim()) {
+      return { key: params.illustrator.trim(), label: params.illustrator.trim(), query: s.DataQuery.parse({ ...base, illustrator: params.illustrator.trim() }) };
+    }
+    const artists = provider.topIllustrators(40, params.region);
+    if (!artists.length) throw err("Keine Illustratoren mit genug Karten in den Produktdaten.", 409);
+    const free = artists.filter((a) => !blocked(a.name));
+    const pick = free[0] ?? [...artists].sort((a, b) => (usedAt.get(a.name) ?? 0) - (usedAt.get(b.name) ?? 0))[0]!;
+    return { key: pick.name, label: pick.name, query: s.DataQuery.parse({ ...base, illustrator: pick.name }) };
+  }
+
   if (kind === "top_era") {
     const eras = provider.listEras().filter((e) => e.setCount > 0);
     if (!eras.length) throw err("Keine Ära mit Sets in den Produktdaten.");
@@ -169,7 +195,8 @@ export function pickScope(provider: ProductDataProvider, series: s.ContentSeries
 
   const free = sets.filter((x) => !blocked(x.id));
   const pick = free[0] ?? oldestFirst(sets)[0]!;
-  return { key: pick.id, label: pick.name, query: s.DataQuery.parse({ ...base, set: pick.id }) };
+  // „Errate den Preis" rotiert wie Top-Set durch die Sets, zeigt sie nur anders.
+  return { key: pick.id, label: pick.name, query: s.DataQuery.parse({ ...base, ...(kind === "guess_the_price" ? { kind: "guess" } : {}), set: pick.id }) };
 }
 
 // --- Lauf --------------------------------------------------------------------
@@ -212,14 +239,20 @@ export async function runSeries(
 
   const pieces: string[] = [];
   const autoNotes: string[] = [];
-  for (const format of series.params.formats) {
+  // Der Showcase erzeugt genau ein Buendel, egal welche Formate eingestellt sind.
+  const formats = series.kind === "binder_showcase" ? ["data_carousel" as const] : series.params.formats;
+  for (const format of formats) {
+    const showcase = series.kind === "binder_showcase";
     const req = s.ContentRequest.parse({
-      format, topic: "", hint: "", seriesId: series.id,
+      // Der Showcase kennt nur ein Format: echte Seiten lassen sich nicht als Reel abkuerzen.
+      format: showcase ? "showcase_carousel" : format,
+      topic: "", hint: "", seriesId: series.id,
       platform: series.params.platforms[0] ?? "instagram",
       bundlePlatforms: series.params.platforms,
       language: series.params.language,
       dataQuery: scope.query,
-      ...(format === "data_reel" ? { reel: { voiceover: series.params.voiceover, music: series.params.music, secondsPerCard: series.params.secondsPerCard } } : {}),
+      ...(showcase ? { showcase: { url: scope.showcaseUrl ?? "", maxPages: series.params.maxPages, withPrices: series.params.withPrices } } : {}),
+      ...(!showcase && format === "data_reel" ? { reel: { voiceover: series.params.voiceover, music: series.params.music, secondsPerCard: series.params.secondsPerCard } } : {}),
     });
     const lead = await generateContent(ctx, series.projectId, req, user);
     pieces.push(lead.id);
@@ -243,7 +276,7 @@ export async function runSeries(
     projectId: series.projectId, content: { scope: scope.label, formats: series.params.formats, pieces },
   });
   return {
-    pieces, scope: scope.label, formats: series.params.formats,
+    pieces, scope: scope.label, formats,
     note: [opts.preview ? "Vorschau — die Rotation wurde nicht verbraucht." : "", ...autoNotes].filter(Boolean).join(" "),
   };
 }

@@ -381,3 +381,26 @@ das eng, und alle drei stehen im Code, nicht in der Doku:
 Der Standard ist überall `manual`. Ob ein Kanal wirklich ohne Einzelfreigabe posten darf, bleibt
 Marcels Entscheidung; der Digest „Heute automatisch gepostet" mit Direktlink zum Löschen ist die
 Gegenleistung dafür, dass er sie treffen kann.
+
+## Der Showcase fotografiert die App, statt sie nachzubauen (2026-09-01, Shot 11)
+
+Binderplans öffentliche API (`GET /api/binders/<id>`) liefert Name, Layout und die Kartenliste —
+damit ließe sich eine Binderseite bequem selbst rendern, ohne Browser, ohne Abhängigkeit von
+fremdem DOM. Trotzdem läuft der Showcase über einen echten Screenshot der geteilten Ansicht.
+
+Der Grund ist inhaltlich, nicht technisch: das Format heißt „schau dir meinen Binder an" und soll
+**das Produkt** zeigen. Ein selbst gebautes Raster zeigt Karten, keine App. Der Preis dafür ist
+eine Abhängigkeit von Binderplans Markup (`.slots`, `.seiten-nav`, `#preis-toggle`) — bricht die,
+schlägt der Lauf mit klarer Meldung fehl, statt leere Bilder zu liefern.
+
+## Die Fußzeile richtet sich nach dem Bild, nicht nach dem Schalter (2026-09-01, Shot 11)
+
+Der erste Showcase-Lauf trug „Preise: Cardmarket-Trend · Stand 01.09.2026" unter einer
+Binderseite, auf der kein einziger Preis stand: die Aufnahme hatte den Schalter „Preise" nicht
+getroffen. Der zweite Lauf traf ihn — und es standen trotzdem keine Preise im aufgenommenen
+Bereich.
+
+Deshalb entscheidet nicht mehr die Absicht (`withPrices`) und auch nicht der Zustand des
+Schalters, sondern der Befund: steht im `.slots`-Bereich ein Eurobetrag, trägt die Slide die
+Preis-Fußzeile, sonst die neutrale. Dieselbe Haltung wie bei den Zahlen der Ranglisten — eine
+Angabe darf nur behaupten, was tatsächlich zu sehen ist.

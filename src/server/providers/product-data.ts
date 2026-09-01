@@ -54,7 +54,8 @@ export interface RankedCard {
 }
 
 export interface TopCardsQuery {
-  scope: { set?: string; era?: string; region?: "intl" | "jp" };
+  /** Genau eines von `set`, `era` oder `illustrator` fuellt den Bereich. */
+  scope: { set?: string; era?: string; illustrator?: string; region?: "intl" | "jp" };
   n: number;
   priceBasis?: PriceBasis;
   minPrice?: number;
@@ -136,6 +137,8 @@ export interface ProductDataProvider {
   listEras(): ProductEra[];
   resolveSet(nameOrId: string): ProductSet | null;
   newestSets(n: number, region?: "intl" | "jp"): ProductSet[];
+  /** Illustratoren mit den meisten Karten — Grundlage der Artist-Spotlight-Rotation. */
+  topIllustrators(n: number, region?: "intl" | "jp"): { name: string; cards: number }[];
   topCards(q: TopCardsQuery): Promise<TopCardsResult>;
   priceMovers(q: PriceMoversQuery): Promise<PriceMoversResult>;
   /** Lokaler Dateipfad eines Kartenbildes – der Renderer braucht Dateien, keine URLs. */

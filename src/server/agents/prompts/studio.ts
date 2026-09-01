@@ -131,7 +131,7 @@ export function dataContentPrompt(input: {
   persona?: Persona;
   voiceProfile: string | null;
   language: Exclude<ContentLanguage, "both">;
-  kind: "top" | "movers";
+  kind: "top" | "movers" | "guess";
   scopeLabel: string;
   /** `price` und `change` kommen fertig formatiert — genau so muss es der Text zitieren. */
   cards: { rank: number; name: string; setName: string; localId: string; price: string; change?: string }[];
@@ -168,10 +168,11 @@ Deliverables:
 ${input.platforms.map((p) => `  - ${p.platform}: max ${p.limit} chars, ${p.policy.max === 0 ? "NO hashtags" : `${p.policy.min || 1}-${p.policy.max} hashtags`}, ${p.linkRule === "bio" ? 'no link in the text - point to "Link in Bio" if a link is needed' : "a link may go into the text"}. ${p.policy.note}`).join("\n")}
 - Hashtags come from these pools where they fit; add specific niche tags when a pool is thin. Lowercase, no duplicates, no generic filler (#love #follow).
 ${pools}
+${input.kind === "guess" ? `- THIS IS A QUIZ: every card appears twice — first without its price, then revealed. The caption must ask the reader to guess before swiping on, and must NOT give away the prices. Mention at most the range.` : ""}
 - Every caption must contain, once, the disclosure "${de ? "Kein offizielles Pokémon-Produkt." : "Not affiliated with Nintendo or The Pokémon Company."}" — as its own short sentence near the end, before the hashtags.
 ${writingRules({ language: input.language, voiceProfile: input.voiceProfile })}
 Return JSON: {"title","coverTitle","hook","ctaLine","captions":[{"platform","caption","hashtags":["#tag"]}]}` },
-    { role: "user", content: `SCOPE: ${input.scopeLabel} (${input.kind === "top" ? "most expensive cards" : "biggest price moves"})
+    { role: "user", content: `SCOPE: ${input.scopeLabel} (${input.kind === "top" ? "most expensive cards" : input.kind === "movers" ? "biggest price moves" : "price quiz: each card is shown without its price first, the next slide reveals it"})
 TOTAL VALUE OF THE LIST: ${input.totalLabel}
 PRICE DATE: ${input.priceStand}
 TOPIC: ${input.topic || "-"}
@@ -199,5 +200,66 @@ Propose hashtag pools for "${input.brief.productName}" (${input.brief.category})
 Rules: lowercase, no "#" prefix in the JSON, no spaces, no generic filler (love, follow, instagood, fyp alone), prefer niche tags a real community actually follows. Channels in use: ${input.channels.join(", ") || "-"}.
 Return JSON: {"brand":[],"topics":{"slug":[]},"byLanguage":{"de":[],"en":[]}}` },
     { role: "user", content: `BRIEF\n${JSON.stringify(input.brief)}\n\nPERSONAS\n${input.personas.map((p) => personaBlock(p)).join("\n") || "(none)"}` },
+  ];
+}
+
+/**
+ * Binder-Showcase (Shot 11). Anders als bei den Ranglisten gibt es hier keine
+ * Zahlenwahrheit zu schuetzen — dafuer eine andere Grenze: die Slides zeigen
+ * **echte Screenshots der App**, also darf der Text nichts behaupten, was auf
+ * den Bildern nicht zu sehen ist.
+ */
+export function showcasePrompt(input: {
+  brief: Brief;
+  persona?: Persona;
+  voiceProfile: string | null;
+  language: Exclude<ContentLanguage, "both">;
+  binderName: string;
+  stats: string;
+  pages: number;
+  platforms: { platform: string; limit: number; policy: HashtagPolicy; linkRule: "bio" | "link" }[];
+  pools: HashtagPools;
+  topic: string;
+  hint: string;
+}): LlmMessage[] {
+  const de = input.language === "de";
+  const pools = [
+    input.pools.brand.length ? `brand: ${input.pools.brand.join(" ")}` : "",
+    ...Object.entries(input.pools.topics).map(([k, v]) => `${k}: ${v.join(" ")}`),
+    input.pools.byLanguage[input.language].length ? `${input.language}: ${input.pools.byLanguage[input.language].join(" ")}` : "",
+  ].filter(Boolean).join("\n") || "(no pools filled in yet - invent fitting, specific niche tags)";
+  return [
+    { role: "system", content: `[task:showcase]
+You write around a carousel of REAL SCREENSHOTS from "${input.brief.productName}": ${input.pages} pages of the shared binder "${input.binderName}" (${input.stats}).
+
+WHAT YOU MAY SAY:
+- The binder, what is in it, why someone would build one, and what the product does with it.
+- Never describe a single card unless the reader can see it — you have not seen the images.
+- Never invent numbers (card values, user counts, ratings). If a number would help, leave it out.
+- The screenshots are the product's own view, so first person works: "so sieht mein … aus".
+
+Deliverables:
+- "title": short internal label, max 60 chars.
+- "coverTitle": headline for the cover slide, max 60 chars, names the binder.
+- "hook": ONE spoken sentence for the first seconds of a video, max 90 chars.
+- "ctaLine": ONE sentence for the last slide, max 90 chars — what the reader does next.
+- "captions": one entry per platform below, each standing on its own.
+${input.platforms.map((p) => `  - ${p.platform}: max ${p.limit} chars, ${p.policy.max === 0 ? "NO hashtags" : `${p.policy.min || 1}-${p.policy.max} hashtags`}, ${p.linkRule === "bio" ? 'no link in the text - point to "Link in Bio"' : "a link may go into the text"}. ${p.policy.note}`).join("\n")}
+- Hashtags from these pools where they fit, plus specific niche tags. Lowercase, no duplicates.
+${pools}
+- Every caption contains, once, the disclosure "${de ? "Kein offizielles Pokémon-Produkt." : "Not affiliated with Nintendo or The Pokémon Company."}" as its own short sentence before the hashtags.
+${writingRules({ language: input.language, voiceProfile: input.voiceProfile })}
+Return JSON: {"title","coverTitle","hook","ctaLine","captions":[{"platform","caption","hashtags":["#tag"]}]}` },
+    { role: "user", content: `BINDER: ${input.binderName}
+PAGES SHOWN: ${input.pages}
+BINDER FACTS (verbatim from the app): ${input.stats}
+TOPIC: ${input.topic || "-"}
+HINT: ${input.hint || "-"}
+
+BRIEF
+${JSON.stringify(input.brief)}
+
+PERSONA
+${personaBlock(input.persona)}` },
   ];
 }

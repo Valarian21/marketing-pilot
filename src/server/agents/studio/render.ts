@@ -66,6 +66,8 @@ export interface RankingSlide {
   imageDataUrl: string | null;
   index: number;
   total: number;
+  /** Ratemodus: der Preis steht erst auf der Folgeslide. */
+  hidePrice?: boolean;
 }
 
 /** Fußzeile, die laut Plan auf JEDER Daten-Slide steht — Quelle, Stand, Herkunft. */
@@ -99,7 +101,7 @@ export function rankingSlideHtml(kit: BrandKit, slide: RankingSlide, w: number, 
 <div class="dhead"><span class="drank">${slide.rank}</span><span class="dbrand">${esc(brand)}</span></div>
 <div class="dcard">${slide.imageDataUrl ? `<img src="${slide.imageDataUrl}">` : ""}</div>
 <div><div class="dname">${esc(slide.name)}</div><div class="dset">${esc(slide.setLine)}</div>
-<div class="dprice">${esc(slide.price)}</div>${slide.change ? `<div class="dchange">${esc(slide.change)}</div>` : ""}</div>
+<div class="dprice"${slide.hidePrice ? ' style="opacity:.35"' : ""}>${slide.hidePrice ? "? ? ?" : esc(slide.price)}</div>${slide.change && !slide.hidePrice ? `<div class="dchange">${esc(slide.change)}</div>` : ""}</div>
 ${dataFoot(w, footer)}</div></div>`;
   return base(kit, w, h, body, dataCss(w));
 }
@@ -128,6 +130,31 @@ export function rankingCtaHtml(kit: BrandKit, a: { line: string; linkLabel: stri
 <div class="dhead"><span class="dbrand">${esc(brand)}</span></div>
 ${a.imageDataUrl ? `<div class="dshot"><img src="${a.imageDataUrl}"></div>` : `<div class="dfan"></div>`}
 <div><h1 style="font-size:${Math.round(w * (a.line.length > 70 ? 0.056 : a.line.length > 45 ? 0.064 : 0.072))}px">${esc(a.line)}</h1><div class="dset" style="opacity:.85">${esc(a.linkLabel)}</div></div>
+${dataFoot(w, footer)}</div></div>`;
+  return base(kit, w, h, body, dataCss(w));
+}
+
+/**
+ * Binder-Showcase (Shot 11): eine echte Seite aus der geteilten Ansicht.
+ *
+ * Das Bild wird nie beschnitten — es ist ein Produkt-Screenshot, und ein halb
+ * abgeschnittenes Fach wäre eine Falschaussage über die App.
+ */
+export function showcaseSlideHtml(kit: BrandKit, a: { headline: string; sub: string; imageDataUrl: string | null }, w: number, h: number, brand: string, footer: string): string {
+  const body = `<div class="slide" style="background:linear-gradient(170deg,var(--b-soft),var(--b-bg))"><div class="dwrap">
+<div class="dhead"><span class="dbrand">${esc(brand)}</span></div>
+<div class="dshot" style="background:transparent;box-shadow:none">${a.imageDataUrl ? `<img src="${a.imageDataUrl}" style="object-fit:contain;object-position:center">` : ""}</div>
+<div><div class="dname" style="font-size:${Math.round(w * 0.055)}px">${esc(a.headline)}</div><div class="dset">${esc(a.sub)}</div></div>
+${dataFoot(w, footer)}</div></div>`;
+  return base(kit, w, h, body, dataCss(w));
+}
+
+/** Cover des Showcase: Name des Binders, eine Seite angedeutet, die Eckdaten. */
+export function showcaseCoverHtml(kit: BrandKit, a: { title: string; stats: string; imageDataUrl: string | null }, w: number, h: number, brand: string, footer: string): string {
+  const body = `<div class="slide" style="background:var(--b-primary);color:var(--b-on-primary)"><div class="dwrap">
+<div class="dhead"><span class="dbrand">${esc(brand)}</span></div>
+<div class="dshot" style="background:rgba(255,255,255,.1)">${a.imageDataUrl ? `<img src="${a.imageDataUrl}" style="object-fit:contain">` : ""}</div>
+<div><h1 style="font-size:${Math.round(w * 0.08)}px">${esc(a.title)}</h1><div class="dtotal" style="margin-top:.5em">${esc(a.stats)}</div></div>
 ${dataFoot(w, footer)}</div></div>`;
   return base(kit, w, h, body, dataCss(w));
 }

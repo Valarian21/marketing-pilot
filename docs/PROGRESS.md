@@ -499,3 +499,46 @@ Live-Abnahme (2026-09-01): Bio-Seite unter `https://agi-empire.com/go/bio/cxuwx`
 4. **TikTok- und YouTube-Audit**: bewusst nicht gebaut, bis Marcel den Audit will.
 5. **Auto-Stufe**: überall aus. Ob ein Kanal wirklich ohne Einzelfreigabe posten darf, ist
    Marcels Entscheidung, nicht meine.
+
+## Shot 11 – Binder-Showcase, Artist Spotlight, Rate-Serie: **fertig** (2026-09-01)
+
+Erledigt:
+- **Binder-Showcase** (`agents/series/binder.ts` + `agents/studio/showcase.ts`): der Pilot öffnet
+  Marcels geteilte Binder-Ansicht (`…/app#ansicht/<id>`) mit Playwright, blättert durch und
+  fotografiert `.slots` — eine echte Seite je Slide. Daraus wird ein Bündel wie in Shot 7:
+  Cover mit Name und Eckdaten, die Seiten, CTA mit Produkt-Screenshot. Neues Format
+  `showcase_carousel`.
+- **Artist Spotlight**: `topCards` kennt den Bereich `illustrator`, der Provider liefert über
+  `topIllustrators()` die Künstler mit mindestens zwölf Karten. Die Serie rotiert durch sie oder
+  nimmt einen fest eingetragenen.
+- **Errate den Preis**: `DataQuery.kind: "guess"` zeigt jede Karte zweimal — erst mit „? ? ?"
+  statt des Preises, dann aufgelöst. Der Prompt weiß davon und darf die Preise in der Caption
+  nicht verraten.
+- **Katalog vollständig**: alle acht Vorlagen sind jetzt anlegbar, keine steht mehr auf
+  „kommt später".
+- **Gemeinsame Bündel-Zeilen**: `writeBundlePieces()` aus `data-content.ts` schreibt die Stücke
+  für Ranglisten **und** Showcase. `bundleId`, Asset-Zuordnung und Hashtag-Politik hängen damit
+  an einer Stelle statt an zweien.
+- **Lehreule-Gegenprobe**: eigener Test, dass ein Projekt ohne Datenquelle unverändert Text und
+  Carousel erzeugt, keine Daten-Felder in den Metadaten auftauchen und keine Preis-Fußzeile auf
+  den Slides landet.
+- **9 neue Tests** (Gesamt **195**).
+
+Live-Abnahme (2026-09-01) gegen den öffentlichen Beispiel-Binder
+`binderplan.app/app#ansicht/0Ujx6M1xTWw`: vier Seiten in **47 s** aufgenommen und gerendert,
+Bündel für Instagram (1080×1350) und TikTok (1080×1920), Caption erwähnt nur, was auf den
+Bildern zu sehen ist.
+
+Gelernt:
+- Der Preis-Schalter der Ansicht heißt `#preis-toggle` und ruft `preiseUmschalten()`; ein Klick
+  aufs Label geht ins Leere. Wichtiger: **ob er an ist, sagt nichts darüber aus, ob im
+  aufgenommenen Bereich Preise stehen.** Die Fußzeile richtet sich deshalb danach, ob im
+  `.slots`-Bereich tatsächlich ein Eurobetrag steht — sonst behauptete sie
+  „Preise: Cardmarket-Trend" über einer Seite ohne einen einzigen Preis.
+
+Offen:
+- Die Reel-Variante des Showcase (Scroll-Aufnahme durch den Binder) ist **nicht** gebaut. Die
+  Seiten sind Standbilder; ein Reel daraus wäre die Slideshow aus Shot 8, ein echtes
+  Scroll-Video eine eigene Aufnahme-Strecke. Erst sinnvoll, wenn die Standbild-Variante läuft.
+- `MP_DEMO_*` ist weiterhin global, nicht je Projekt — gebraucht wird das erst für die
+  Reel-Variante.

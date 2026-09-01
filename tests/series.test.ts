@@ -69,6 +69,7 @@ const fakeProvider = (): ProductDataProvider => ({
   ],
   resolveSet: (x) => SETS.find((y) => y.id === x) ?? null,
   newestSets: (n) => SETS.slice(0, n),
+  topIllustrators: () => [{ name: "Ken Sugimori", cards: 300 }, { name: "Mitsuhiro Arita", cards: 210 }, { name: "Naoyo Kimura", cards: 90 }],
   topCards: () => Promise.reject(new Error("nicht benutzt")),
   priceMovers: () => Promise.reject(new Error("nicht benutzt")),
   cardImage: () => Promise.resolve(null),
@@ -141,6 +142,37 @@ describe("Rotation", () => {
     expect(() => pickScope(provider, series({ kind: "custom", params: schlecht }), now)).toThrowError(/gibt es in den Produktdaten nicht/);
   });
 
+  it("rotiert Illustratoren und respektiert einen fest eingetragenen", () => {
+    const now = new Date("2026-09-07T07:00:00Z");
+    const erste = pickScope(provider, series({ kind: "artist_spotlight" }), now);
+    expect(erste.key).toBe("Ken Sugimori");
+    expect(erste.query.illustrator).toBe("Ken Sugimori");
+    const cov: s.SeriesCoverage = { used: [{ key: "Ken Sugimori", label: "Ken Sugimori", at: now.toISOString() }] };
+    expect(pickScope(provider, series({ kind: "artist_spotlight", coverage: cov }), now).key).toBe("Mitsuhiro Arita");
+    const fest = s.SeriesParams.parse({ illustrator: "Naoyo Kimura" });
+    expect(pickScope(provider, series({ kind: "artist_spotlight", params: fest, coverage: cov }), now).key).toBe("Naoyo Kimura");
+  });
+
+  it("wechselt beim Binder-Showcase zwischen den Share-Links", () => {
+    const now = new Date("2026-09-07T07:00:00Z");
+    const params = s.SeriesParams.parse({ binderUrls: ["https://binderplan.app/app#ansicht/AAA111", "https://binderplan.app/app#ansicht/BBB222"] });
+    const erste = pickScope(provider, series({ kind: "binder_showcase", params }), now);
+    expect(erste.key).toBe("AAA111");
+    expect(erste.showcaseUrl).toContain("AAA111");
+    const cov: s.SeriesCoverage = { used: [{ key: "AAA111", label: "", at: now.toISOString() }] };
+    expect(pickScope(provider, series({ kind: "binder_showcase", params, coverage: cov }), now).key).toBe("BBB222");
+  });
+
+  it("sagt beim Showcase klar, wenn noch kein Binder hinterlegt ist", () => {
+    expect(() => pickScope(provider, series({ kind: "binder_showcase" }), new Date())).toThrowError(/Share-Links/);
+  });
+
+  it("zeigt die Rate-Serie als Set-Rotation im Ratemodus", () => {
+    const q = pickScope(provider, series({ kind: "guess_the_price" }), new Date("2026-09-07T07:00:00Z")).query;
+    expect(q.kind).toBe("guess");
+    expect(q.set).toBe("s2026");
+  });
+
   it("baut für Preis-Raketen eine movers-Abfrage ohne Rotation — mit Plausibilitätsgrenzen", () => {
     const q = pickScope(provider, series({ kind: "price_movers" }), new Date("2026-09-07T07:00:00Z")).query;
     expect(q.kind).toBe("movers");
@@ -154,10 +186,13 @@ describe("Rotation", () => {
 });
 
 describe("Katalog", () => {
-  it("nennt auch, was noch nicht geht — mit Grund", () => {
-    const offen = SERIES_CATALOG.filter((x) => !x.available);
-    expect(offen.map((x) => x.kind)).toEqual(["artist_spotlight", "guess_the_price", "binder_showcase"]);
-    for (const x of offen) expect(x.note).toContain("Shot 11");
+  it("hat seit Shot 11 keine offenen Vorlagen mehr", () => {
+    // Vor Shot 11 standen drei Vorlagen mit „kommt noch" im Katalog. Jetzt laufen alle.
+    expect(SERIES_CATALOG.filter((x) => !x.available)).toEqual([]);
+    expect(SERIES_CATALOG.map((x) => x.kind)).toContain("binder_showcase");
+    expect(SERIES_CATALOG.map((x) => x.kind)).toContain("artist_spotlight");
+    expect(SERIES_CATALOG.map((x) => x.kind)).toContain("guess_the_price");
+    for (const x of SERIES_CATALOG) expect(x.description.length).toBeGreaterThan(30);
   });
   it("liefert für jede Vorlage gültige Vorgaben", () => {
     for (const x of SERIES_CATALOG) {

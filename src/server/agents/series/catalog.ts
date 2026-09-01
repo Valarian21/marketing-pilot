@@ -43,19 +43,23 @@ export const SERIES_CATALOG: s.SeriesCatalogEntry[] = [
     cadence: C(["wed"], 9), note: "Set oder Ära in den Parametern eintragen.",
   },
   {
-    kind: "artist_spotlight", name: "Artist Spotlight", available: false,
-    description: "„10 Karten von <Illustrator>“ — braucht eine Abfrage nach Illustrator im Produktdaten-Provider.",
-    defaults: P({ n: 10 }), cadence: C(["tue"], 9), note: "Kommt mit Shot 11.",
+    kind: "artist_spotlight", name: "Artist Spotlight", available: true,
+    description: "„Die 10 teuersten Karten von <Illustrator>“ — rotiert durch die Künstler mit den meisten Karten.",
+    defaults: P({ n: 10, formats: ["data_carousel"], platforms: ["instagram", "tiktok"], minWeeksBetweenRepeats: 52 }),
+    cadence: C(["tue"], 9), note: "Ein fester Illustrator lässt sich in den Parametern eintragen; sonst rotiert die Serie.",
   },
   {
-    kind: "guess_the_price", name: "Errate den Preis", available: false,
-    description: "Slide 1 zeigt die Karte ohne Preis, Slide 2 löst auf — braucht eine zweite Slide-Vorlage.",
-    defaults: P({ n: 5 }), cadence: C(["tue"], 17), note: "Kommt mit Shot 11.",
+    kind: "guess_the_price", name: "Errate den Preis", available: true,
+    description: "Jede Karte kommt zweimal: erst ohne Preis, dann aufgelöst. Fragt in der Caption nach Schätzungen.",
+    defaults: P({ n: 5, formats: ["data_carousel"], platforms: ["instagram"] }),
+    cadence: C(["tue"], 17), note: "Fünf Karten ergeben zehn Slides — mehr wird für ein Carousel zu lang.",
   },
   {
-    kind: "binder_showcase", name: "Binder-Showcase", available: false,
-    description: "Screenshots aus echten Vorzeige-Bindern — braucht Share-Links und den Recorder.",
-    defaults: P({ n: 5 }), cadence: C(["sun"], 11), note: "Kommt mit Shot 11.",
+    kind: "binder_showcase", name: "Binder-Showcase", available: true,
+    description: "Echte Seiten aus deinen geteilten Vorzeige-Bindern — Produkt statt Nachbildung.",
+    defaults: P({ maxPages: 5, withPrices: true, formats: ["data_carousel"], platforms: ["instagram", "tiktok"], minWeeksBetweenRepeats: 8 }),
+    cadence: C(["sun"], 11),
+    note: "Share-Links der Binder eintragen (…/app#ansicht/<id>). Die Serie wechselt zwischen ihnen ab.",
   },
 ];
 

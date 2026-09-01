@@ -20,6 +20,7 @@ import { voiceBlock } from "./voice.js";
 import { reviseWithCritic } from "./critic.js";
 import { carouselSlideHtml, dataUrlFor, framedScreenshotHtml, pinHtml, playwrightRenderer, type RenderJob, type Renderer } from "./render.js";
 import { clearBundle, generateDataBundle, type DataBase } from "./data-content.js";
+import { generateShowcaseBundle } from "./showcase.js";
 import { buildUtmUrl, deepLinkFor, PLATFORM_LIMITS, platformFromChannel, slugify } from "../../util/utm.js";
 import { canonicalChannel, channelLink, saneTitle } from "../../../shared/channels.js";
 import { loadProfiles, planChannelNames } from "../../channels.js";
@@ -188,6 +189,7 @@ async function draftFor(ctx: StudioContext, base: Base, req: s.ContentRequest, p
     }
     case "data_carousel":
     case "data_reel":
+    case "showcase_carousel":
       // laeuft nie hier durch - generateContent zweigt vorher nach data-content.ts ab
       throw err("Daten-Formate werden als Bündel erzeugt, nicht als Einzelstück.");
     default:
@@ -238,13 +240,16 @@ async function generateDataPieces(ctx: StudioContext, base: Base, req: s.Content
     // Assets und Läufe haben Fremdschlüssel auf das Stück - die Zeile muss vorher stehen.
     if (leadId !== reuseLeadId) insertPlaceholder(ctx.db, base.project.id, leadId, req, req.taskId ?? null);
     try {
-      const { result } = await withRun(ctx.db, { task: `studio.data_carousel:${language}`, model: modelFor("content"), projectId: base.project.id, pieceId: leadId }, (usage) =>
-        generateDataBundle(ctx, dataBase, req, usage, {
-          leadPieceId: leadId, language,
-          addAsset: (pieceId, file, meta) => addAsset(ctx.db, ctx.dataDir, base.project.id, pieceId, "render", file, meta),
-          renderer,
-          screenshotPath: shot ? path.join(ctx.dataDir, shot.path) : null,
-        }));
+      const shared = {
+        leadPieceId: leadId, language,
+        addAsset: (pieceId: string, file: string, meta: Record<string, unknown>) => addAsset(ctx.db, ctx.dataDir, base.project.id, pieceId, "render", file, meta),
+        renderer,
+        screenshotPath: shot ? path.join(ctx.dataDir, shot.path) : null,
+      };
+      const { result } = await withRun(ctx.db, { task: `studio.${req.format}:${language}`, model: modelFor("content"), projectId: base.project.id, pieceId: leadId }, (usage) =>
+        req.format === "showcase_carousel"
+          ? generateShowcaseBundle(ctx, dataBase, req, usage, shared)
+          : generateDataBundle(ctx, dataBase, req, usage, shared));
       if (req.format === "data_reel") enqueueJob(ctx.db, { projectId: base.project.id, kind: "video.slideshow", payload: { pieceId: leadId }, steps: SLIDESHOW_STEPS });
       writeAudit(ctx.db, { user, action: "content.generate", entityType: "content_piece", entityId: leadId, projectId: base.project.id, content: { format: req.format, language, pieces: result.length, platforms: result.map((p) => p.channel) } });
       if (i === 0) lead = withCosts(ctx.db, [result[0]!])[0]!;
@@ -259,7 +264,7 @@ async function generateDataPieces(ctx: StudioContext, base: Base, req: s.Content
 
 export async function generateContent(ctx: StudioContext, projectId: string, req: s.ContentRequest, user: HostUser): Promise<s.ContentPiece> {
   const base = loadBase(ctx, projectId);
-  if (req.format === "data_carousel" || req.format === "data_reel") return generateDataPieces(ctx, base, req, user);
+  if (req.format === "data_carousel" || req.format === "data_reel" || req.format === "showcase_carousel") return generateDataPieces(ctx, base, req, user);
   const pieceId = newId();
   insertPlaceholder(ctx.db, projectId, pieceId, req, req.taskId ?? null);
   const model = req.format === "article" ? modelFor("analysis") : modelFor("content");
@@ -292,7 +297,7 @@ export async function regenerateContent(ctx: StudioContext, pieceId: string, hin
   const req: s.ContentRequest = reqParsed.success ? reqParsed.data : s.ContentRequest.parse({ format: existing.format, topic: existing.title, hint: "" });
   const merged = { ...req, hint: [req.hint, hint].filter(Boolean).join(" | ") };
   const base = loadBase(ctx, existing.projectId);
-  if (existing.format === "data_carousel" || existing.format === "data_reel") {
+  if (existing.format === "data_carousel" || existing.format === "data_reel" || existing.format === "showcase_carousel") {
     // Ein Bündel wird immer als Ganzes neu erzeugt, und immer über sein Leit-Stück:
     // die Mitglieder teilen sich die Assets, einzeln wäre das nicht konsistent zu halten.
     const bundleId = String(existing.meta["bundleId"] ?? existing.id);

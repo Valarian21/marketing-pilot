@@ -191,3 +191,34 @@ describe("studio API", () => {
     expect((await built.app.inject({ method: "POST", url: `/api/mp/content/${a.id}/schedule`, headers: auth, payload: { date: "2026-09-01T09:00:00.000Z" } })).statusCode).toBe(400);
   });
 });
+
+
+/**
+ * Gegenprobe zum Daten-Ausbau (Shot 11, Punkt 3): Lehreule hat keine
+ * Produktdatenquelle. Alles, was in den Shots 6-11 dazukam, darf an diesem
+ * Projekt nichts veraendern — weder im Ergebnis noch in den Metadaten.
+ */
+describe("Lehreule-Gegenprobe: brief-basierte Flows bleiben unberuehrt", () => {
+  it("erzeugt weiterhin Text und Carousel ohne eine Spur von Produktdaten", async () => {
+    const text = await built.app.inject({ method: "POST", url: `/api/mp/projects/${pid}/content`, headers: auth, payload: { format: "text", platform: "linkedin", topic: "Sonntagabend" } });
+    expect(text.statusCode).toBe(201);
+    const t1 = text.json();
+    expect(t1.format).toBe("text");
+    for (const key of ["dataQuery", "cards", "bundleId", "scopeLabel", "footer", "showcase"]) expect(t1.meta[key]).toBeUndefined();
+
+    const carousel = await built.app.inject({ method: "POST", url: `/api/mp/projects/${pid}/content`, headers: auth, payload: { format: "carousel", platform: "instagram", template: "clean" } });
+    expect(carousel.statusCode).toBe(201);
+    const c1 = carousel.json();
+    expect(c1.format).toBe("carousel");
+    expect(c1.assets.length).toBeGreaterThan(0);
+    for (const key of ["dataQuery", "cards", "bundleId"]) expect(c1.meta[key]).toBeUndefined();
+    // Die Slides tragen keine Preis-Fusszeile - die gehoert nur an Daten-Formate.
+    expect(rendered.join(" ")).not.toContain("Cardmarket-Trend");
+  }, 60_000);
+
+  it("weist Daten-Formate ohne Datenquelle mit Klartext ab", async () => {
+    const res = await built.app.inject({ method: "POST", url: `/api/mp/projects/${pid}/content`, headers: auth, payload: { format: "data_carousel", dataQuery: { kind: "top", set: "swsh12" } } });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().detail).toContain("Produktdatenquelle");
+  });
+});

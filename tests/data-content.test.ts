@@ -102,6 +102,10 @@ const fakeLlm: LlmProvider = {
     const task = /^\[task:([a-z-]+)\]/.exec(messages.find((m) => m.role === "system")?.content ?? "")?.[1];
     switch (task) {
       case "data-content": return json({ title: "Top 5 Silberne Sturmwinde", coverTitle: "Die 5 teuersten Karten aus Silberne Sturmwinde", hook: "Platz 1 ist 626,08 € wert.", ctaLine: "Sortier deinen Binder mit Binderplan.", captions: CAPTIONS });
+      case "showcase": return json({ title: "Binder Dschungel", coverTitle: "Mein Master Set Dschungel", hook: "So sieht ein volles Dschungel-Set aus.", ctaLine: "Plane deinen eigenen Binder mit Binderplan.", captions: [
+        { platform: "instagram", caption: "Acht Seiten, 64 Fächer. Kein offizielles Pokémon-Produkt.", hashtags: ["#pokemonsammeln", "#binder"] },
+        { platform: "tiktok", caption: "Mein Dschungel-Binder. Kein offizielles Pokémon-Produkt.", hashtags: ["#pokemon"] },
+      ] });
       case "hashtag-pools": return json({ brand: ["binderplan", "binderplanapp"], topics: { sammeln: ["sammlerstueck", "kartensammlung"] }, byLanguage: { de: ["pokemondeutschland", "kartenpreise"], en: ["pokemoncards"] } });
       case "ai-tell-critic": return json({ score: 9, issues: [], suggestions: [] });
       case "rewrite": return json({ body: "Überarbeitet." });
@@ -429,13 +433,12 @@ describe("Serien (Shot 9)", () => {
     expect(series.params.minWeeksBetweenRepeats).toBe(26);
   });
 
-  it("lehnt Vorlagen ab, die es noch nicht gibt", async () => {
+  it("lehnt eine unbekannte Vorlage ab", async () => {
     const res = await built.app.inject({
       method: "POST", url: `/api/mp/projects/${pid}/series`, headers: auth,
-      payload: { name: "Artist", kind: "artist_spotlight" },
+      payload: { name: "Quatsch", kind: "gibtsnicht" },
     });
     expect(res.statusCode).toBe(400);
-    expect(res.json().detail).toContain("Shot 11");
   });
 
   it("ändert beim PATCH nur, was genannt wurde", async () => {
@@ -525,4 +528,95 @@ describe("Serien (Shot 9)", () => {
     expect(del.statusCode).toBe(200);
     expect(getSeries(built.db, seriesId)).toBeNull();
   });
+});
+
+
+describe("Binder-Showcase (Shot 11)", () => {
+  /** Attrappe statt Browser: liefert zwei „aufgenommene" Binderseiten. */
+  const fakeShooter = async (url: string, opts: { outDir: string; maxPages?: number }) => {
+    fs.mkdirSync(opts.outDir, { recursive: true });
+    const pages = [1, 2].slice(0, opts.maxPages ?? 5).map((n) => {
+      const file = path.join(opts.outDir, `seite-${n}.png`);
+      fs.writeFileSync(file, PNG);
+      return { file, index: n };
+    });
+    return { name: "Master Set Dschungel", stats: "64 Fächer · 8 Binderseiten", pages, totalPages: 8, pricesShown: true };
+  };
+
+  it("macht aus echten Binderseiten ein Plattform-Bündel", async () => {
+    const { generateShowcaseBundle } = await import("../src/server/agents/studio/showcase.js");
+    const { UsageCollector } = await import("../src/server/agents/runner.js");
+    const project = (await built.app.inject({ method: "GET", url: `/api/mp/projects/${pid}`, headers: auth })).json();
+    const base = {
+      db: built.db, project, brief, personas: [], kit: { colors: [], primary: null, ink: null, background: null, logoAssetId: null, logoUrl: null, fonts: [], extractedAt: null, voiceSamples: [], voiceProfile: null },
+      voice: null, language: "de",
+    };
+    const req = (await import("../src/shared/schemas.js")).ContentRequest.parse({
+      format: "showcase_carousel", bundlePlatforms: ["instagram", "tiktok"],
+      showcase: { url: "https://binderplan.app/app#ansicht/0Ujx6M1xTWw", maxPages: 2, withPrices: true },
+    });
+    const assets: string[] = [];
+    const pieces = await generateShowcaseBundle(built.ctx!, base as never, req, new UsageCollector(), {
+      language: "de",
+      addAsset: (_p, file) => { const id = `sa${assets.length}`; assets.push(file); return id; },
+      renderer: fakeRenderer, screenshotPath: null, shooter: fakeShooter as never,
+    });
+
+    expect(pieces.length).toBe(2);
+    expect(pieces[0]!.format).toBe("showcase_carousel");
+    // Cover + 2 Seiten + CTA
+    expect(pieces[0]!.assets.length).toBe(4);
+    expect((pieces[0]!.meta["showcase"] as { binderName: string; pages: number; totalPages: number }).binderName).toBe("Master Set Dschungel");
+    expect((pieces[0]!.meta["showcase"] as { pages: number }).pages).toBe(2);
+    // Der Hinweis, dass nur ein Teil gezeigt wird, steht am Stück
+    expect(pieces[0]!.aiTellNotes).toContain("2 von 8 Binderseiten");
+    // Instagram und TikTok haben verschiedene Formate, also eigene Dateien - und eigene Captions
+    expect(pieces[0]!.meta["size"]).toBe("1080x1350");
+    expect(pieces[1]!.meta["size"]).toBe("1080x1920");
+    expect(pieces[1]!.assets).not.toEqual(pieces[0]!.assets);
+    expect(pieces[1]!.assets.length).toBe(4);
+    expect(pieces[1]!.body).not.toBe(pieces[0]!.body);
+    expect(pieces[0]!.body).toContain("Kein offizielles Pokémon-Produkt");
+
+    const html = [...rendered.entries()].filter(([f]) => f.includes("1080x1350"));
+    expect(html.some(([f]) => f.includes("00-cover"))).toBe(true);
+    expect(html.some(([f]) => f.includes("seite1"))).toBe(true);
+    expect(html.some(([f]) => f.includes("99-cta"))).toBe(true);
+  }, 60_000);
+
+  it("weist einen Link ab, der keine geteilte Binder-Ansicht ist", async () => {
+    const { generateShowcaseBundle } = await import("../src/server/agents/studio/showcase.js");
+    const { UsageCollector } = await import("../src/server/agents/runner.js");
+    const project = (await built.app.inject({ method: "GET", url: `/api/mp/projects/${pid}`, headers: auth })).json();
+    const base = { db: built.db, project, brief, personas: [], kit: { colors: [], primary: null, ink: null, background: null, logoAssetId: null, logoUrl: null, fonts: [], extractedAt: null, voiceSamples: [], voiceProfile: null }, voice: null, language: "de" };
+    const req = (await import("../src/shared/schemas.js")).ContentRequest.parse({
+      format: "showcase_carousel", showcase: { url: "https://binderplan.app/" },
+    });
+    await expect(generateShowcaseBundle(built.ctx!, base as never, req, new UsageCollector(), {
+      language: "de", addAsset: () => "x", renderer: fakeRenderer, screenshotPath: null, shooter: fakeShooter as never,
+    })).rejects.toThrow(/geteilten Binder-Ansicht/);
+  });
+});
+
+describe("Rate-Modus (Shot 11)", () => {
+  it("zeigt jede Karte zweimal: verdeckt, dann aufgelöst", async () => {
+    rendered.clear();
+    const res = await built.app.inject({
+      method: "POST", url: `/api/mp/projects/${pid}/content`, headers: auth,
+      payload: { format: "data_carousel", bundlePlatforms: ["instagram"], dataQuery: { kind: "guess", set: "swsh12", n: 3, countdown: true } },
+    });
+    expect(res.statusCode).toBe(201);
+    const piece: ContentPiece = res.json();
+    // Cover + 3 Karten x 2 + CTA
+    expect(piece.assets.length).toBe(8);
+    const frage = [...rendered.entries()].filter(([f]) => f.includes("-frage"));
+    expect(frage.length).toBe(3);
+    // Auf der Frage-Slide steht kein Preis
+    expect(frage[0]![1]).toContain("? ? ?");
+    expect(frage[0]![1]).not.toContain("626,08 €");
+    // Die Auflösung direkt danach trägt ihn
+    const alle = [...rendered.keys()].filter((f) => f.startsWith("de-1080x1350-")).sort();
+    expect(alle[1]).toContain("-frage");
+    expect(alle[2]).not.toContain("-frage");
+  }, 60_000);
 });

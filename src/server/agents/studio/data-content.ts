@@ -110,9 +110,9 @@ async function loadCards(
     if (verworfen > 0) skipped.push(`${verworfen} Karten mit über ${q.maxChangePct} % Ausschlag verworfen (unglaubwürdig bei dieser Datenlage)`);
     return { loaded, skipped, scopeLabel: res.scopeLabel, totalEur: 0, priceStand: res.priceStand, coverage: null, withHistory: res.withHistory };
   }
-  if (!q.set && !q.era) throw err("Bereich fehlt: Set oder Ära wählen.");
+  if (!q.set && !q.era && !q.illustrator) throw err("Bereich fehlt: Set, Ära oder Illustrator wählen.");
   const res = await provider.topCards({
-    scope: { ...(q.set ? { set: q.set } : {}), ...(q.era ? { era: q.era } : {}), region: q.region },
+    scope: { ...(q.set ? { set: q.set } : {}), ...(q.era ? { era: q.era } : {}), ...(q.illustrator ? { illustrator: q.illustrator } : {}), region: q.region },
     n: want, priceBasis: q.priceBasis, ...(q.minPrice !== undefined ? { minPrice: q.minPrice } : {}),
   });
   const { loaded, skipped } = await withImages(provider, res.cards, q.n, lang);
@@ -213,7 +213,7 @@ export async function generateDataBundle(
   // --- Slides: deterministisch aus den Daten --------------------------------
   const ordered = q.countdown ? [...data.loaded].reverse() : data.loaded;
   const rankOf = new Map(data.loaded.map((x, i) => [x.card.id, i + 1]));
-  const slides: RankingSlide[] = ordered.map((x, i) => {
+  const slideOf = (x: Loaded, i: number, total: number, hidePrice = false): RankingSlide => {
     const mover = "changePct" in x.card ? (x.card as PriceMover) : null;
     return {
       rank: rankOf.get(x.card.id)!,
@@ -222,10 +222,17 @@ export async function generateDataBundle(
       price: fmtEur(x.card.priceEur, lang),
       ...(mover ? { change: changeLabel(mover, lang) } : {}),
       imageDataUrl: x.dataUrl,
-      index: i + 1, total: ordered.length + 2,
+      index: i + 1, total,
+      ...(hidePrice ? { hidePrice: true } : {}),
     };
-  });
-  const totalLabel = q.kind === "top"
+  };
+  // Ratemodus: jede Karte kommt zweimal — erst verdeckt, dann aufgeloest.
+  const slides: RankingSlide[] = q.kind === "guess"
+    ? ordered.flatMap((x, i) => [slideOf(x, i * 2, ordered.length * 2 + 2, true), slideOf(x, i * 2 + 1, ordered.length * 2 + 2)])
+    : ordered.map((x, i) => slideOf(x, i, ordered.length + 2));
+  const totalLabel = q.kind === "guess"
+    ? (lang === "de" ? `${data.loaded.length} Karten — was schätzt du?` : `${data.loaded.length} cards — what's your guess?`)
+    : q.kind === "top"
     ? (lang === "de" ? `Zusammen ${fmtEur(data.totalEur, lang)}` : `Together ${fmtEur(data.totalEur, lang)}`)
     : (lang === "de" ? `Letzte ${q.days} Tage` : `Last ${q.days} days`);
   const coverImages = data.loaded.slice(0, 3).map((x) => x.dataUrl);
@@ -248,7 +255,7 @@ export async function generateDataBundle(
     jobs.push({ html: rankingCoverHtml(base.kit, { title: coverTitle, totalLabel, images: coverImages }, size.w, size.h, brand, footer), width: size.w, height: size.h, file: cover });
     files.push(cover);
     slides.forEach((sl, i) => {
-      const file = path.join(outDir, `${lang}-${size.tag}-${String(i + 1).padStart(2, "0")}-rang${sl.rank}.png`);
+      const file = path.join(outDir, `${lang}-${size.tag}-${String(i + 1).padStart(2, "0")}-rang${sl.rank}${sl.hidePrice ? "-frage" : ""}.png`);
       jobs.push({ html: rankingSlideHtml(base.kit, sl, size.w, size.h, brand, footer), width: size.w, height: size.h, file });
       files.push(file);
     });
@@ -274,46 +281,91 @@ export async function generateDataBundle(
   const leadCaption = captionOf(leadPlatform) || out.captions[0]?.caption.trim() || coverTitle;
   const rev = await reviseWithCritic(ctx, usage, { body: leadCaption, language: lang, voiceProfile: base.voice, format, platform: leadPlatform, limit: PLATFORM_LIMITS[leadPlatform] ?? 2000, maxRounds: 2 });
 
-  const pools = loadHashtags(ctx.db, base.project.id);
   const notes = [rev.notes];
   if (data.skipped.length) notes.push(`Ohne ladbares Bild übersprungen (${data.skipped.length}): ${data.skipped.join(", ")}. Die Rangfolge ist die der veröffentlichten Liste.`);
   if (data.coverage && data.coverage.skipped > 0) notes.push(`${data.coverage.skipped} Karten im Bereich wurden nicht nachbepreist (Deckel je Abfrage).`);
   if (q.kind === "movers") notes.push(`Beruht auf ${data.withHistory} Karten mit Preisverlauf.`);
   notes.push(...reelNotes);
 
-  const ts = nowIso();
-  const pieces: s.ContentPiece[] = [];
-  platforms.forEach((platform, i) => {
-    const id = i === 0 ? leadId : newId();
-    const size = sizeForPlatform(platform, format);
-    const rule = format === "data_reel" ? linkRuleFor(leadPlatform) : linkRuleFor(platform);
-    const caption = i === 0 ? rev.body : (captionOf(platform) || rev.body);
-    const suggested = out.captions.find((c) => c.platform.trim().toLowerCase() === platform)?.hashtags ?? [];
-    const tags = applyHashtagPolicy(suggested, pools, platform, lang);
-    const body = [stripTags(caption), tags.join(" ")].filter(Boolean).join("\n\n");
-    const files = [...(bySize.get(size.tag) ?? []), ctaFiles.get(`${size.tag}:${rule}`) ?? ""].filter(Boolean);
-    const assets = files.map((f) => assetIds.get(f)!).filter(Boolean);
-    // Reihenfolge der Slides = Reihenfolge im Video: Cover, Karten, CTA.
-    const meta: Record<string, unknown> = {
-      bundleId: leadId, bundleLead: i === 0, platform, language: lang, size: size.tag, linkRule: rule,
-      ...(format === "data_reel" ? { reel: reelOpts, slideAssets: assets } : {}),
-      caption: body, hashtags: tags, hook: out.hook, coverTitle, ctaLine,
+  return writeBundlePieces({
+    db: ctx.db, projectId: base.project.id, leadId, format, language: lang, platforms,
+    taskId: req.taskId ?? null,
+    title: out.title || coverTitle,
+    score: rev.score, notes: notes.filter(Boolean).join("\n"),
+    captionFor: (platform, isLead) => (isLead ? rev.body : captionOf(platform) || rev.body),
+    hashtagsFor: (platform) => out.captions.find((c) => c.platform.trim().toLowerCase() === platform)?.hashtags ?? [],
+    assetsFor: (platform) => {
+      const size = sizeForPlatform(platform, format);
+      const rule = format === "data_reel" ? linkRuleFor(leadPlatform) : linkRuleFor(platform);
+      return [...(bySize.get(size.tag) ?? []), ctaFiles.get(`${size.tag}:${rule}`) ?? ""].filter(Boolean).map((f) => assetIds.get(f)!).filter(Boolean);
+    },
+    sizeFor: (platform) => sizeForPlatform(platform, format).tag,
+    ruleFor: (platform) => (format === "data_reel" ? linkRuleFor(leadPlatform) : linkRuleFor(platform)),
+    meta: {
+      ...(format === "data_reel" ? { reel: reelOpts } : {}),
+      hook: out.hook, coverTitle, ctaLine, footer,
       dataQuery: q, scopeLabel: data.scopeLabel, priceStand: data.priceStand, totalEur: data.totalEur,
-      footer, limit: PLATFORM_LIMITS[platform] ?? 2000,
       cards: data.loaded.map((x, n) => ({ rank: n + 1, id: x.card.id, name: x.card.name, nameEn: x.card.nameEn, setName: x.card.setName, localId: x.card.localId, priceEur: x.card.priceEur, priceBasisUsed: x.card.priceBasisUsed, priceUpdatedAt: x.card.priceUpdatedAt })),
       skippedNoImage: data.skipped, coverage: data.coverage, request: req,
+    },
+  });
+}
+
+/**
+ * Die Stuecke eines Buendels in die Datenbank schreiben.
+ *
+ * Steht fuer sich, weil zwei Generatoren sie brauchen: die Ranglisten
+ * (`generateDataBundle`) und der Binder-Showcase aus Shot 11. Hier haengen
+ * `bundleId`, Asset-Zuordnung und Hashtag-Politik zusammen — genau die Stellen,
+ * an denen eine zweite Kopie irgendwann auseinanderlaufen wuerde.
+ */
+export interface BundleRowsInput {
+  db: Db;
+  projectId: string;
+  leadId: string;
+  format: s.ContentPiece["format"];
+  language: "de" | "en";
+  platforms: string[];
+  taskId: string | null;
+  title: string;
+  score: number | null;
+  notes: string;
+  captionFor: (platform: string, isLead: boolean) => string;
+  hashtagsFor: (platform: string) => string[];
+  assetsFor: (platform: string) => string[];
+  sizeFor: (platform: string) => string;
+  ruleFor: (platform: string) => "bio" | "link";
+  meta: Record<string, unknown>;
+}
+
+export function writeBundlePieces(i: BundleRowsInput): s.ContentPiece[] {
+  const pools = loadHashtags(i.db, i.projectId);
+  const ts = nowIso();
+  const pieces: s.ContentPiece[] = [];
+  i.platforms.forEach((platform, n) => {
+    const id = n === 0 ? i.leadId : newId();
+    const tags = applyHashtagPolicy(i.hashtagsFor(platform), pools, platform, i.language);
+    const body = [stripTags(i.captionFor(platform, n === 0)), tags.join(" ")].filter(Boolean).join("\n\n");
+    const assets = i.assetsFor(platform);
+    const meta: Record<string, unknown> = {
+      ...i.meta,
+      bundleId: i.leadId, bundleLead: n === 0, platform, language: i.language,
+      size: i.sizeFor(platform), linkRule: i.ruleFor(platform),
+      caption: body, hashtags: tags, limit: PLATFORM_LIMITS[platform] ?? 2000,
+      // Reihenfolge der Slides = Reihenfolge im Video: Cover, Inhalt, CTA.
+      ...(i.format === "data_reel" ? { slideAssets: assets } : {}),
     };
     const row = {
-      id, projectId: base.project.id, taskId: i === 0 ? (req.taskId ?? null) : null,
-      channel: platform, format,
-      title: `${i === 0 ? out.title || coverTitle : coverTitle} · ${platform}`.slice(0, 120),
+      id, projectId: i.projectId, taskId: n === 0 ? i.taskId : null,
+      channel: platform, format: i.format,
+      title: `${n === 0 ? i.title : i.title} · ${platform}`.slice(0, 120),
       // Ein Reel ist erst fertig, wenn der Worker die MP4 gebaut hat - bis dahin Entwurf.
-      body, assets: toJson(assets), status: (format === "data_reel" ? "draft" : "review") as s.ContentPiece["status"], humanEdited: false,
+      body, assets: toJson(assets), status: (i.format === "data_reel" ? "draft" : "review") as s.ContentPiece["status"], humanEdited: false,
       publishedAt: null, externalUrl: null, utm: "{}", meta: toJson(meta),
-      aiTellScore: i === 0 ? rev.score : null, aiTellNotes: i === 0 ? notes.filter(Boolean).join("\n") : "",
+      aiTellScore: n === 0 ? i.score : null, aiTellNotes: n === 0 ? i.notes : "",
       rejectionReason: "", createdAt: ts, updatedAt: ts,
     };
-    ctx.db.insert(t.mpContentPieces).values(row).onConflictDoUpdate({ target: t.mpContentPieces.id, set: { ...row } }).run();
+    i.db.insert(t.mpContentPieces).values(row).onConflictDoUpdate({ target: t.mpContentPieces.id, set: { ...row } }).run();
     pieces.push({ ...row, assets, utm: {}, meta, costUsd: 0 });
   });
   return pieces;
