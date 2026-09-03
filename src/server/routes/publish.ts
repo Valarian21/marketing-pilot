@@ -12,7 +12,9 @@ import type { Db } from "../db/index.js";
 import type { Env } from "../env.js";
 import { writeAudit } from "../audit.js";
 import { getProject } from "../repo/projects.js";
-import { loadProfiles } from "../channels.js";
+import { loadProfiles, patchChannel, stageOf } from "../channels.js";
+import { channelBoard, projectSetup } from "../publish/board.js";
+import { STAGES, stageAtLeast } from "../../shared/channels.js";
 import { enqueueJob, getJob, hasActiveJob, workerAlive } from "../jobs.js";
 import { getPiece } from "../agents/studio/generate.js";
 import { loadCredentials, platformStatus, posterFor, saveCredentials } from "../publish/index.js";
@@ -31,6 +33,42 @@ export function publishRoutes(app: FastifyInstance, db: Db, env: Env): void {
     return {
       profiles: loadProfiles(db, req.params.projectId),
       platforms: platformStatus(db, req.params.projectId),
+      board: channelBoard(db, req.params.projectId),
+      setup: projectSetup(db, req.params.projectId),
+      scheduled: listScheduled(db, req.params.projectId),
+      bio, bioUrl: bio.enabled ? bioUrl(bio.code) : null,
+      autoToday: postedToday(db, req.params.projectId),
+      workerAlive: workerAlive(db),
+    };
+  });
+
+  /**
+   * Ein Kanal auf der Kanäle-Seite: Stufe, Adresse, Slots, Deckel. Die Stufe
+   * darf nicht über das hinaus, was die Plattform zulässt — X, LinkedIn und
+   * Reddit bleiben beim Vorbereiten, egal was hereinkommt.
+   */
+  r.patch("/api/mp/projects/:projectId/publish/channel/:platform", {
+    schema: { params: P.extend({ platform: z.string().min(1) }), body: s.ChannelPatch, response: { 200: s.PublishView, 400: s.ErrorBody, 404: s.ErrorBody } },
+  }, async (req, reply) => {
+    if (!getProject(db, req.params.projectId)) return reply.code(404).send({ detail: "Projekt nicht gefunden." });
+    const platform = req.params.platform.trim().toLowerCase();
+    if (req.body.stage) {
+      const card = channelBoard(db, req.params.projectId).find((c) => c.platform === platform);
+      if (card && !stageAtLeast(card.maxStage, req.body.stage)) {
+        return reply.code(400).send({ detail: `${card.label} kann höchstens „${STAGES[card.maxStage].label}“: ${card.maxReason}` });
+      }
+    }
+    const before = stageOf(db, req.params.projectId, platform);
+    const next = patchChannel(db, req.params.projectId, platform, req.body);
+    if (req.body.stage && req.body.stage !== before) {
+      writeAudit(db, { user: req.user, action: "channel.stage", entityType: "project", entityId: req.params.projectId, projectId: req.params.projectId, content: { platform, from: before, to: next.stage } });
+    }
+    const bio = loadBio(db, req.params.projectId);
+    return {
+      profiles: loadProfiles(db, req.params.projectId),
+      platforms: platformStatus(db, req.params.projectId),
+      board: channelBoard(db, req.params.projectId),
+      setup: projectSetup(db, req.params.projectId),
       scheduled: listScheduled(db, req.params.projectId),
       bio, bioUrl: bio.enabled ? bioUrl(bio.code) : null,
       autoToday: postedToday(db, req.params.projectId),
@@ -56,6 +94,14 @@ export function publishRoutes(app: FastifyInstance, db: Db, env: Env): void {
   }, async (req, reply) => {
     const piece = getPiece(db, req.params.id);
     if (!piece) return reply.code(404).send({ detail: "Stück nicht gefunden." });
+    // Die Stufe entscheidet: auf „Vorbereiten" postest du selbst, der Pilot plant dort nichts ein.
+    const targets = (req.body.platforms.length ? req.body.platforms : [String(piece.meta["platform"] ?? piece.channel)]).map((p) => p.trim().toLowerCase());
+    for (const platform of targets) {
+      const stage = stageOf(db, piece.projectId, platform);
+      if (!stageAtLeast(stage, "approve")) {
+        return reply.code(400).send({ detail: `${platform} steht auf Stufe „${STAGES[stage].label}“ — dort postest du selbst. Zum Einplanen den Kanal auf „Freigeben“ stellen.` });
+      }
+    }
     const planned = schedulePiece(db, piece.projectId, { pieceId: piece.id, ...(req.body.platforms.length ? { platforms: req.body.platforms } : {}), ...(req.body.scheduledAt ? { at: req.body.scheduledAt } : {}) });
     writeAudit(db, { user: req.user, action: "publish.schedule", entityType: "content_piece", entityId: piece.id, projectId: piece.projectId, content: { entries: planned.map((x) => ({ platform: x.platform, at: x.scheduledAt })) } });
     return reply.code(201).send(planned);

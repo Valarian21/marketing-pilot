@@ -21,6 +21,8 @@ import { currentVersion, dueAtFor } from "../strategy/plan.js";
 import { weekOf } from "../../routes/tasks.js";
 import { generateContent, pieceOf, type StudioContext } from "../studio/generate.js";
 import { autoScheduleBundle } from "../../publish/auto.js";
+import { stageOf } from "../../channels.js";
+import { stageAtLeast } from "../../../shared/channels.js";
 import { catalogFor, isAvailable } from "./catalog.js";
 import { isDue, nextRunAt } from "./time.js";
 import { shareIdOf } from "./binder.js";
@@ -237,6 +239,14 @@ export async function runSeries(
     }
   } finally { provider.close(); }
 
+  // Die Stufe je Kanal entscheidet, wer bespielt wird: ein Kanal auf „Aus" bekommt
+  // nichts, auch wenn die Serie ihn nennt. Bleibt keiner, faellt der Lauf mit
+  // Begruendung aus statt Content ins Leere zu erzeugen.
+  const platforms = series.params.platforms.filter((p) => stageAtLeast(stageOf(ctx.db, series.projectId, p), "prepare"));
+  if (platforms.length === 0) {
+    throw err(`Kein Kanal dieser Serie ist eingeschaltet (${series.params.platforms.join(", ")} stehen auf „Aus“). Auf der Kanäle-Seite mindestens einen auf „Vorbereiten“ stellen.`, 409);
+  }
+
   const pieces: string[] = [];
   const autoNotes: string[] = [];
   // Der Showcase erzeugt genau ein Buendel, egal welche Formate eingestellt sind.
@@ -247,8 +257,8 @@ export async function runSeries(
       // Der Showcase kennt nur ein Format: echte Seiten lassen sich nicht als Reel abkuerzen.
       format: showcase ? "showcase_carousel" : format,
       topic: "", hint: "", seriesId: series.id,
-      platform: series.params.platforms[0] ?? "instagram",
-      bundlePlatforms: series.params.platforms,
+      platform: platforms[0] ?? "instagram",
+      bundlePlatforms: platforms,
       language: series.params.language,
       dataQuery: scope.query,
       ...(showcase ? { showcase: { url: scope.showcaseUrl ?? "", maxPages: series.params.maxPages, withPrices: series.params.withPrices } } : {}),

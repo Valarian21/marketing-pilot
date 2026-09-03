@@ -5,7 +5,8 @@ import { api } from "../api.js";
 import { Button, Card, Notice, PageHeader, Pill, fmtDateTime, type PillKind } from "../components/ui.js";
 import { ProjectNav } from "../components/ProjectNav.js";
 import { fmtUsd } from "../components/Revise.js";
-import { ChannelTag } from "../components/ChannelLink.js";
+import { ChannelTag, useProfiles } from "../components/ChannelLink.js";
+import { STAGES } from "../../shared/channels.js";
 
 const TABS = [{ id: "erstellen", label: "Erstellen" }, { id: "brand", label: "Brand-Kit & Stimme" }, { id: "hashtags", label: "Hashtags" }, { id: "verzeichnisse", label: "Verzeichnisse" }, { id: "geo", label: "GEO-Artikel" }] as const;
 type Tab = (typeof TABS)[number]["id"];
@@ -64,6 +65,9 @@ function CreateTab({ id, view, busy, run }: { id: string; view: StudioView; busy
   const [template, setTemplate] = useState("clean");
   const [topic, setTopic] = useState(params.get("topic") ?? "");
   const [hint, setHint] = useState(params.get("hint") ?? "");
+  const profiles = useProfiles(id);
+  const stageOf = (p: string) => profiles.find((x) => x.platform === p)?.stage ?? "off";
+  const opt = (p: string) => <option key={p} value={p}>{p} · {STAGES[stageOf(p)].label}</option>;
 
   // Daten-Carousel: Bereich, Umfang und Bündel-Plattformen
   const [data, setData] = useState<ProductDataView | null>(null);
@@ -112,9 +116,10 @@ function CreateTab({ id, view, busy, run }: { id: string; view: StudioView; busy
                 {hasData && <option value="data_reel">Daten-Reel (Video 1080×1920)</option>}
                 <option value="pin">Pinterest-Pin (1000×1500)</option><option value="image">Bild / Thumbnail (KI)</option><option value="ad_creative">Ad-Hintergrund (KI)</option>
               </select></label>
-            {format === "text" && <label className="mp-field mp-field--short"><span>Plattform</span><select value={platform} onChange={(e) => setPlatform(e.target.value)}>{["linkedin", "x", "threads", "bluesky", "facebook", "instagram"].map((p) => <option key={p} value={p}>{p}</option>)}</select></label>}
-            {format === "carousel" && <><label className="mp-field mp-field--short"><span>Plattform</span><select value={platform} onChange={(e) => setPlatform(e.target.value)}><option value="instagram">instagram</option><option value="linkedin">linkedin</option></select></label>
+            {format === "text" && <label className="mp-field mp-field--short"><span>Plattform</span><select value={platform} onChange={(e) => setPlatform(e.target.value)}>{["linkedin", "x", "threads", "bluesky", "facebook", "instagram"].map(opt)}</select></label>}
+            {format === "carousel" && <><label className="mp-field mp-field--short"><span>Plattform</span><select value={platform} onChange={(e) => setPlatform(e.target.value)}>{["instagram", "linkedin"].map(opt)}</select></label>
               <label className="mp-field mp-field--short"><span>Layout</span><select value={template} onChange={(e) => setTemplate(e.target.value)}>{["clean", "bold", "screenshot", "list", "story"].map((t) => <option key={t} value={t}>{t}</option>)}</select></label></>}
+            {!isData && format !== "pin" && stageOf(platform) === "off" && <Notice kind="info">{platform} ist auf der <Link to={`/projects/${id}/channels`}>Kanäle-Seite</Link> ausgeschaltet. Erstellen geht trotzdem — nur Serien lassen den Kanal aus.</Notice>}
             {!isData && <label className="mp-field"><span>Thema / Blickwinkel</span><input value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="z. B. „Sonntagabend-Vorbereitung in 10 Minuten“" /></label>}
           </div>
 
@@ -151,7 +156,7 @@ function CreateTab({ id, view, busy, run }: { id: string; view: StudioView; busy
               <fieldset className="mp-field">
                 <span>Plattformen im Bündel <span className="mp-muted mp-small">{format === "data_reel" ? "eine MP4 für alle, eigene Caption je Kanal" : "gleiche Slides, eigene Caption, eigene Hashtags"}</span></span>
                 <div className="mp-inline">{BUNDLE_PLATFORMS.map((p) => (
-                  <label key={p} className="mp-inline mp-small"><input type="checkbox" checked={bundle.includes(p)} onChange={() => toggle(p)} /> {p}</label>
+                  <label key={p} className={`mp-inline mp-small${stageOf(p) === "off" ? " mp-muted" : ""}`} title={STAGES[stageOf(p)].summary}><input type="checkbox" checked={bundle.includes(p)} onChange={() => toggle(p)} /> {p} <span className="mp-muted">· {STAGES[stageOf(p)].label}</span></label>
                 ))}</div>
               </fieldset>
             </>

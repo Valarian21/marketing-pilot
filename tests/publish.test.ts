@@ -16,6 +16,7 @@ import { platformStatus, posterFor, saveCredentials } from "../src/server/publis
 import { duePosts, nextFreeSlot, runScheduledPost, schedulePiece } from "../src/server/publish/schedule.js";
 import { PLATFORM_POSTING } from "../src/server/publish/types.js";
 import { saveProfiles } from "../src/server/channels.js";
+import { fullProfile } from "../src/shared/channels.js";
 import { autoScheduleBundle } from "../src/server/publish/auto.js";
 import { fakeHost } from "./helpers.js";
 
@@ -132,6 +133,73 @@ describe("Signierte Asset-Adressen", () => {
     expect(ok.statusCode).toBe(200);
     expect(ok.headers["content-type"]).toContain("image/png");
     expect((await built.app.inject({ method: "GET", url: "/go/a/erfunden" })).statusCode).toBe(404);
+  });
+});
+
+describe("Stufen je Kanal (Content-Pilot)", () => {
+  it("leitet die Stufe aus alten Profilen ab und den publishMode aus der Stufe", () => {
+    expect(fullProfile({ platform: "bluesky", publishMode: "scheduled" }).stage).toBe("approve");
+    expect(fullProfile({ platform: "bluesky", publishMode: "auto" }).stage).toBe("auto");
+    expect(fullProfile({ platform: "bluesky", publishMode: "manual" }).stage).toBe("prepare");
+    expect(fullProfile({ platform: "bluesky", stage: "off" }).publishMode).toBe("manual");
+    expect(fullProfile({ platform: "bluesky", stage: "approve" }).publishMode).toBe("scheduled");
+    // Die Stufe gewinnt, wenn beides da ist.
+    expect(fullProfile({ platform: "bluesky", stage: "auto", publishMode: "manual" }).publishMode).toBe("auto");
+  });
+
+  it("zeigt jede Plattform als Karte mit Stufe, Grenze und dem, was fehlt", async () => {
+    const res = await built.app.inject({ method: "GET", url: `/api/mp/projects/${pid}/publish`, headers: auth });
+    expect(res.statusCode).toBe(200);
+    const board = res.json().board as { platform: string; stage: string; maxStage: string; requirements: { id: string; ok: boolean; blocking: boolean }[]; ready: boolean; nextMissing: string[] }[];
+    expect(board.length).toBeGreaterThanOrEqual(12);
+    // Ohne Profil steht alles auf „Aus" und ist damit trivial bereit.
+    expect(board.every((c) => c.stage === "off" && c.ready)).toBe(true);
+    // X und Reddit kommen nie über das Vorbereiten hinaus; Bluesky darf bis ganz nach oben.
+    expect(board.find((c) => c.platform === "x")!.maxStage).toBe("prepare");
+    expect(board.find((c) => c.platform === "reddit")!.maxStage).toBe("prepare");
+    expect(board.find((c) => c.platform === "bluesky")!.maxStage).toBe("auto");
+    // Was für die nächste Stufe („Vorbereiten") fehlt: der Brief — das Projekt hat keinen.
+    expect(board.find((c) => c.platform === "bluesky")!.nextMissing).toContain("Produkt-Brief bestätigt");
+  });
+
+  it("nennt auf „Freigeben“ ohne Zugang genau das als Blocker", async () => {
+    // Der vorige Block hat Bluesky eingerichtet — für diesen Test ist der Zugang weg und kommt am Ende zurück.
+    saveCredentials(built.db, pid, { bluesky: { handle: "", appPassword: "" } });
+    const res = await built.app.inject({ method: "PATCH", url: `/api/mp/projects/${pid}/publish/channel/bluesky`, headers: auth, payload: { stage: "approve" } });
+    expect(res.statusCode).toBe(200);
+    const card = res.json().board.find((c: { platform: string }) => c.platform === "bluesky");
+    expect(card.stage).toBe("approve");
+    expect(card.ready).toBe(false);
+    const creds = card.requirements.find((r: { id: string }) => r.id === "creds");
+    expect(creds.ok).toBe(false);
+    expect(creds.blocking).toBe(true);
+    expect(creds.action).toBe("credentials");
+    // Zugang eintragen → der Blocker ist weg.
+    await built.app.inject({ method: "PUT", url: `/api/mp/projects/${pid}/publish/credentials`, headers: auth, payload: { bluesky: { handle: "bp.bsky.social", appPassword: "abcd-efgh" } } });
+    const after = (await built.app.inject({ method: "GET", url: `/api/mp/projects/${pid}/publish`, headers: auth })).json().board.find((c: { platform: string }) => c.platform === "bluesky");
+    expect(after.requirements.find((r: { id: string }) => r.id === "creds").ok).toBe(true);
+    // Der Brief fehlt weiterhin — Bluesky bleibt „nicht bereit", aber aus dem richtigen Grund.
+    expect(after.ready).toBe(false);
+    expect(after.requirements.filter((r: { ok: boolean; blocking: boolean }) => !r.ok && r.blocking).map((r: { id: string }) => r.id)).toEqual(["brief", "worker"]);
+    // Zurück auf Aus, damit die folgenden Tests ihren eigenen Zustand setzen.
+    await built.app.inject({ method: "PATCH", url: `/api/mp/projects/${pid}/publish/channel/bluesky`, headers: auth, payload: { stage: "off" } });
+    saveCredentials(built.db, pid, { bluesky: { handle: "neu.bsky.social", appPassword: "abcd-efgh" } });
+  });
+
+  it("lässt X nicht über das Vorbereiten hinaus", async () => {
+    const res = await built.app.inject({ method: "PATCH", url: `/api/mp/projects/${pid}/publish/channel/x`, headers: auth, payload: { stage: "approve" } });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().detail).toContain("Vorbereiten");
+    const ok = await built.app.inject({ method: "PATCH", url: `/api/mp/projects/${pid}/publish/channel/x`, headers: auth, payload: { stage: "prepare", url: "https://x.com/binderplan" } });
+    expect(ok.statusCode).toBe(200);
+    expect(ok.json().profiles.find((p: { platform: string }) => p.platform === "x").url).toBe("https://x.com/binderplan");
+  });
+
+  it("plant über die API nur ein, was auf „Freigeben“ oder höher steht", async () => {
+    saveProfiles(built.db, pid, [{ platform: "bluesky", stage: "prepare" }]);
+    const no = await built.app.inject({ method: "POST", url: `/api/mp/content/${pieceId}/publish/schedule`, headers: auth, payload: { platforms: ["bluesky"] } });
+    expect(no.statusCode).toBe(400);
+    expect(no.json().detail).toContain("postest du selbst");
   });
 });
 

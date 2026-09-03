@@ -656,11 +656,25 @@ export const PostSlot = z.object({ day: Weekday, hour: z.number().int().min(0).m
  */
 export const PublishMode = z.enum(["manual", "scheduled", "auto"]);
 
+/** Die Stufe eines Kanals — Erklaerung und Ableitung in `shared/channels.ts` (`STAGES`). */
+export const ChannelStage = z.enum(["off", "prepare", "approve", "auto"]);
+
 export const ChannelProfile = z.object({
   platform: z.string().min(1), label: z.string().default(""), url: z.string().default(""),
   slots: z.array(PostSlot).default([]),
+  /** Fehlt in alten Eintraegen — der Server leitet sie dann aus `publishMode` ab. */
+  stage: ChannelStage.optional(),
   publishMode: PublishMode.default("manual"),
   autoWeeklyCap: z.number().int().min(0).max(50).default(5),
+});
+
+/** Teil-Aenderung eines Kanals von der Kanaele-Seite: nur was mitkommt, aendert sich. */
+export const ChannelPatch = z.object({
+  stage: ChannelStage.optional(),
+  url: z.string().optional(),
+  label: z.string().optional(),
+  slots: z.array(PostSlot).optional(),
+  autoWeeklyCap: z.number().int().min(0).max(50).optional(),
 });
 
 /** Was eine Plattform ueberhaupt zulaesst — Grundlage jeder Anzeige im UI. */
@@ -678,6 +692,52 @@ export const PlatformPosting = z.object({
   tokenAgeDays: z.number().int().nullable().default(null),
   /** Klartext-Warnung, wenn er bald abläuft (sonst leer). */
   warning: z.string().default(""),
+});
+
+/**
+ * Eine Voraussetzung fuer die gewaehlte Stufe. `blocking` heisst: ohne sie laeuft
+ * die Stufe nicht (Zugang fehlt); sonst ist es ein Hinweis (kein Slot gesetzt).
+ */
+export const ChannelRequirement = z.object({
+  id: z.string(),
+  label: z.string(),
+  ok: z.boolean(),
+  blocking: z.boolean(),
+  /** Was zu tun ist, wenn `ok` falsch ist — ein Satz. */
+  hint: z.string().default(""),
+  /** Wohin der Hinweis fuehrt: `credentials` (Felder auf der Karte), `slots`, oder eine App-Route. */
+  action: z.string().nullable().default(null),
+});
+
+/** Eine Plattform auf der Kanaele-Seite: Stufe, Bereitschaft, was fehlt. */
+export const ChannelCard = z.object({
+  platform: z.string(),
+  label: z.string(),
+  stage: ChannelStage,
+  /** Hoechste Stufe, die diese Plattform ueberhaupt erreichen kann (X/LinkedIn/Reddit: `prepare`). */
+  maxStage: ChannelStage,
+  /** Warum nicht hoeher — der Satz aus `PLATFORM_POSTING`. */
+  maxReason: z.string().default(""),
+  url: z.string().default(""),
+  slots: z.array(PostSlot).default([]),
+  autoWeeklyCap: z.number().int().default(5),
+  /** Upload nur per App (Instagram, TikTok): der Hinweis steht auf der Karte. */
+  appOnly: z.boolean().default(false),
+  posting: PlatformPosting,
+  requirements: z.array(ChannelRequirement).default([]),
+  /** Alle blockierenden Voraussetzungen der gewaehlten Stufe erfuellt. */
+  ready: z.boolean(),
+  /** Was fuer die naechste Stufe noch fehlt (leer, wenn erreicht oder nicht moeglich). */
+  nextMissing: z.array(z.string()).default([]),
+  stats: z.object({
+    waitingReview: z.number().int().default(0),
+    approvedUnposted: z.number().int().default(0),
+    queued: z.number().int().default(0),
+    posted7d: z.number().int().default(0),
+    lastPostedAt: Iso.nullable().default(null),
+    /** Aktive Serien, die diesen Kanal bespielen. */
+    series: z.number().int().default(0),
+  }),
 });
 
 export const ScheduledStatus = z.enum(["queued", "posted", "failed", "cancelled"]);
@@ -709,6 +769,10 @@ export const BioSettings = z.object({
 export const PublishView = z.object({
   profiles: z.array(ChannelProfile),
   platforms: z.array(PlatformPosting),
+  /** Die Kanaele-Seite: eine Karte je Plattform mit Stufe und Bereitschaft. */
+  board: z.array(ChannelCard).default([]),
+  /** Projektweite Voraussetzungen, die jede Stufe ab `prepare` braucht. */
+  setup: z.object({ briefConfirmed: z.boolean(), brandKit: z.boolean(), voiceProfile: z.boolean(), hasData: z.boolean() }),
   scheduled: z.array(ScheduledPost),
   bio: BioSettings,
   bioUrl: z.string().nullable(),
@@ -933,6 +997,10 @@ export type DirectoryDef = z.infer<typeof DirectoryDef>;
 export type DirectoryStatus = z.infer<typeof DirectoryStatus>;
 export type PublishPackage = z.infer<typeof PublishPackage>;
 export type ChannelProfile = z.infer<typeof ChannelProfile>;
+export type ChannelStage = z.infer<typeof ChannelStage>;
+export type ChannelPatch = z.infer<typeof ChannelPatch>;
+export type ChannelRequirement = z.infer<typeof ChannelRequirement>;
+export type ChannelCard = z.infer<typeof ChannelCard>;
 export type DataSource = z.infer<typeof DataSource>;
 export type ProductSet = z.infer<typeof ProductSet>;
 export type ProductEra = z.infer<typeof ProductEra>;

@@ -2,9 +2,9 @@
 import { useEffect } from "react";
 import { NavLink } from "react-router";
 
-// Only the pages the sidebar does not offer - everything else (Aufgaben, Studio, Freigaben, …) is one click away there.
+// Heute und Kanäle sind der Weg des Content-Piloten; der Produkt-Brief (Analyse) ist der einmalige Einrichtungsschritt davor.
 const TABS = [
-  { to: "", label: "Heute" }, { to: "/analysis", label: "Analyse" }, { to: "/strategy", label: "Strategie" },
+  { to: "", label: "Heute" }, { to: "/channels", label: "Kanäle" }, { to: "/analysis", label: "Produkt-Brief" },
 ];
 
 export function rememberProject(id: string): void { try { localStorage.setItem("mp_project", id); } catch { /* ignore */ } }

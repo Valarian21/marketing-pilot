@@ -23,11 +23,11 @@ import { processNextJob, writeHeartbeat } from "../src/server/jobs.js";
 import { renderSlideshowJob } from "../src/server/agents/video/slideshow.js";
 import { SERIES_STEPS } from "../src/server/agents/series/job.js";
 import { seriesRunJob } from "../src/server/agents/series/job.js";
-import { getSeries, jammedSeries } from "../src/server/agents/series/series.js";
+import { getSeries, jammedSeries, runSeries } from "../src/server/agents/series/series.js";
 import { berlinParts } from "../src/server/agents/series/time.js";
 import { enqueueDue } from "../src/server/scheduler.js";
 import type { VideoContext } from "../src/server/agents/video/pipeline.js";
-import { fakeHost } from "./helpers.js";
+import { fakeHost, TEST_USER } from "./helpers.js";
 
 const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==", "base64");
 const usage = { tokensIn: 40, tokensOut: 20, costUsd: 0.001 };
@@ -417,6 +417,24 @@ describe("Serien (Shot 9)", () => {
   /** Der Slideshow-Job wird hier nicht gebraucht - er darf die Warteschlange nur nicht blockieren. */
   const handlers = { "series.run": seriesRunJob, "video.slideshow": async () => ({ übersprungen: true }) };
   const drain = async () => { for (let i = 0; i < 6; i++) if (!(await processNextJob(built.ctx!, handlers))) break; };
+
+  it("lässt eine Serie erst laufen, wenn ihr Kanal eingeschaltet ist", async () => {
+    // Ohne Profil steht Instagram auf „Aus" — der Lauf muss das sagen, statt Content ins Leere zu erzeugen.
+    const created = await built.app.inject({
+      method: "POST", url: `/api/mp/projects/${pid}/series`, headers: auth,
+      payload: { name: "Probe", kind: "top_set", cadence: { days: ["mon"], hour: 9 }, params: { n: 5, formats: ["data_carousel"], platforms: ["instagram"] } },
+    });
+    expect(created.statusCode).toBe(201);
+    await expect(runSeries(built.ctx!, created.json().id, TEST_USER, { preview: true })).rejects.toThrow(/„Aus“/);
+    await built.app.inject({ method: "DELETE", url: `/api/mp/series/${created.json().id}`, headers: auth });
+
+    // Einschalten über die Kanäle-Seite: Instagram auf „Vorbereiten".
+    const on = await built.app.inject({ method: "PATCH", url: `/api/mp/projects/${pid}/publish/channel/instagram`, headers: auth, payload: { stage: "prepare" } });
+    expect(on.statusCode).toBe(200);
+    const card = on.json().board.find((c: { platform: string }) => c.platform === "instagram");
+    expect(card.stage).toBe("prepare");
+    expect(card.maxStage).toBe("auto");
+  });
 
   it("legt eine Serie aus dem Katalog an", async () => {
     const res = await built.app.inject({

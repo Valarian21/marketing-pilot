@@ -58,13 +58,65 @@ export function canonicalChannel(name: string, planChannels: readonly string[] =
 export type WeekdayId = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
 const WEEKDAY_IDS: readonly WeekdayId[] = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 
-/** Ein Kanal-Profil des Projekts. `slots`/`publishMode` kamen mit Shot 10 dazu. */
+/**
+ * Die Stufe eines Kanals — der Kern des Content-Piloten.
+ *
+ * Jede Plattform steht auf genau einer Stufe, und die Stufe sagt, wie viel der
+ * Pilot dort von selbst tut:
+ * - `off`      Aus: der Kanal wird nicht bespielt. Serien lassen ihn aus.
+ * - `prepare`  Vorbereiten: der Pilot erstellt fertigen Content, du postest
+ *              ihn selbst (Text kopieren, Dateien laden, Plattform öffnen).
+ * - `approve`  Freigeben: der Pilot erstellt, du gibst frei, der Pilot postet
+ *              zum nächsten Slot über die API der Plattform.
+ * - `auto`     Vollautomatisch: Serien-Stücke gehen ohne Einzelfreigabe raus —
+ *              nur Daten-Formate, nur bis zum Wochendeckel.
+ *
+ * `publishMode` (Shot 10) ist seither eine **abgeleitete** Größe: off/prepare →
+ * manual, approve → scheduled, auto → auto. Es gibt genau eine Quelle der
+ * Wahrheit, und das ist die Stufe.
+ */
+export type ChannelStage = "off" | "prepare" | "approve" | "auto";
+export type PublishMode = "manual" | "scheduled" | "auto";
+
+export const STAGE_ORDER: readonly ChannelStage[] = ["off", "prepare", "approve", "auto"];
+
+export interface StageDef {
+  label: string;
+  /** Ein Satz, was auf dieser Stufe passiert — steht wörtlich im UI. */
+  summary: string;
+  /** Wer erstellt / wer gibt frei / wer postet. */
+  who: { create: "du" | "Pilot" | "–"; approve: "du" | "–"; post: "du" | "Pilot" | "–" };
+}
+
+export const STAGES: Record<ChannelStage, StageDef> = {
+  off: { label: "Aus", summary: "Der Kanal wird nicht bespielt. Serien lassen ihn aus, nichts entsteht für ihn.", who: { create: "–", approve: "–", post: "–" } },
+  prepare: { label: "Vorbereiten", summary: "Der Pilot erstellt fertigen Content. Du kopierst Text und Dateien und postest selbst auf der Plattform.", who: { create: "Pilot", approve: "du", post: "du" } },
+  approve: { label: "Freigeben", summary: "Der Pilot erstellt, du gibst frei — dann postet er von selbst zum nächsten Slot.", who: { create: "Pilot", approve: "du", post: "Pilot" } },
+  auto: { label: "Vollautomatisch", summary: "Serien-Stücke gehen ohne Einzelfreigabe raus. Nur Daten-Formate, nur bis zum Wochendeckel, mit Tagesdigest.", who: { create: "Pilot", approve: "–", post: "Pilot" } },
+};
+
+export const isStage = (x: unknown): x is ChannelStage => typeof x === "string" && (STAGE_ORDER as readonly string[]).includes(x);
+export const stageRank = (s: ChannelStage): number => STAGE_ORDER.indexOf(s);
+/** Ob eine Stufe mindestens so weit ist wie eine andere. */
+export const stageAtLeast = (s: ChannelStage, min: ChannelStage): boolean => stageRank(s) >= stageRank(min);
+
+export function modeFromStage(stage: ChannelStage): PublishMode {
+  return stage === "auto" ? "auto" : stage === "approve" ? "scheduled" : "manual";
+}
+/** Für alte Profile ohne Stufe: `manual` war ein bewusst angelegter Kanal, den man selbst bespielt. */
+export function stageFromMode(mode: unknown): ChannelStage {
+  return mode === "auto" ? "auto" : mode === "scheduled" ? "approve" : "prepare";
+}
+
+/** Ein Kanal-Profil des Projekts. `slots`/`publishMode` kamen mit Shot 10 dazu, `stage` mit dem Content-Piloten. */
 export interface ChannelProfile {
   platform: string; label: string; url: string;
   /** Wochentag + Stunde (Europe/Berlin), zu denen auf diesem Kanal gepostet wird. */
   slots: { day: WeekdayId; hour: number }[];
-  /** manual | scheduled | auto — Standard ist ueberall `manual`. */
-  publishMode: "manual" | "scheduled" | "auto";
+  /** Die Stufe — siehe `STAGES`. */
+  stage: ChannelStage;
+  /** Abgeleitet aus `stage`; bleibt für die Zeitplan-Logik aus Shot 10 erhalten. */
+  publishMode: PublishMode;
   autoWeeklyCap: number;
 }
 
@@ -72,10 +124,10 @@ export interface ChannelProfile {
 export function fullProfile(p: Partial<ChannelProfile> & { platform: string }): ChannelProfile {
   const slots = (Array.isArray(p.slots) ? p.slots : [])
     .filter((x): x is { day: WeekdayId; hour: number } => WEEKDAY_IDS.includes(x?.day as WeekdayId) && Number.isInteger(x?.hour) && x.hour >= 0 && x.hour <= 23);
+  const stage = isStage(p.stage) ? p.stage : stageFromMode(p.publishMode);
   return {
     platform: p.platform, label: p.label ?? "", url: p.url ?? "",
-    slots,
-    publishMode: p.publishMode === "scheduled" || p.publishMode === "auto" ? p.publishMode : "manual",
+    slots, stage, publishMode: modeFromStage(stage),
     autoWeeklyCap: typeof p.autoWeeklyCap === "number" ? Math.max(0, Math.min(50, Math.round(p.autoWeeklyCap))) : 5,
   };
 }
@@ -105,7 +157,8 @@ export function defaultProfiles(planChannels: readonly string[]): ChannelProfile
     const key = platformKey(c);
     if (!key || seen.has(key) || !PLATFORMS[key]?.home) continue;
     seen.add(key);
-    out.push(fullProfile({ platform: key, label: PLATFORMS[key]!.label }));
+    // Ohne gespeichertes Profil steht ein Kanal auf „Aus" — eingeschaltet wird bewusst, auf der Kanäle-Seite.
+    out.push(fullProfile({ platform: key, label: PLATFORMS[key]!.label, stage: "off" }));
   }
   return out;
 }

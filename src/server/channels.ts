@@ -2,7 +2,7 @@
 import { eq } from "drizzle-orm";
 import * as t from "./db/schema.js";
 import { nowIso, parseJson, toJson, type Db } from "./db/index.js";
-import { defaultProfiles, fullProfile, type ChannelProfile } from "../shared/channels.js";
+import { defaultProfiles, fullProfile, PLATFORMS, type ChannelProfile, type ChannelStage } from "../shared/channels.js";
 import { currentVersion } from "./agents/strategy/plan.js";
 
 const key = (projectId: string) => `channels:${projectId}`;
@@ -20,8 +20,31 @@ export function loadProfiles(db: Db, projectId: string): ChannelProfile[] {
   return [...stored, ...missing];
 }
 
-export function saveProfiles(db: Db, projectId: string, profiles: ChannelProfile[]): ChannelProfile[] {
-  const clean = profiles.map((p) => fullProfile({ ...p, platform: p.platform.trim().toLowerCase(), label: p.label.trim(), url: p.url.trim() })).filter((p) => p.platform);
+type ProfileInput = { [K in keyof ChannelProfile]?: ChannelProfile[K] | undefined } & { platform: string };
+
+export function saveProfiles(db: Db, projectId: string, profiles: ProfileInput[]): ChannelProfile[] {
+  const clean = profiles.map((raw) => Object.fromEntries(Object.entries(raw).filter(([, v]) => v !== undefined)) as Partial<ChannelProfile> & { platform: string }).map((p) => fullProfile({ ...p, platform: p.platform.trim().toLowerCase(), label: (p.label ?? "").trim(), url: (p.url ?? "").trim() })).filter((p) => p.platform);
   db.insert(t.mpSettings).values({ key: key(projectId), value: toJson(clean), updatedAt: nowIso() }).onConflictDoUpdate({ target: t.mpSettings.key, set: { value: toJson(clean), updatedAt: nowIso() } }).run();
   return loadProfiles(db, projectId);
+}
+
+/** Die Stufe eines Kanals — `off`, wenn es kein Profil gibt. Das ist die eine Frage, die Serien und Zeitplan stellen. */
+export function stageOf(db: Db, projectId: string, platform: string): ChannelStage {
+  return loadProfiles(db, projectId).find((p) => p.platform === platform.trim().toLowerCase())?.stage ?? "off";
+}
+
+/**
+ * Ein Kanal von der Kanaele-Seite: legt das Profil an, wenn es fehlt, und aendert
+ * nur die mitgeschickten Felder. So kann eine Plattform eingeschaltet werden,
+ * ohne dass das UI die ganze Liste kennen muss.
+ */
+export function patchChannel(db: Db, projectId: string, platform: string, patch: { [K in "stage" | "url" | "label" | "slots" | "autoWeeklyCap"]?: ChannelProfile[K] | undefined }): ChannelProfile {
+  const slug = platform.trim().toLowerCase();
+  const all = loadProfiles(db, projectId);
+  const cur = all.find((p) => p.platform === slug) ?? fullProfile({ platform: slug, label: PLATFORMS[slug]?.label ?? slug, stage: "off" });
+  const defined = Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined)) as Partial<ChannelProfile>;
+  const next = fullProfile({ ...cur, ...defined });
+  const rest = all.filter((p) => p.platform !== slug);
+  saveProfiles(db, projectId, [...rest, next]);
+  return next;
 }

@@ -401,3 +401,45 @@ button, input { font: inherit; color: inherit; }
 .mp-lightbox-prev { left: 16px; } .mp-lightbox-next { right: 16px; }
 .mp-lightbox-close { top: 16px; right: 16px; width: 36px; height: 36px; font-size: 22px; }
 .mp-lightbox-nav:hover, .mp-lightbox-close:hover { background: rgba(255, 255, 255, .24); }
+
+/* --- Kanäle: Stufen-Leiter, Karten, Voraussetzungen (Content Pilot) --- */
+.mp-stage-summary { display: inline-flex; gap: 14px; }
+.mp-stage-summary b { color: var(--mp-ink); margin-right: 3px; }
+.mp-stage-legend { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--mp-gap-sm); margin-bottom: var(--mp-gap); }
+.mp-stage-legend-item { background: var(--mp-surface); border: var(--mp-border); border-radius: var(--mp-radius); padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; border-top: 3px solid var(--mp-line); }
+.mp-stage-legend-item--prepare { border-top-color: var(--mp-pill-todo-fg); }
+.mp-stage-legend-item--approve { border-top-color: var(--mp-pill-progress-fg); }
+.mp-stage-legend-item--auto { border-top-color: var(--mp-pill-done-fg); }
+.mp-stage-legend-item p { margin: 0; }
+.mp-stage-legend-title { font-weight: 700; font-size: var(--mp-text-md); }
+.mp-stage-who { color: var(--mp-ink-2); }
+.mp-stage-who b { color: var(--mp-ink); font-weight: 600; }
+.mp-channel-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: var(--mp-gap); margin-bottom: var(--mp-gap); }
+.mp-channel-card { display: flex; flex-direction: column; gap: 10px; border-left: 3px solid var(--mp-pill-done-fg); }
+.mp-channel-card--blocked { border-left-color: var(--mp-pill-review-fg); }
+.mp-channel-card h2 { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.mp-channel-url { font-weight: 400; text-decoration: none; }
+.mp-stage-ladder { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 2px; background: var(--mp-track); border-radius: var(--mp-radius-sm); padding: 2px; }
+.mp-stage-step { font: inherit; font-weight: 600; font-size: var(--mp-text-sm); height: 30px; border: 0; border-radius: 5px; background: transparent; color: var(--mp-ink-2); cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 6px; }
+.mp-stage-step:hover:not(:disabled) { color: var(--mp-ink); background: var(--mp-surface); }
+.mp-stage-step.is-active { background: var(--mp-accent); color: var(--mp-on-accent); }
+.mp-stage-step.is-locked { color: var(--mp-ink-3); cursor: not-allowed; text-decoration: line-through; }
+.mp-stage-step:disabled:not(.is-locked) { opacity: .6; }
+.mp-stage-summary-text { margin: 0; }
+.mp-req-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.mp-req { display: flex; gap: 10px; align-items: flex-start; padding: 4px 0; }
+.mp-req-mark { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; font-family: var(--mp-font-mono); font-size: 12px; flex: 0 0 auto; margin-top: 1px; background: var(--mp-track); color: var(--mp-ink-2); }
+.mp-req.is-ok .mp-req-mark { background: var(--mp-pill-done-bg); color: var(--mp-pill-done-fg); }
+.mp-req.is-blocking .mp-req-mark { background: var(--mp-pill-review-bg); color: var(--mp-pill-review-fg); }
+.mp-req.is-ok > .mp-today-main { color: var(--mp-ink-2); }
+.mp-req .mp-linkbtn { color: var(--mp-accent); font-weight: 600; }
+.mp-slot-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.mp-slot-grid .mp-btn { padding: 0 6px; font-size: var(--mp-text-xs); }
+.mp-channel-foot { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; border-top: 1px solid var(--mp-grid-line); padding-top: 8px; margin-top: auto; }
+.mp-channel-foot .mp-linkbtn { color: var(--mp-accent); font-weight: 600; }
+.mp-channel-next { margin-top: -4px; }
+.mp-channel-offlist { list-style: none; margin: 0; padding: 0; }
+.mp-channel-offlist li { display: flex; gap: 12px; align-items: center; padding: 8px 0; border-top: 1px solid var(--mp-grid-line); }
+.mp-nav-group--later .mp-nav-group-label { cursor: pointer; user-select: none; display: flex; justify-content: space-between; }
+.mp-nav-group--later .mp-nav-item { opacity: .75; }
+@media (max-width: 900px) { .mp-stage-legend { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

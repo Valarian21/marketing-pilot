@@ -12,6 +12,8 @@ import type { Job, SeriesCatalogEntry, SeriesParams, SeriesView, Weekday } from 
 import { api } from "../api.js";
 import { Button, Card, Notice, PageHeader, Pill, fmtDateTime } from "../components/ui.js";
 import { ProjectNav } from "../components/ProjectNav.js";
+import { useProfiles } from "../components/ChannelLink.js";
+import { STAGES, type ChannelProfile } from "../../shared/channels.js";
 
 const DAYS: { id: Weekday; label: string }[] = [
   { id: "mon", label: "Mo" }, { id: "tue", label: "Di" }, { id: "wed", label: "Mi" }, { id: "thu", label: "Do" },
@@ -26,6 +28,7 @@ export function SeriesPage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [open, setOpen] = useState<string | null>(null);
+  const profiles = useProfiles(id);
 
   const load = useCallback(async () => {
     try {
@@ -116,7 +119,7 @@ export function SeriesPage() {
               </div>
               {c.available && <Button disabled={!view.hasData} onClick={() => setOpen(open === c.kind ? null : c.kind)}>{open === c.kind ? "Abbrechen" : "Anlegen"}</Button>}
             </div>
-            {open === c.kind && <NewSeriesForm entry={c} busy={busy} onCreate={(body) => run("create", async () => { await api(`/projects/${id}/series`, { method: "POST", json: body }); setOpen(null); })} />}
+            {open === c.kind && <NewSeriesForm entry={c} busy={busy} profiles={profiles} projectId={id} onCreate={(body) => run("create", async () => { await api(`/projects/${id}/series`, { method: "POST", json: body }); setOpen(null); })} />}
           </li>
         ))}</ul>
       </Card>
@@ -124,11 +127,13 @@ export function SeriesPage() {
   );
 }
 
-function NewSeriesForm({ entry, busy, onCreate }: { entry: SeriesCatalogEntry; busy: string | null; onCreate: (body: unknown) => void }) {
+function NewSeriesForm({ entry, busy, profiles, projectId, onCreate }: { entry: SeriesCatalogEntry; busy: string | null; profiles: ChannelProfile[]; projectId: string; onCreate: (body: unknown) => void }) {
+  const stageOf = (p: string) => profiles.find((x) => x.platform === p)?.stage ?? "off";
   const [name, setName] = useState(entry.name);
   const [days, setDays] = useState<Weekday[]>(entry.cadence.days);
   const [hour, setHour] = useState(entry.cadence.hour);
-  const [params, setParams] = useState<SeriesParams>(entry.defaults);
+  // Vorgaben nur mit eingeschalteten Kanälen: ein Kanal auf „Aus" bekommt von einer Serie nichts.
+  const [params, setParams] = useState<SeriesParams>({ ...entry.defaults, platforms: entry.defaults.platforms.filter((p) => stageOf(p) !== "off") });
   const toggleDay = (d: Weekday) => setDays((cur) => (cur.includes(d) ? cur.filter((x) => x !== d) : [...cur, d]));
   const togglePlatform = (p: string) => setParams((cur) => ({ ...cur, platforms: cur.platforms.includes(p) ? cur.platforms.filter((x) => x !== p) : [...cur.platforms, p] }));
   const toggleFormat = (f: "data_carousel" | "data_reel") => setParams((cur) => ({ ...cur, formats: cur.formats.includes(f) ? cur.formats.filter((x) => x !== f) : [...cur.formats, f] }));
@@ -154,7 +159,11 @@ function NewSeriesForm({ entry, busy, onCreate }: { entry: SeriesCatalogEntry; b
         </div>
       </fieldset>
       <fieldset className="mp-field"><span>Plattformen</span>
-        <div className="mp-inline">{PLATFORMS.map((p) => <label key={p} className="mp-inline mp-small"><input type="checkbox" checked={params.platforms.includes(p)} onChange={() => togglePlatform(p)} /> {p}</label>)}</div>
+        <div className="mp-inline">{PLATFORMS.map((p) => {
+          const st = stageOf(p);
+          return <label key={p} className={`mp-inline mp-small${st === "off" ? " mp-muted" : ""}`} title={st === "off" ? "Auf der Kanäle-Seite einschalten" : STAGES[st].summary}><input type="checkbox" disabled={st === "off"} checked={params.platforms.includes(p)} onChange={() => togglePlatform(p)} /> {p} <span className="mp-muted">· {STAGES[st].label}</span></label>;
+        })}</div>
+        {PLATFORMS.every((p) => stageOf(p) === "off") && <p className="mp-small mp-muted">Noch kein Kanal eingeschaltet — zuerst auf der <Link to={`/projects/${projectId}/channels`}>Kanäle-Seite</Link> wählen, wohin gepostet wird.</p>}
       </fieldset>
       {wantsReel && (
         <div className="mp-form mp-form--row">

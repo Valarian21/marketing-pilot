@@ -10,6 +10,8 @@ import { VideoGallery } from "./Video.js";
 import { bundleIdOf } from "./Studio.js";
 import { ShotGallery } from "../components/Lightbox.js";
 import { ReviseBox, fmtUsd } from "../components/Revise.js";
+import { useProfiles } from "../components/ChannelLink.js";
+import { STAGES, stageAtLeast } from "../../shared/channels.js";
 
 const STATUS: Record<ContentPiece["status"], { label: string; kind: PillKind }> = { draft: { label: "Entwurf", kind: "todo" }, review: { label: "in Freigabe", kind: "review" }, approved: { label: "freigegeben", kind: "done" }, published: { label: "veröffentlicht", kind: "done" }, rejected: { label: "abgelehnt", kind: "kind" } };
 
@@ -25,6 +27,9 @@ export function ReviewPage() {
 
   const load = useCallback(async () => { try { setPieces(await api<ContentPiece[]>(`/projects/${id}/content`)); } catch (e) { setError(e instanceof Error ? e.message : "Fehler"); } }, [id]);
   useEffect(() => { void load(); }, [load]);
+  // Die Stufe des Kanals entscheidet, was „Freigeben" hier heißt: selbst posten oder einplanen lassen.
+  const profiles = useProfiles(id);
+  const stageFor = (p: ContentPiece) => profiles.find((x) => x.platform === String(p.meta["platform"] ?? p.channel).toLowerCase())?.stage ?? "off";
 
   // Ein Bündel (Shot 7) steht als ein Eintrag in der Warteschlange: vier Plattform-
   // Stücke aus einem Lauf sind eine Entscheidung, nicht vier.
@@ -127,7 +132,11 @@ export function ReviewPage() {
             )}
             <div className="mp-form-actions mp-review-actions">
               {current.status === "review" && siblings.length > 1 && <><Button variant="primary" disabled={busy} onClick={() => void actBundle("approved")}>Alle {siblings.length} freigeben</Button><Button variant="danger" disabled={busy} onClick={() => void actBundle("rejected")}>Bündel ablehnen</Button></>}
-              {current.status === "review" && <><Button variant="primary" disabled={busy} onClick={() => void act("approved", true)}>{siblings.length > 1 ? "Nur dieses freigeben & posten" : "Freigeben & posten"}</Button><Button disabled={busy} onClick={() => void act("approved")}>Nur freigeben</Button><Button disabled={busy} title="Freigeben und in den nächsten Slot dieses Kanals legen - der Pilot postet dann selbst" onClick={() => void approveAndSchedule()}>Freigeben &amp; einplanen</Button><Button variant="danger" disabled={busy} onClick={() => void act("rejected")}>Ablehnen</Button></>}
+              {current.status === "review" && (stageAtLeast(stageFor(current), "approve") ? (
+                <><Button variant="primary" disabled={busy} title={`Kanal auf „${STAGES[stageFor(current)].label}“: der Pilot postet zum nächsten Slot`} onClick={() => void approveAndSchedule()}>{siblings.length > 1 ? "Nur dieses freigeben & einplanen" : "Freigeben & einplanen"}</Button><Button disabled={busy} onClick={() => void act("approved", true)}>Freigeben & selbst posten</Button><Button disabled={busy} onClick={() => void act("approved")}>Nur freigeben</Button><Button variant="danger" disabled={busy} onClick={() => void act("rejected")}>Ablehnen</Button></>
+              ) : (
+                <><Button variant="primary" disabled={busy} title="Kanal auf „Vorbereiten“: du postest selbst — das Paket hat Text, Dateien und den Link zur Plattform" onClick={() => void act("approved", true)}>{siblings.length > 1 ? "Nur dieses freigeben & posten" : "Freigeben & posten"}</Button><Button disabled={busy} onClick={() => void act("approved")}>Nur freigeben</Button><Button variant="danger" disabled={busy} onClick={() => void act("rejected")}>Ablehnen</Button></>
+              ))}
               {current.status !== "published" && <Button disabled={busy} onClick={() => void act("regenerate")}>{busy ? "…" : "Neu generieren"}</Button>}
               {draft !== null && draft !== current.body && current.status !== "published" && <Button disabled={busy} onClick={() => void saveText()}>Text speichern</Button>}
               {(current.status === "approved" || current.status === "published") && <Link className="mp-btn mp-btn--primary" to={`/projects/${id}/publish/${current.id}`}>Publish-Paket</Link>}

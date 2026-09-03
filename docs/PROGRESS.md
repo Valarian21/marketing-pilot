@@ -611,3 +611,42 @@ Verlauf allein sagt nichts über die Glaubwürdigkeit.
 Drei Beispiel-Stücke im neuen Design erzeugt: Skyridge Top 10 (Crystal Glurak 4.526,87 €),
 Preis-Raketen 7 Tage (ohne die falsche Mewtu-Zeile) und ein Showcase aus Marcels „Art Binder",
 der die Artwork-Seiten bewirbt.
+
+## Content Pilot: Stufen je Kanal, Kanäle-Seite, Navigation verschlankt (2026-09-03)
+
+Marcels Auftrag: der Pilot soll Content vorbereiten, erstellen und posten — mit **Stufen je
+Plattform**, gut sichtbar, selbsterklärend, und mit einer klaren Antwort darauf, was das Tool
+noch braucht, bis eine Stufe läuft. Der Marketing-Teil ist bewusst nach hinten gerückt.
+
+- **Stufen-Modell** (`shared/channels.ts`, `STAGES`): `off` Aus · `prepare` Vorbereiten (Pilot
+  erstellt fertigen Content, du postest selbst) · `approve` Freigeben (du gibst frei, Pilot postet
+  zum Slot) · `auto` Vollautomatisch (Serien-Stücke ohne Einzelfreigabe). `publishMode` aus
+  Shot 10 ist seither **abgeleitet** (off/prepare → manual, approve → scheduled, auto → auto);
+  alte Profile bekommen ihre Stufe beim Lesen (`manual` → `prepare`). Kanäle ohne Profil stehen
+  auf **Aus** — eingeschaltet wird bewusst.
+- **Bereitschafts-Board** (`publish/board.ts`): je Plattform eine Karte mit Stufe, höchster
+  erreichbarer Stufe (X/LinkedIn/Reddit/TikTok/YouTube: Vorbereiten, mit Begründung aus
+  `PLATFORM_POSTING`), Voraussetzungen der gewählten Stufe (blockierend vs. Hinweis: Brief,
+  Marken-Kit, Adresse, API möglich, Zugang, Token-Alter, Slots, Worker, Serie, Deckel), `ready`,
+  und was für die **nächste** Stufe fehlt. Alles berechnet, nichts gespeichert.
+- **API**: `GET …/publish` liefert `board` + `setup`; `PATCH …/publish/channel/:platform`
+  (Stufe, Adresse, Slots, Deckel — legt das Profil an, weist Stufen über `maxStage` ab).
+  Einplanen (`POST /content/:id/publish/schedule`) verlangt Stufe ≥ Freigeben; Serienläufe
+  filtern ihre Plattformen auf eingeschaltete und fallen mit 409 aus, wenn keine bleibt.
+- **UI**: neue Seite `/projects/:id/channels` („Kanäle", ersetzt „Veröffentlichen"; alte
+  Adresse bleibt): Stufen-Legende, eine Karte je eingeschaltetem Kanal mit Stufen-Leiter,
+  Checkliste und aufklappbaren Eingaben (Adresse, Zugang, Slots, Deckel) direkt am Hinweis;
+  ausgeschaltete Plattformen als Liste mit „Einschalten". Sidebar: **Content Pilot** (Projekte ·
+  Kanäle · Erstellen · Serien · Freigaben · Medien), Betrieb, und eingeklappt **„Marketing ·
+  später"** (Aufgaben, Timeline, Community, Insights). Projekt-Reiter: Heute · Kanäle ·
+  Produkt-Brief. „Heute" zeigt statt Leads den Kanal-Stand; Freigabe-Knöpfe folgen der Stufe
+  („Freigeben & einplanen" nur ab Freigeben); Studio und Serien zeigen die Stufe je Plattform,
+  Serien lassen ausgeschaltete Kanäle nicht wählen.
+- **Live**: Binderplans Serien nennen Instagram/TikTok/Pinterest — die drei stehen seit dem
+  Deploy auf **Vorbereiten** (genau das bisherige Verhalten), alles andere auf Aus.
+- **6 neue Tests** (Gesamt **208**): Ableitung Stufe ↔ publishMode, Board (Grenzen, Blocker,
+  nächste Stufe), Zugang als Blocker → weg nach Eintrag, X nicht über Vorbereiten, Einplanen
+  nur ab Freigeben, Serienlauf ohne eingeschalteten Kanal.
+
+Nicht gebaut: eine Ideen-Ebene vor dem Erstellen (Marcel: Stufe 1 ist fertiger Content, der
+von Hand gepostet wird). Der Marketing-Teil bleibt vollständig erreichbar, nur eingeklappt.

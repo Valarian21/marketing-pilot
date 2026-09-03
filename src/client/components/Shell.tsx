@@ -8,22 +8,29 @@ import { Icons, type IconName } from "./icons.js";
 import { Button } from "./ui.js";
 import { lastProject, rememberProject } from "./ProjectNav.js";
 
-const NAV: { group: string; to: string; label: string; icon: IconName; end?: boolean }[] = [
-  { group: "Planung", to: "/projects", label: "Projekte", icon: "projects", end: true },
-  { group: "Planung", to: "/timeline", label: "Timeline", icon: "timeline" },
-  { group: "Planung", to: "/tasks", label: "Aufgaben", icon: "tasks" },
-  { group: "Inhalte", to: "/studio", label: "Content Studio", icon: "studio" },
-  { group: "Inhalte", to: "/series", label: "Serien", icon: "series" },
-  { group: "Inhalte", to: "/media", label: "Medien", icon: "media" },
-  { group: "Inhalte", to: "/review", label: "Freigaben", icon: "review" },
-  { group: "Inhalte", to: "/publishing", label: "Veröffentlichen", icon: "send" },
-  { group: "Wachstum", to: "/community", label: "Community", icon: "community" },
-  { group: "Wachstum", to: "/insights", label: "Insights", icon: "insights" },
+/**
+ * Die Navigation des Content-Piloten: erst die Kanäle (was läuft wo, auf welcher
+ * Stufe), dann der Weg des Contents — erstellen, Serien, freigeben, Medien. Der
+ * Marketing-Teil (Analyse, Strategie, Aufgaben, Timeline, Community, Insights)
+ * bleibt gebaut, ist aber eingeklappt: er kommt später wieder nach vorn.
+ */
+const NAV: { group: string; to: string; label: string; icon: IconName; end?: boolean; later?: boolean }[] = [
+  { group: "Content Pilot", to: "/projects", label: "Projekte", icon: "projects", end: true },
+  { group: "Content Pilot", to: "/channels", label: "Kanäle", icon: "send" },
+  { group: "Content Pilot", to: "/studio", label: "Erstellen", icon: "studio" },
+  { group: "Content Pilot", to: "/series", label: "Serien", icon: "series" },
+  { group: "Content Pilot", to: "/review", label: "Freigaben", icon: "review" },
+  { group: "Content Pilot", to: "/media", label: "Medien", icon: "media" },
   { group: "Betrieb", to: "/activity", label: "Aktivität", icon: "activity" },
   { group: "Betrieb", to: "/storage", label: "Speicher", icon: "storage" },
   { group: "Betrieb", to: "/settings", label: "Einstellungen", icon: "settings" },
+  { group: "Marketing · später", to: "/tasks", label: "Aufgaben", icon: "tasks", later: true },
+  { group: "Marketing · später", to: "/timeline", label: "Timeline", icon: "timeline", later: true },
+  { group: "Marketing · später", to: "/community", label: "Community", icon: "community", later: true },
+  { group: "Marketing · später", to: "/insights", label: "Insights", icon: "insights", later: true },
 ];
 const GROUPS = Array.from(new Set(NAV.map((n) => n.group)));
+const LATER_KEY = "mp_nav_later_open";
 
 interface ProjectLite { id: string; name: string; url: string; piecesInReview?: number; openTasksThisWeek?: number }
 
@@ -79,6 +86,10 @@ export function Shell() {
   useEffect(() => { api<ProjectLite[]>("/overview").then(setProjects).catch(() => setProjects([])); }, [reloadKey, pathname]);
   const current = useCurrentProject(projects);
   const badge = (to: string): number | null => !current ? null : to === "/review" ? (current.piecesInReview ?? null) : to === "/tasks" ? (current.openTasksThisWeek ?? null) : null;
+  const [laterOpen, setLaterOpen] = useState<boolean>(() => { try { return localStorage.getItem(LATER_KEY) === "1"; } catch { return false; } });
+  // Wer gerade auf einer Marketing-Seite ist, soll den Eintrag auch sehen.
+  const onLaterPage = NAV.some((n) => n.later && pathname.includes(n.to));
+  const toggleLater = () => setLaterOpen((v) => { try { localStorage.setItem(LATER_KEY, v ? "0" : "1"); } catch { /* ignore */ } return !v; });
   return (
     <div className="mp-shell">
       <aside className="mp-sidebar">
@@ -88,10 +99,15 @@ export function Shell() {
         </div>
         <ProjectBox projects={projects} />
         <nav className="mp-nav" aria-label="Hauptnavigation">
-          {GROUPS.map((g) => (
-            <div key={g} className="mp-nav-group">
-              <div className="mp-nav-group-label">{g}</div>
-              {NAV.filter((n) => n.group === g).map((n) => {
+          {GROUPS.map((g) => {
+            const later = NAV.find((n) => n.group === g)?.later ?? false;
+            const open = !later || laterOpen || onLaterPage;
+            return (
+            <div key={g} className={`mp-nav-group${later ? " mp-nav-group--later" : ""}`}>
+              {later
+                ? <button type="button" className="mp-nav-group-label mp-linkbtn" onClick={toggleLater} aria-expanded={open}>{g}<span aria-hidden="true">{open ? "−" : "+"}</span></button>
+                : <div className="mp-nav-group-label">{g}</div>}
+              {open && NAV.filter((n) => n.group === g).map((n) => {
                 const Icon = Icons[n.icon];
                 return (
                   <NavLink key={n.to} to={n.to} end={n.end ?? false} className={({ isActive }) => `mp-nav-item${isActive ? " is-active" : ""}`}>
@@ -100,7 +116,8 @@ export function Shell() {
                 );
               })}
             </div>
-          ))}
+            );
+          })}
         </nav>
         <div className="mp-sidebar-foot">
           {info?.backLink && (
