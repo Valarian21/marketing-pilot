@@ -10,6 +10,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import Database from "better-sqlite3";
+import { dataFooterText } from "../src/server/agents/studio/render.js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { loadEnv } from "../src/server/env.js";
 import { buildApp } from "../src/server/app.js";
@@ -225,6 +226,11 @@ describe("Daten-Bündel", () => {
     // Fusszeile mit Quelle und Stand-Datum auf jeder Slide, auch auf Cover und CTA.
     const heute = new Date().toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" });
     for (const [, html] of rendered) expect(html).toContain(`Preise: Cardmarket-Trend · Stand ${heute} · binderplan.app`);
+    // Die Fußzeile muss die Preisbasis benennen: Trend und Monatsschnitt liegen
+    // bei einzelnen Karten um das Vierfache auseinander, und wer nur
+    // „Cardmarket" liest, hält beides für dasselbe.
+    expect(dataFooterText("04.09.2026", "binderplan.app", "avg30")).toContain("Cardmarket 30-Tage-Schnitt");
+    expect(dataFooterText("04.09.2026", "binderplan.app")).toContain("Cardmarket-Trend");
   });
 
   it("gibt dem Modell die Zahlen fertig formatiert (es soll zitieren, nicht rechnen)", () => {

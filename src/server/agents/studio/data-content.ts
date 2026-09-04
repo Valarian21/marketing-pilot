@@ -196,7 +196,7 @@ export async function generateDataBundle(
 
   const platforms = (req.bundlePlatforms.length ? req.bundlePlatforms : [req.platform ?? "instagram"]).map((p) => p.trim().toLowerCase()).filter((p, i, all) => p && all.indexOf(p) === i);
   const leadPlatform = platforms[0]!;
-  const footer = dataFooterText(fmtDate(data.priceStand, lang), base.project.url.replace(/^https?:\/\//, "").replace(/\/$/, ""));
+  const footer = dataFooterText(fmtDate(data.priceStand, lang), base.project.url.replace(/^https?:\/\//, "").replace(/\/$/, ""), q.priceBasis);
   const brand = base.brief.productName;
 
   // --- der einzige Modellaufruf des Laufs -----------------------------------
@@ -247,6 +247,14 @@ export async function generateDataBundle(
     : (lang === "de" ? `Letzte ${q.days} Tage` : `Last ${q.days} days`);
   const coverImages = data.loaded.slice(0, 3).map((x) => x.dataUrl);
   const shot = opts.screenshotPath ? dataUrlFor(opts.screenshotPath) : null;
+  // Die drei Ansichten der Startseite fuer den Abschluss-Slide. Sie liegen als
+  // Projekt-Assets mit `produktbild` in der Meta und sind nach `rang` sortiert.
+  const produktBilder = ctx.db.select().from(t.mpAssets).where(eq(t.mpAssets.projectId, base.project.id)).all()
+    .map((a) => ({ a, m: parseJson<Record<string, unknown>>(a.meta, {}) }))
+    .filter((x) => x.m["produktbild"] === true)
+    .sort((a, b) => Number(a.m["rang"] ?? 0) - Number(b.m["rang"] ?? 0))
+    .map((x) => ({ url: dataUrlFor(path.join(ctx.dataDir, x.a.path)), label: String(x.m["label"] ?? "") }))
+    .filter((x): x is { url: string; label: string } => Boolean(x.url));
 
   // --- rendern: eine Datei je Größe, alle Plattformen teilen sie ------------
   const leadId = opts.leadPieceId ?? newId();
@@ -262,7 +270,7 @@ export async function generateDataBundle(
   for (const size of sizes) {
     const files: string[] = [];
     const cover = path.join(outDir, `${lang}-${size.tag}-00-cover.png`);
-    jobs.push({ html: rankingCoverHtml(base.kit, { title: coverTitle, totalLabel, images: coverImages }, size.w, size.h, brand, footer), width: size.w, height: size.h, file: cover });
+    jobs.push({ html: rankingCoverHtml(base.kit, { title: coverTitle, totalLabel, images: coverImages, ...(out.hook ? { hook: out.hook } : {}) }, size.w, size.h, brand, footer), width: size.w, height: size.h, file: cover });
     files.push(cover);
     slides.forEach((sl, i) => {
       const file = path.join(outDir, `${lang}-${size.tag}-${String(i + 1).padStart(2, "0")}-rang${sl.rank}${sl.hidePrice ? "-frage" : ""}.png`);
@@ -274,7 +282,7 @@ export async function generateDataBundle(
       const linkLabel = rule === "bio"
         ? (lang === "de" ? "Link in Bio" : "Link in bio")
         : base.project.url.replace(/^https?:\/\//, "").replace(/\/$/, "");
-      jobs.push({ html: rankingCtaHtml(base.kit, { line: ctaLine, linkLabel, imageDataUrl: shot, trustLine: out.trustLine }, size.w, size.h, brand, footer), width: size.w, height: size.h, file });
+      jobs.push({ html: rankingCtaHtml(base.kit, { line: ctaLine, linkLabel, imageDataUrl: shot, trustLine: out.trustLine, productImages: produktBilder }, size.w, size.h, brand, footer), width: size.w, height: size.h, file });
       ctaFiles.set(`${size.tag}:${rule}`, file);
     }
     bySize.set(size.tag, files);

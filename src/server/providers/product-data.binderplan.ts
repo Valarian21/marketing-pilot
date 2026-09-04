@@ -63,7 +63,16 @@ interface CardRow {
   kinds: string | null; set_name: string | null; set_name_en: string | null;
 }
 
-interface Price { eur: number | null; holo: number | null; updatedAt: string; suspect?: boolean }
+interface Price {
+  eur: number | null; holo: number | null;
+  /**
+   * 30-Tage-Schnitt von Cardmarket — zum **selben Produkt** wie `eur`.
+   * Für Karten mit eigener Holo-Ausgabe ist das der Schnitt der Standardausgabe;
+   * einen Schnitt zur Holo-Ausgabe liefert die Quelle nicht.
+   */
+  avg30: number | null;
+  updatedAt: string; suspect?: boolean;
+}
 
 /**
  * Gegenprobe gegen die zweite Preisquelle derselben Antwort.
@@ -107,6 +116,23 @@ export class BinderplanProvider implements ProductDataProvider {
   }
 
   close(): void { this.sqlite.close(); }
+
+  /**
+   * Führt der Schnappschuss den 30-Tage-Schnitt?
+   *
+   * `card_prices` gehört Binderplan, nicht uns. Eine Spalte dort fest
+   * vorauszusetzen macht den Piloten von einer Migration abhängig, die jemand
+   * anders fährt — deshalb wird sie einmal nachgesehen und sonst weggelassen.
+   */
+  private hatAvg30(): boolean {
+    if (this.avg30Bekannt === null) {
+      const spalten = this.sqlite.prepare("PRAGMA table_info(card_prices)").all() as { name: string }[];
+      this.avg30Bekannt = spalten.some((s) => s.name === "eur_avg30");
+      if (!this.avg30Bekannt) this.log("card_prices führt kein eur_avg30 — die Preisbasis „30-Tage-Schnitt“ bleibt leer.");
+    }
+    return this.avg30Bekannt;
+  }
+  private avg30Bekannt: boolean | null = null;
 
   // --- Sets und Ären ---------------------------------------------------------
 
@@ -160,27 +186,36 @@ export class BinderplanProvider implements ProductDataProvider {
     for (let i = 0; i < ids.length; i += 400) {
       const chunk = ids.slice(i, i + 400);
       const rows = this.sqlite.prepare(
-        `SELECT card_id, eur, eur_holo, updated_at FROM card_prices WHERE card_id IN (${chunk.map(() => "?").join(",")})`,
-      ).all(...chunk) as { card_id: string; eur: number | null; eur_holo: number | null; updated_at: string | null }[];
-      for (const r of rows) out.set(r.card_id, { eur: r.eur, holo: r.eur_holo, updatedAt: toIso(r.updated_at) });
+        `SELECT card_id, eur, eur_holo, ${this.hatAvg30() ? "eur_avg30" : "NULL eur_avg30"}, updated_at FROM card_prices WHERE card_id IN (${chunk.map(() => "?").join(",")})`,
+      ).all(...chunk) as { card_id: string; eur: number | null; eur_holo: number | null; eur_avg30: number | null; updated_at: string | null }[];
+      for (const r of rows) out.set(r.card_id, { eur: r.eur, holo: r.eur_holo, avg30: r.eur_avg30, updatedAt: toIso(r.updated_at) });
       const own = this.db.select().from(t.mpCardPrices).where(inArray(t.mpCardPrices.cardId, chunk)).all();
       for (const r of own) {
         const prev = out.get(r.cardId);
         // Der Verdacht haftet an der Karte, nicht am Eintrag: auch wenn Binderplans
         // Wert frischer ist, bleibt er unglaubwuerdig, wenn unsere Gegenprobe anschlug.
-        if (!prev || r.fetchedAt > prev.updatedAt) out.set(r.cardId, { eur: r.eur, holo: r.eurHolo, updatedAt: r.fetchedAt, suspect: r.suspect === 1 });
+        if (!prev || r.fetchedAt > prev.updatedAt) out.set(r.cardId, { eur: r.eur, holo: r.eurHolo, avg30: prev?.avg30 ?? null, updatedAt: r.fetchedAt, suspect: r.suspect === 1 });
         else if (prev) prev.suspect = r.suspect === 1;
       }
     }
     return out;
   }
 
-  private effective(p: Price | undefined, basis: PriceBasis): { eur: number; used: "normal" | "holo" } | null {
+  private effective(p: Price | undefined, basis: PriceBasis): { eur: number; used: "normal" | "holo" | "avg30" } | null {
     if (!p) return null;
     const normal = p.eur ?? null;
     const holo = p.holo ?? null;
     if (basis === "normal") return normal === null ? null : { eur: normal, used: "normal" };
     if (basis === "holo") return holo === null ? null : { eur: holo, used: "holo" };
+    /**
+     * 30-Tage-Schnitt: der ehrlichere Wert für eine Rangliste.
+     *
+     * Der Trendpreis folgt einzelnen Verkäufen — Rocket's Mewtwo ex stand damit
+     * bei 5.201 €, während der Monatsschnitt 1.337 € sagt, und Dark Golduck bei
+     * 355 € gegen 4,22 €. Fehlt der Schnitt, gilt die Karte hier als preislos:
+     * ein Trendwert dazwischen würde die Liste unbemerkt mischen.
+     */
+    if (basis === "avg30") return p.avg30 === null || p.avg30 <= 0 ? null : { eur: p.avg30, used: "avg30" };
     // "max": bei alten Holos ist die Holo-Variante die wertvolle.
     if (normal === null && holo === null) return null;
     if (holo !== null && (normal === null || holo > normal)) return { eur: holo, used: "holo" };
@@ -237,7 +272,9 @@ export class BinderplanProvider implements ProductDataProvider {
         if (p.eur === null && p.holo === null) continue;
         const suspect = isImplausible(Math.max(p.eur ?? 0, p.holo ?? 0), p.usd) ? 1 : 0;
         if (suspect) this.log(`Preis unglaubwürdig: ${id} — Cardmarket ${Math.max(p.eur ?? 0, p.holo ?? 0)} € gegen TCGplayer ${p.usd} $`);
-        out.set(id, { eur: p.eur, holo: p.holo, updatedAt: at, suspect: Boolean(suspect) });
+        // Der 30-Tage-Schnitt steht nur in Binderplans Tabelle; ein Nachladen bei
+        // TCGdex darf ihn nicht wegwerfen, sonst faellt die Karte aus der avg30-Liste.
+        out.set(id, { eur: p.eur, holo: p.holo, avg30: out.get(id)?.avg30 ?? null, updatedAt: at, suspect: Boolean(suspect) });
         this.db.insert(t.mpCardPrices)
           .values({ cardId: id, eur: p.eur, eurHolo: p.holo, usd: p.usd, suspect, source: "tcgdex", fetchedAt: at })
           .onConflictDoUpdate({ target: t.mpCardPrices.cardId, set: { eur: p.eur, eurHolo: p.holo, usd: p.usd, suspect, source: "tcgdex", fetchedAt: at } })
@@ -304,8 +341,12 @@ export class BinderplanProvider implements ProductDataProvider {
   private cardName(r: CardRow): { de: string; en: string } {
     const de = r.name_de || r.name_en || r.name_ja || r.id;
     const en = r.name_en || r.name_de || r.name_ja || r.id;
+    // Japanische Karten tragen beide Namen — aber der lateinische zuerst.
+    // Auf einer Slide fuer deutsches Publikum ist er die Information, der
+    // japanische die Herkunftsangabe; umgekehrt liest niemand die Zeile zu Ende.
     return r.region === "jp"
-      ? { de: r.name_de ? `${r.name_ja} · ${r.name_de}` : (r.name_ja ?? de), en: r.name_en ? `${r.name_ja} · ${r.name_en}` : (r.name_ja ?? en) }
+      ? { de: r.name_de && r.name_ja ? `${r.name_de} · ${r.name_ja}` : (r.name_de ?? r.name_ja ?? de),
+          en: r.name_en && r.name_ja ? `${r.name_en} · ${r.name_ja}` : (r.name_en ?? r.name_ja ?? en) }
       : { de, en };
   }
 
@@ -340,7 +381,7 @@ export class BinderplanProvider implements ProductDataProvider {
 
     const ranked = pool
       .map((r) => ({ r, p: prices.get(r.id), e: this.effective(prices.get(r.id), basis) }))
-      .filter((x): x is { r: CardRow; p: Price; e: { eur: number; used: "normal" | "holo" } } => x.e !== null && x.p !== undefined)
+      .filter((x): x is { r: CardRow; p: Price; e: { eur: number; used: "normal" | "holo" | "avg30" } } => x.e !== null && x.p !== undefined)
       // Karten, deren beide Quellen sich widersprechen, kommen gar nicht erst in
       // die Rangliste — lieber eine Karte weniger als eine falsche Zahl auf einer Slide.
       .filter((x) => !x.p.suspect)

@@ -404,7 +404,7 @@ export const DataQuery = z.object({
   illustrator: z.string().default(""),
   region: z.enum(["intl", "jp"]).default("intl"),
   n: z.number().int().min(3).max(20).default(15),
-  priceBasis: z.enum(["max", "normal", "holo"]).default("max"),
+  priceBasis: z.enum(["max", "normal", "holo", "avg30"]).default("max"),
   minPrice: z.number().min(0).optional(),
   days: z.union([z.literal(7), z.literal(30)]).default(7),
   direction: z.enum(["up", "down"]).default("up"),
@@ -535,7 +535,7 @@ export const ProductEra = z.object({
 export const RankedCard = z.object({
   rank: z.number().int(), id: z.string(), name: z.string(), nameEn: z.string(),
   setId: z.string(), setName: z.string(), localId: z.string(), rarity: z.string(), illustrator: z.string(),
-  priceEur: z.number(), priceBasisUsed: z.enum(["normal", "holo"]), priceUpdatedAt: z.string(),
+  priceEur: z.number(), priceBasisUsed: z.enum(["normal", "holo", "avg30"]), priceUpdatedAt: z.string(),
   region: z.enum(["intl", "jp"]), imageLang: z.enum(["de", "en"]).nullable(),
 });
 export const PriceMover = RankedCard.extend({
@@ -591,7 +591,7 @@ export const SeriesCadence = z.object({
 export const SeriesParams = z.object({
   region: z.enum(["intl", "jp"]).default("intl"),
   n: z.number().int().min(3).max(20).default(15),
-  priceBasis: z.enum(["max", "normal", "holo"]).default("max"),
+  priceBasis: z.enum(["max", "normal", "holo", "avg30"]).default("max"),
   language: ContentLanguage.default("de"),
   formats: z.array(z.enum(["data_carousel", "data_reel"])).min(1).default(["data_carousel"]),
   platforms: z.array(z.string()).min(1).default(["instagram", "tiktok"]),

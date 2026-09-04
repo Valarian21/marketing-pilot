@@ -32,7 +32,14 @@ export interface ProductEra {
 }
 
 /** Auf welcher Variante der Preis beruht – gehört sichtbar an jede Zahl. */
-export type PriceBasis = "max" | "normal" | "holo";
+/**
+ * Worauf sich der Preis einer Rangliste stützt.
+ *
+ * `avg30` ist der 30-Tage-Schnitt von Cardmarket und für Ranglisten der
+ * belastbarere Wert: der Trendpreis folgt einzelnen Verkäufen und kann eine
+ * Karte um das Vierfache über ihren Monatsschnitt heben.
+ */
+export type PriceBasis = "max" | "normal" | "holo" | "avg30";
 
 export interface RankedCard {
   rank: number;
@@ -47,7 +54,7 @@ export interface RankedCard {
   /** Cardmarket-Trend in Euro. Nie gerundet, nie geschätzt. */
   priceEur: number;
   /** „normal“ oder „holo“ – bei `basis: max` die tatsächlich gewinnende Variante. */
-  priceBasisUsed: "normal" | "holo";
+  priceBasisUsed: "normal" | "holo" | "avg30";
   priceUpdatedAt: string;
   region: "intl" | "jp";
   imageLang: "de" | "en" | null;

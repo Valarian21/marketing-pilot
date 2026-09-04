@@ -103,8 +103,14 @@ export interface RankingSlide {
 }
 
 /** Fußzeile, die laut Plan auf JEDER Daten-Slide steht — Quelle, Stand, Herkunft. */
-export const dataFooterText = (priceStand: string, source: string): string =>
-  `Preise: Cardmarket-Trend · Stand ${priceStand} · ${source}`;
+/**
+ * Die Fußzeile jeder Slide — sie muss sagen, **welcher** Preis dort steht.
+ *
+ * Trend und 30-Tage-Schnitt unterscheiden sich bei einzelnen Karten um das
+ * Vierfache. Wer nur „Cardmarket" liest, hält beides für dasselbe.
+ */
+export const dataFooterText = (priceStand: string, source: string, basis: string = "max"): string =>
+  `Preise: Cardmarket${basis === "avg30" ? " 30-Tage-Schnitt" : "-Trend"} · Stand ${priceStand} · ${source}`;
 
 const dataFoot = (w: number, footer: string) =>
   `<div class="dfoot" style="font-family:var(--f-mono);font-size:${Math.round(w * 0.019)}px;letter-spacing:.02em;opacity:.6;text-align:center">${esc(footer)}</div>`;
@@ -135,7 +141,17 @@ const dataCss = (w: number) => `
 .dtile span{width:${Math.round(w * 0.23)}px;aspect-ratio:63/88;border:${Math.round(w * 0.009)}px solid var(--b-contour);border-radius:${Math.round(w * 0.014)}px;margin:0 ${Math.round(w * -0.024)}px;display:block}
 .dtile .l{background:var(--b-accent2);transform:rotate(-9deg)}
 .dtile .m{background:var(--b-primary);width:${Math.round(w * 0.25)}px;position:relative;z-index:2}
-.dtile .r{background:var(--b-bg);transform:rotate(9deg)}`;
+.dtile .r{background:var(--b-bg);transform:rotate(9deg)}
+/* Die drei Produktansichten: aufgefaechert wie auf der Startseite, jede
+   beschriftet — ohne Beschriftung sieht man drei Blaetter und weiss nicht,
+   dass es drei verschiedene Dinge sind, die das Werkzeug kann. */
+.dprod{flex:1;min-height:0;display:flex;align-items:flex-end;justify-content:center;gap:0}
+.dprod figure{width:34%;margin:0 ${Math.round(w * -0.022)}px;display:flex;flex-direction:column;align-items:center;gap:${Math.round(w * 0.018)}px}
+.dprod img{width:100%;border:${Math.round(w * 0.007)}px solid var(--b-contour);border-radius:${Math.round(w * 0.016)}px;background:#fff;display:block}
+.dprod figcaption{font-family:var(--f-mono);font-size:${Math.round(w * 0.023)}px;letter-spacing:.03em;opacity:.75;white-space:nowrap}
+.dprod .p0{transform:rotate(-7deg)}
+.dprod .p1{width:38%;z-index:2}
+.dprod .p2{transform:rotate(7deg)}`;
 
 /** Rangkarte: Bild groß, Preis groß, alles andere leise. */
 export function rankingSlideHtml(kit: BrandKit, slide: RankingSlide, w: number, h: number, brand: string, footer: string): string {
@@ -149,7 +165,7 @@ ${dataFoot(w, footer)}</div></div>`;
 }
 
 /** Cover: worum es geht, was die Liste zusammen wert ist, drei Karten angedeutet. */
-export function rankingCoverHtml(kit: BrandKit, a: { title: string; totalLabel: string; images: (string | null)[] }, w: number, h: number, brand: string, footer: string): string {
+export function rankingCoverHtml(kit: BrandKit, a: { title: string; totalLabel: string; images: (string | null)[]; hook?: string }, w: number, h: number, brand: string, footer: string): string {
   const imgs = a.images.filter((x): x is string => Boolean(x)).slice(0, 3);
   // Der Versatz bleibt bewusst klein: bei 0,26·w ragten die aeusseren Karten
   // ueber den Slide-Rand hinaus und wurden abgeschnitten.
@@ -161,16 +177,29 @@ export function rankingCoverHtml(kit: BrandKit, a: { title: string; totalLabel: 
   const body = `<div class="slide" style="background:var(--b-primary);color:var(--b-on-primary)"><div class="dwrap">
 <div class="dhead"><span class="dbrand">${esc(brand)}</span></div>
 <div class="dfan">${fan}</div>
-<div><h1 style="font-size:${Math.round(w * 0.085)}px">${esc(a.title)}</h1><div class="dtotal" style="margin-top:.6em">${esc(a.totalLabel)}</div></div>
+<div><h1 style="font-size:${Math.round(w * (a.title.length > 22 ? 0.072 : 0.085))}px">${esc(a.title)}</h1>
+${a.hook ? `<div class="dcoverhook" style="font-size:${Math.round(w * 0.042)}px;margin-top:.5em;line-height:1.25">${esc(a.hook)}</div>` : ""}
+<div class="dtotal" style="margin-top:.55em">${esc(a.totalLabel)}</div></div>
 ${dataFoot(w, footer)}</div></div>`;
   return base(kit, w, h, body, dataCss(w));
 }
 
 /** Abschluss: Produkt-Screenshot, ein Satz, der Link bzw. der Bio-Hinweis. */
-export function rankingCtaHtml(kit: BrandKit, a: { line: string; linkLabel: string; imageDataUrl: string | null; trustLine?: string }, w: number, h: number, brand: string, footer: string): string {
+export function rankingCtaHtml(
+  kit: BrandKit,
+  a: { line: string; linkLabel: string; imageDataUrl: string | null; trustLine?: string; productImages?: { url: string; label: string }[] },
+  w: number, h: number, brand: string, footer: string,
+): string {
+  // Die drei Ansichten der Startseite — geplante Binderseite, Artwork-Seite,
+  // Druckblatt. Sie zeigen das Produkt, statt es zu behaupten. Liegen sie nicht
+  // vor, bleibt die gezeichnete Kachel als Rueckfall.
+  const bilder = (a.productImages ?? []).slice(0, 3);
+  const kachel = bilder.length
+    ? `<div class="dprod">${bilder.map((b, i) => `<figure class="p${i}"><img src="${b.url}"><figcaption>${esc(b.label)}</figcaption></figure>`).join("")}</div>`
+    : `<div class="dtile"><span class="l"></span><span class="m"></span><span class="r"></span></div>`;
   const body = `<div class="slide"><div class="dwrap">
 <div class="dhead"><span class="dbrand">${esc(brand)}</span></div>
-<div class="dtile"><span class="l"></span><span class="m"></span><span class="r"></span></div>
+${kachel}
 <div><h1 style="font-size:${Math.round(w * (a.line.length > 70 ? 0.056 : a.line.length > 45 ? 0.064 : 0.072))}px">${esc(a.line)}</h1>
 ${a.trustLine ? `<div class="dset" style="opacity:.7;margin-top:.35em">${esc(a.trustLine)}</div>` : ""}
 <div class="dset" style="opacity:.85">${esc(a.linkLabel)}</div></div>
