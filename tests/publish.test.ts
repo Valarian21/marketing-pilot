@@ -39,6 +39,7 @@ function fakeNet() {
     if (u.includes("createRecord")) return ok({ uri: "at://did:plc:x/app.bsky.feed.post/3kabc" });
     if (u.includes("api.telegram.org")) return ok({ result: { message_id: 42 } });
     if (u.includes("/media_publish")) return ok({ id: "ig-post-1" });
+    if (u.includes("fields=status_code")) return ok({ status_code: "FINISHED" });
     if (u.includes("/media")) return ok({ id: `container-${calls.length}` });
     return ok({});
   }) as unknown as typeof fetch;
@@ -112,6 +113,28 @@ describe("Was auf welcher Plattform erlaubt ist", () => {
     const st = platformStatus(built.db, pid).find((x) => x.platform === "bluesky")!;
     expect(st.configured).toBe(true);   // das Passwort steht noch
   });
+});
+
+describe("Instagram-Reel", () => {
+  it("veröffentlicht erst, wenn die Plattform das Video fertig verarbeitet hat", async () => {
+    const zustaende = ["IN_PROGRESS", "IN_PROGRESS", "FINISHED"];
+    let abrufe = 0;
+    const impl = (async (url: string | URL) => {
+      const u = String(url);
+      const ok = (b: unknown) => new Response(JSON.stringify(b), { status: 200, headers: { "content-type": "application/json" } });
+      if (u.includes("fields=status_code")) { abrufe += 1; return ok({ status_code: zustaende[Math.min(abrufe - 1, zustaende.length - 1)] }); }
+      if (u.includes("/media_publish")) return ok({ id: "reel-1" });
+      return ok({ id: "container-1" });
+    }) as unknown as typeof fetch;
+    const res = await instagramPoster.post({
+      platform: "instagram", text: "Top 10", title: "Top 10", link: null,
+      creds: { igUserId: "1", accessToken: "t" }, fetchImpl: impl,
+      assets: [{ path: "/tmp/x.mp4", url: "https://example.test/x.mp4", mime: "video/mp4", alt: "", kind: "video" }],
+    });
+    expect(res.ref).toBe("reel-1");
+    // Ohne dieses Warten lehnt Meta jede Reel-Veröffentlichung ab.
+    expect(abrufe).toBeGreaterThanOrEqual(3);
+  }, 30_000);
 });
 
 describe("Signierte Asset-Adressen", () => {

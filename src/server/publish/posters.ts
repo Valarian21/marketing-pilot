@@ -139,6 +139,34 @@ export const mastodonPoster: PlatformPoster = {
 const GRAPH = "https://graph.facebook.com/v21.0";
 
 /**
+ * Auf die Verarbeitung eines Medien-Containers warten.
+ *
+ * Instagram und Threads laden das Video von unserer Adresse und kodieren es
+ * selbst. Bis das fertig ist, lehnt `media_publish` ab. Ohne dieses Warten
+ * scheitert jedes Reel — und zwar zuverlaessig, nicht sporadisch.
+ */
+async function warteAufFertig(
+  f: typeof fetch, basis: string, containerId: string, token: string,
+  log?: (m: string) => void, maxMs = 180_000,
+): Promise<void> {
+  const bis = Date.now() + maxMs;
+  let letzter = "";
+  while (Date.now() < bis) {
+    const res = await json<{ status_code?: string; status?: string }>(
+      await call(f, `${basis}/${containerId}?fields=status_code,status&access_token=${encodeURIComponent(token)}`, {}, "Medien-Status"),
+    );
+    letzter = res.status_code ?? "";
+    if (letzter === "FINISHED") return;
+    if (letzter === "ERROR" || letzter === "EXPIRED") {
+      throw new Error(`Die Plattform konnte das Video nicht verarbeiten (${letzter}${res.status ? `: ${res.status}` : ""}).`);
+    }
+    log?.(`Video wird verarbeitet (${letzter || "IN_PROGRESS"}) …`);
+    await new Promise((r) => setTimeout(r, 5000));
+  }
+  throw new Error(`Die Plattform hat das Video in ${Math.round(maxMs / 1000)} s nicht fertig verarbeitet (zuletzt ${letzter || "unbekannt"}).`);
+}
+
+/**
  * Instagram nimmt keine Dateien entgegen, sondern **öffentliche URLs**. Deshalb
  * bekommt jedes Asset eine signierte, ablaufende Adresse (`/go/a/<token>`) —
  * siehe `assetTokens.ts`. Ein Carousel entsteht in drei Schritten: Kind-Container,
@@ -184,6 +212,10 @@ export const instagramPoster: PlatformPoster = {
     const video = media.find((a) => a.kind === "video");
     if (video) {
       creationId = await container({ media_type: "REELS", video_url: video.url, caption });
+      // Meta laedt das Video von unserer Adresse und kodiert es selbst. Wer sofort
+      // veroeffentlicht, bekommt „media is not ready" — der Container muss erst
+      // auf FINISHED stehen.
+      await warteAufFertig(f, GRAPH, creationId, token, i.log);
     } else if (media.length === 1) {
       creationId = await container({ image_url: media[0]!.url, caption });
     } else {
@@ -266,7 +298,10 @@ export const threadsPoster: PlatformPoster = {
 
     let creationId: string;
     const video = media.find((a) => a.kind === "video");
-    if (video) creationId = await container({ media_type: "VIDEO", video_url: video.url, text });
+    if (video) {
+      creationId = await container({ media_type: "VIDEO", video_url: video.url, text });
+      await warteAufFertig(f, THREADS, creationId, token, i.log);
+    }
     else if (media.length === 1) creationId = await container({ media_type: "IMAGE", image_url: media[0]!.url, text });
     else if (media.length > 1) {
       const children: string[] = [];
