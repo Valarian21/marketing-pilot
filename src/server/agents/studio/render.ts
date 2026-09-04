@@ -146,11 +146,11 @@ const dataCss = (w: number) => `
    beschriftet — ohne Beschriftung sieht man drei Blaetter und weiss nicht,
    dass es drei verschiedene Dinge sind, die das Werkzeug kann. */
 .dprod{flex:1;min-height:0;display:flex;align-items:flex-end;justify-content:center;gap:0}
-.dprod figure{width:34%;margin:0 ${Math.round(w * -0.022)}px;display:flex;flex-direction:column;align-items:center;gap:${Math.round(w * 0.018)}px}
+.dprod figure{width:40%;margin:0 ${Math.round(w * -0.045)}px;display:flex;flex-direction:column;align-items:center;gap:${Math.round(w * 0.016)}px}
 .dprod img{width:100%;border:${Math.round(w * 0.007)}px solid var(--b-contour);border-radius:${Math.round(w * 0.016)}px;background:#fff;display:block}
 .dprod figcaption{font-family:var(--f-mono);font-size:${Math.round(w * 0.023)}px;letter-spacing:.03em;opacity:.75;white-space:nowrap}
 .dprod .p0{transform:rotate(-7deg)}
-.dprod .p1{width:38%;z-index:2}
+.dprod .p1{width:45%;z-index:2}
 .dprod .p2{transform:rotate(7deg)}`;
 
 /** Rangkarte: Bild groß, Preis groß, alles andere leise. */

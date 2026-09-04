@@ -119,11 +119,13 @@ describe("Instagram-Reel", () => {
   it("veröffentlicht erst, wenn die Plattform das Video fertig verarbeitet hat", async () => {
     const zustaende = ["IN_PROGRESS", "IN_PROGRESS", "FINISHED"];
     let abrufe = 0;
-    const impl = (async (url: string | URL) => {
+    let container = "";
+    const impl = (async (url: string | URL, init?: RequestInit) => {
       const u = String(url);
       const ok = (b: unknown) => new Response(JSON.stringify(b), { status: 200, headers: { "content-type": "application/json" } });
       if (u.includes("fields=status_code")) { abrufe += 1; return ok({ status_code: zustaende[Math.min(abrufe - 1, zustaende.length - 1)] }); }
       if (u.includes("/media_publish")) return ok({ id: "reel-1" });
+      container = String((init as RequestInit | undefined)?.body ?? "");
       return ok({ id: "container-1" });
     }) as unknown as typeof fetch;
     const res = await instagramPoster.post({
@@ -134,6 +136,9 @@ describe("Instagram-Reel", () => {
     expect(res.ref).toBe("reel-1");
     // Ohne dieses Warten lehnt Meta jede Reel-Veröffentlichung ab.
     expect(abrufe).toBeGreaterThanOrEqual(3);
+    // Das Vorschaubild darf nicht der erste Frame sein — der ist eingeblendet
+    // und damit schwarz.
+    expect(container).toContain("thumb_offset");
   }, 30_000);
 });
 

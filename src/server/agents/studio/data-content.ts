@@ -182,7 +182,11 @@ export async function generateDataBundle(
       // Hook und Endkarte kommen erst vom Modell — mit Stimme brauchen sie
       // erfahrungsgemaess je einen gesprochenen Satz. Wird das hier nicht
       // reserviert, kappt der Job hinterher, was der Text schon angekuendigt hat.
-      ...(reelOpts.voiceover ? { hookMs: 4500, endMs: 4500 } : {}),
+      // Dieselbe Rechnung wie im Job: ohne Textkachel faellt ihre Zeit weg.
+      // Weicht die Vorab-Planung ab, kuendigt die Caption Karten an, die das
+      // Video nicht zeigt.
+      ...(reelOpts.hookCard ? {} : { hookMs: 0 }),
+      ...(reelOpts.voiceover ? { ...(reelOpts.hookCard ? { hookMs: 4500 } : {}), endMs: 4500 } : {}),
     });
     if (fit.dropped.length) {
       const drop = new Set(fit.dropped);
@@ -238,8 +242,8 @@ export async function generateDataBundle(
   };
   // Ratemodus: jede Karte kommt zweimal — erst verdeckt, dann aufgeloest.
   const slides: RankingSlide[] = q.kind === "guess"
-    ? ordered.flatMap((x, i) => [slideOf(x, i * 2, ordered.length * 2 + 2, true), slideOf(x, i * 2 + 1, ordered.length * 2 + 2)])
-    : ordered.map((x, i) => slideOf(x, i, ordered.length + 2));
+    ? ordered.flatMap((x, i) => [slideOf(x, i * 2, ordered.length * 2 + (req.cover ? 2 : 1), true), slideOf(x, i * 2 + 1, ordered.length * 2 + (req.cover ? 2 : 1))])
+    : ordered.map((x, i) => slideOf(x, i, ordered.length + (req.cover ? 2 : 1)));
   const totalLabel = q.kind === "guess"
     ? (lang === "de" ? `${data.loaded.length} Karten — was schätzt du?` : `${data.loaded.length} cards — what's your guess?`)
     : q.kind === "top"
@@ -269,9 +273,11 @@ export async function generateDataBundle(
   const ctaFiles = new Map<string, string>();
   for (const size of sizes) {
     const files: string[] = [];
-    const cover = path.join(outDir, `${lang}-${size.tag}-00-cover.png`);
-    jobs.push({ html: rankingCoverHtml(base.kit, { title: coverTitle, totalLabel, images: coverImages, ...(out.hook ? { hook: out.hook } : {}) }, size.w, size.h, brand, footer), width: size.w, height: size.h, file: cover });
-    files.push(cover);
+    if (req.cover) {
+      const cover = path.join(outDir, `${lang}-${size.tag}-00-cover.png`);
+      jobs.push({ html: rankingCoverHtml(base.kit, { title: coverTitle, totalLabel, images: coverImages, ...(out.hook ? { hook: out.hook } : {}) }, size.w, size.h, brand, footer), width: size.w, height: size.h, file: cover });
+      files.push(cover);
+    }
     slides.forEach((sl, i) => {
       const file = path.join(outDir, `${lang}-${size.tag}-${String(i + 1).padStart(2, "0")}-rang${sl.rank}${sl.hidePrice ? "-frage" : ""}.png`);
       jobs.push({ html: rankingSlideHtml(base.kit, sl, size.w, size.h, brand, footer), width: size.w, height: size.h, file });

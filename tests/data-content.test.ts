@@ -141,6 +141,19 @@ beforeAll(async () => {
 }, 60_000);
 afterAll(async () => { await built.close(); fs.rmSync(DATA, { recursive: true, force: true }); });
 
+describe("Reel-Planung", () => {
+  it("gibt die Zeit der Textkachel an die Karten weiter, wenn sie wegfaellt", async () => {
+    const { planSlideshow } = await import("../src/server/agents/video/slideshow.js");
+    const karten = Array.from({ length: 10 }, (_, i) => ({ key: `c${i}` }));
+    const mit = planSlideshow(karten, { secondsPerCard: 2.2 });
+    const ohne = planSlideshow(karten, { secondsPerCard: 2.2, hookMs: 0 });
+    expect(ohne.totalMs).toBeLessThan(mit.totalMs);
+    expect(ohne.hookMs).toBe(0);
+    // Was die Textkachel nicht mehr braucht, darf keine Karte kosten.
+    expect(ohne.dropped.length).toBeLessThanOrEqual(mit.dropped.length);
+  });
+});
+
 describe("Plattform-Politik", () => {
   it("kennt TikTok und YouTube als Textlängen", () => {
     expect(PLATFORM_LIMITS["tiktok"]).toBe(2200);

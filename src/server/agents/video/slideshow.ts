@@ -331,7 +331,9 @@ export const renderSlideshowJob: JobHandler<VideoContext> = async (ctx, job, pro
   // 2. Zeitplan + Overlays (Hook-Karte, Wort-Captions)
   const plan = planSlideshow(cardOrder.map((c) => ({ key: `c${c.rank}`, ...(voice.get(`c${c.rank}`) ? { voiceMs: voice.get(`c${c.rank}`)!.durationMs } : {}) })), {
     secondsPerCard: opts.secondsPerCard,
-    hookMs: Math.max(HOOK_MS, (voice.get("hook")?.durationMs ?? 0) + 250),
+    // Ohne Textkachel faellt ihre Zeit weg — sonst stuende dem Video eine
+    // Sekunde zu viel im Budget und die letzten Karten flogen unnoetig raus.
+    hookMs: opts.hookCard ? Math.max(HOOK_MS, (voice.get("hook")?.durationMs ?? 0) + 250) : 0,
     endMs: Math.max(END_MS, (voice.get("end")?.durationMs ?? 0) + 250),
   });
   if (plan.dropped.length) warnings.push(`${plan.dropped.length} Karten gekappt, damit das Reel unter 60 s bleibt (${plan.dropped.join(", ")}).`);
@@ -340,11 +342,13 @@ export const renderSlideshowJob: JobHandler<VideoContext> = async (ctx, job, pro
   const lay = reelLayout();
   const hookCard = path.join(outDir, "hook.png");
   const { captions, segments } = await step("overlays", async () => {
-    const jobs: RenderJob[] = [{ html: hookCardHtml(kit, hookText || String(meta["coverTitle"] ?? ""), brand, lay.w, lay.h), width: lay.w, height: lay.h, file: hookCard }];
+    const jobs: RenderJob[] = opts.hookCard
+      ? [{ html: hookCardHtml(kit, hookText || String(meta["coverTitle"] ?? ""), brand, lay.w, lay.h), width: lay.w, height: lay.h, file: hookCard }]
+      : [];
     const cues: CaptionCue[] = [];
-    /** Segmente in Reihenfolge: Hook, Cover, Karten (Anzeigereihenfolge), CTA. */
+    /** Segmente in Reihenfolge: (Hook), Cover, Karten (Anzeigereihenfolge), CTA. */
     const segs: { image: string; durationMs: number; audio: string | null; key: string }[] = [
-      { image: hookCard, durationMs: plan.hookMs, audio: voice.get("hook")?.file ?? null, key: "hook" },
+      ...(opts.hookCard ? [{ image: hookCard, durationMs: plan.hookMs, audio: voice.get("hook")?.file ?? null, key: "hook" }] : []),
       { image: cover, durationMs: plan.coverMs, audio: null, key: "cover" },
     ];
     plan.cards.forEach((c) => {

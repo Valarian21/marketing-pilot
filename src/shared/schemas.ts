@@ -429,6 +429,13 @@ export const DataQuery = z.object({
 export const ReelOptions = z.object({
   voiceover: z.boolean().default(false),
   music: z.enum(["none", "bed"]).default("none"),
+  /**
+   * Textkachel als erstes Bild des Videos.
+   *
+   * Aus, wenn das Reel mit der Deckseite anfangen soll: die trägt schon Karten
+   * und ist damit das bessere erste Bild — es ist zugleich das Vorschaubild.
+   */
+  hookCard: z.boolean().default(true),
   /** Standzeit je Karte in Sekunden; wird gesenkt, wenn das Reel sonst ueber 60 s liefe. */
   secondsPerCard: z.number().min(1.4).max(2.5).default(1.8),
 });
@@ -464,6 +471,14 @@ export const ContentRequest = z.object({
   showcase: ShowcaseOptions.optional(),
   /** Zusätzlich zum Beitrag eine Story erzeugen, die auf ihn hinweist. */
   withStory: z.boolean().default(false),
+  /**
+   * Deck-Slide voranstellen (Bereichsname, Hook, Gesamtwert).
+   *
+   * Aus, wenn der Beitrag mit einer Karte anfangen soll: das erste Bild ist bei
+   * Instagram zugleich das Vorschaubild, und eine Karte zieht dort mehr als eine
+   * Textkachel.
+   */
+  cover: z.boolean().default(true),
   /** Von welcher Serie der Lauf kam (Shot 9) — leer bei Handarbeit. */
   seriesId: z.string().default(""),
   /** Ein Lauf, mehrere Plattform-Stuecke mit gemeinsamen Assets. Leer = nur `platform`. */

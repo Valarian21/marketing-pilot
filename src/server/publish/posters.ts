@@ -211,7 +211,10 @@ export const instagramPoster: PlatformPoster = {
     let creationId: string;
     const video = media.find((a) => a.kind === "video");
     if (video) {
-      creationId = await container({ media_type: "REELS", video_url: video.url, caption });
+      // `thumb_offset`: welcher Frame das Vorschaubild wird. Ohne Angabe nimmt
+      // Instagram den ersten — und der ist durch das Einblenden schwarz. Eine
+      // halbe Sekunde weiter steht die Deckseite mit Karten.
+      creationId = await container({ media_type: "REELS", video_url: video.url, caption, thumb_offset: "500" });
       // Meta laedt das Video von unserer Adresse und kodiert es selbst. Wer sofort
       // veroeffentlicht, bekommt „media is not ready" — der Container muss erst
       // auf FINISHED stehen.
