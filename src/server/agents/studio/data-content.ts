@@ -77,6 +77,12 @@ const changeLabel = (m: PriceMover, lang: "de" | "en") => {
 
 const Out = z.object({
   title: z.string().default(""),
+  /**
+   * Die Zeile unter dem Abschluss-Satz — Tatsachen über das Produkt
+   * („Kostenlos starten · 33.746 Karten"). Bleibt leer, wenn niemand sie
+   * setzt: erfundene Produktdaten wären schlimmer als gar keine.
+   */
+  trustLine: z.string().default(""),
   coverTitle: z.string().default(""),
   hook: z.string().default(""),
   ctaLine: z.string().default(""),
@@ -194,7 +200,11 @@ export async function generateDataBundle(
   const brand = base.brief.productName;
 
   // --- der einzige Modellaufruf des Laufs -----------------------------------
-  const out = await chatJson(ctx.llm, modelFor("content"), Out, dataContentPrompt({
+  // ... es sei denn, die Texte kommen schon fertig herein. Dann bleibt vom Lauf
+  // genau das uebrig, was ohnehin deterministisch ist: die Slides aus den Zahlen.
+  const out = req.manualText
+    ? Out.parse(req.manualText)
+    : await chatJson(ctx.llm, modelFor("content"), Out, dataContentPrompt({
     brief: base.brief, ...(base.personas[0] ? { persona: base.personas[0] } : {}), voiceProfile: base.voice, language: lang,
     kind: q.kind, scopeLabel: data.scopeLabel,
     cards: data.loaded.map((x, i) => ({
@@ -264,7 +274,7 @@ export async function generateDataBundle(
       const linkLabel = rule === "bio"
         ? (lang === "de" ? "Link in Bio" : "Link in bio")
         : base.project.url.replace(/^https?:\/\//, "").replace(/\/$/, "");
-      jobs.push({ html: rankingCtaHtml(base.kit, { line: ctaLine, linkLabel, imageDataUrl: shot }, size.w, size.h, brand, footer), width: size.w, height: size.h, file });
+      jobs.push({ html: rankingCtaHtml(base.kit, { line: ctaLine, linkLabel, imageDataUrl: shot, trustLine: out.trustLine }, size.w, size.h, brand, footer), width: size.w, height: size.h, file });
       ctaFiles.set(`${size.tag}:${rule}`, file);
     }
     bySize.set(size.tag, files);
@@ -279,7 +289,11 @@ export async function generateDataBundle(
   // --- Captions: Kritiker nur auf die des Leit-Stücks -----------------------
   const captionOf = (platform: string) => out.captions.find((c) => c.platform.trim().toLowerCase() === platform)?.caption.trim() ?? "";
   const leadCaption = captionOf(leadPlatform) || out.captions[0]?.caption.trim() || coverTitle;
-  const rev = await reviseWithCritic(ctx, usage, { body: leadCaption, language: lang, voiceProfile: base.voice, format, platform: leadPlatform, limit: PLATFORM_LIMITS[leadPlatform] ?? 2000, maxRounds: 2 });
+  // Von Hand geschriebene Texte gehen unangetastet durch: der Kritiker sucht
+  // KI-Spuren und wuerde an einem menschlichen Text nur herumschleifen.
+  const rev = req.manualText
+    ? { body: leadCaption, score: null, notes: "Texte von Hand geschrieben — kein Modellaufruf, keine AI-Tell-Prüfung." }
+    : await reviseWithCritic(ctx, usage, { body: leadCaption, language: lang, voiceProfile: base.voice, format, platform: leadPlatform, limit: PLATFORM_LIMITS[leadPlatform] ?? 2000, maxRounds: 2 });
 
   const notes = [rev.notes];
   if (data.skipped.length) notes.push(`Ohne ladbares Bild übersprungen (${data.skipped.length}): ${data.skipped.join(", ")}. Die Rangfolge ist die der veröffentlichten Liste.`);

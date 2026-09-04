@@ -127,7 +127,15 @@ const dataCss = (w: number) => `
 .stil-kontur .dcard img{border-radius:${Math.round(w * 0.012)}px}
 .dtotal{font-family:var(--f-mono);font-size:${Math.round(w * 0.03)}px;opacity:.75;font-variant-numeric:tabular-nums}
 .dshot{flex:1;min-height:0;border-radius:${Math.round(w * 0.02)}px;overflow:hidden;background:var(--b-soft);box-shadow:0 ${Math.round(w * 0.02)}px ${Math.round(w * 0.05)}px rgba(0,0,0,.2)}
-.dshot img{width:100%;height:100%;object-fit:cover;object-position:top}`;
+.dshot img{width:100%;height:100%;object-fit:cover;object-position:top}
+/* Produktkachel des Abschluss-Slides: drei aufgefaecherte Seiten, gezeichnet
+   statt fotografiert. Ein Website-Screenshot altert mit jeder Aenderung an der
+   Seite und zeigt auf 1080 px ohnehin nur Kleingedrucktes. */
+.dtile{flex:1;min-height:0;display:flex;align-items:center;justify-content:center}
+.dtile span{width:${Math.round(w * 0.23)}px;aspect-ratio:63/88;border:${Math.round(w * 0.009)}px solid var(--b-contour);border-radius:${Math.round(w * 0.014)}px;margin:0 ${Math.round(w * -0.024)}px;display:block}
+.dtile .l{background:var(--b-accent2);transform:rotate(-9deg)}
+.dtile .m{background:var(--b-primary);width:${Math.round(w * 0.25)}px;position:relative;z-index:2}
+.dtile .r{background:var(--b-bg);transform:rotate(9deg)}`;
 
 /** Rangkarte: Bild groß, Preis groß, alles andere leise. */
 export function rankingSlideHtml(kit: BrandKit, slide: RankingSlide, w: number, h: number, brand: string, footer: string): string {
@@ -159,11 +167,13 @@ ${dataFoot(w, footer)}</div></div>`;
 }
 
 /** Abschluss: Produkt-Screenshot, ein Satz, der Link bzw. der Bio-Hinweis. */
-export function rankingCtaHtml(kit: BrandKit, a: { line: string; linkLabel: string; imageDataUrl: string | null }, w: number, h: number, brand: string, footer: string): string {
+export function rankingCtaHtml(kit: BrandKit, a: { line: string; linkLabel: string; imageDataUrl: string | null; trustLine?: string }, w: number, h: number, brand: string, footer: string): string {
   const body = `<div class="slide"><div class="dwrap">
 <div class="dhead"><span class="dbrand">${esc(brand)}</span></div>
-${a.imageDataUrl ? `<div class="dshot"><img src="${a.imageDataUrl}"></div>` : `<div class="dfan"></div>`}
-<div><h1 style="font-size:${Math.round(w * (a.line.length > 70 ? 0.056 : a.line.length > 45 ? 0.064 : 0.072))}px">${esc(a.line)}</h1><div class="dset" style="opacity:.85">${esc(a.linkLabel)}</div></div>
+<div class="dtile"><span class="l"></span><span class="m"></span><span class="r"></span></div>
+<div><h1 style="font-size:${Math.round(w * (a.line.length > 70 ? 0.056 : a.line.length > 45 ? 0.064 : 0.072))}px">${esc(a.line)}</h1>
+${a.trustLine ? `<div class="dset" style="opacity:.7;margin-top:.35em">${esc(a.trustLine)}</div>` : ""}
+<div class="dset" style="opacity:.85">${esc(a.linkLabel)}</div></div>
 ${dataFoot(w, footer)}</div></div>`;
   return base(kit, w, h, body, dataCss(w));
 }

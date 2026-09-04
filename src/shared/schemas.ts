@@ -460,6 +460,27 @@ export const ContentRequest = z.object({
   seriesId: z.string().default(""),
   /** Ein Lauf, mehrere Plattform-Stuecke mit gemeinsamen Assets. Leer = nur `platform`. */
   bundlePlatforms: z.array(z.string()).default([]),
+  /**
+   * Fertige Texte statt Modelltexte.
+   *
+   * Die Slides eines Daten-Formats entstehen ohnehin deterministisch aus den
+   * Zahlen — das Modell schreibt nur Titel, Hook, Abschlusszeile und die
+   * Captions. Wer die selbst schreibt, gibt sie hier mit: dann entfaellt der
+   * Modellaufruf, und auch der AI-Tell-Kritiker haelt sich heraus. Er hat an
+   * einem von Hand geschriebenen Text nichts zu suchen.
+   */
+  manualText: z.object({
+    title: z.string().default(""),
+    coverTitle: z.string().default(""),
+    trustLine: z.string().default(""),
+    hook: z.string().default(""),
+    ctaLine: z.string().default(""),
+    captions: z.array(z.object({
+      platform: z.string(),
+      caption: z.string().default(""),
+      hashtags: z.array(z.string()).default([]),
+    })).default([]),
+  }).optional(),
   language: ContentLanguage.default("de"),
 });
 
