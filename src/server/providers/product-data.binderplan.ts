@@ -344,10 +344,16 @@ export class BinderplanProvider implements ProductDataProvider {
     // Japanische Karten tragen beide Namen — aber der lateinische zuerst.
     // Auf einer Slide fuer deutsches Publikum ist er die Information, der
     // japanische die Herkunftsangabe; umgekehrt liest niemand die Zeile zu Ende.
-    return r.region === "jp"
-      ? { de: r.name_de && r.name_ja ? `${r.name_de} · ${r.name_ja}` : (r.name_de ?? r.name_ja ?? de),
-          en: r.name_en && r.name_ja ? `${r.name_en} · ${r.name_ja}` : (r.name_en ?? r.name_ja ?? en) }
-      : { de, en };
+    if (r.region !== "jp") return { de, en };
+    // Der lateinische Name kann in beiden Feldern stehen: japanische Sets haben
+    // oft nur `name_en` gepflegt. Ohne diesen Rueckfall stuende auf der Slide
+    // nur Japanisch — und genau das war bei Collection Moon der Fall.
+    const latDe = r.name_de || r.name_en || null;
+    const latEn = r.name_en || r.name_de || null;
+    return {
+      de: latDe && r.name_ja ? `${latDe} · ${r.name_ja}` : (latDe ?? r.name_ja ?? de),
+      en: latEn && r.name_ja ? `${latEn} · ${r.name_ja}` : (latEn ?? r.name_ja ?? en),
+    };
   }
 
   async topCards(q: TopCardsQuery): Promise<TopCardsResult> {
