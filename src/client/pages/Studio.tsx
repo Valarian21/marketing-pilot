@@ -10,7 +10,7 @@ import { STAGES } from "../../shared/channels.js";
 
 const TABS = [{ id: "erstellen", label: "Erstellen" }, { id: "brand", label: "Brand-Kit & Stimme" }, { id: "hashtags", label: "Hashtags" }, { id: "verzeichnisse", label: "Verzeichnisse" }, { id: "geo", label: "GEO-Artikel" }] as const;
 type Tab = (typeof TABS)[number]["id"];
-const FORMAT_LABEL: Record<string, string> = { text: "Text-Post", carousel: "Carousel", pin: "Pinterest-Pin", image: "Bild (KI)", ad_creative: "Ad-Hintergrund (KI)", article: "GEO-Artikel", directory_entry: "Directory-Eintrag", video: "Video", community_reply: "Community-Antwort", data_carousel: "Daten-Carousel" };
+const FORMAT_LABEL: Record<string, string> = { text: "Text-Post", carousel: "Carousel", pin: "Pinterest-Pin", image: "Bild (KI)", ad_creative: "Ad-Hintergrund (KI)", article: "GEO-Artikel", directory_entry: "Directory-Eintrag", video: "Video", community_reply: "Community-Antwort", data_carousel: "Daten-Carousel", story: "Story (24 h)" };
 /** Plattformen, die ein Daten-Bündel bedienen kann - Reihenfolge = Vorschlag im Formular. */
 const BUNDLE_PLATFORMS = ["instagram", "tiktok", "pinterest", "facebook", "bluesky", "x"] as const;
 const STATUS: Record<ContentPiece["status"], { label: string; kind: PillKind }> = { draft: { label: "Entwurf", kind: "todo" }, review: { label: "in Freigabe", kind: "review" }, approved: { label: "freigegeben", kind: "done" }, published: { label: "veröffentlicht", kind: "done" }, rejected: { label: "abgelehnt", kind: "kind" } };

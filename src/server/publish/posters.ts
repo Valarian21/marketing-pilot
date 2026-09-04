@@ -155,6 +155,25 @@ export const instagramPoster: PlatformPoster = {
     const media = i.assets.filter((a) => a.url).slice(0, 10);
     if (!media.length) throw new Error("Instagram braucht mindestens ein Bild oder Video.");
 
+    // Eine Story ist ein einziges Medium ohne Caption. Sticker — Link, Umfrage,
+    // Frage — gibt die API nicht her; was verlinkt werden soll, steht im Bild.
+    const containerFuer = async (params: Record<string, string>): Promise<string> => {
+      const out = await json<{ id: string }>(await call(f, `${GRAPH}/${user}/media`, {
+        method: "POST", body: new URLSearchParams({ ...params, access_token: token }),
+      }, "Instagram"));
+      return out.id;
+    };
+    if (i.kind === "story") {
+      const erste = media[0]!;
+      const id = await containerFuer(erste.kind === "video"
+        ? { media_type: "STORIES", video_url: erste.url }
+        : { media_type: "STORIES", image_url: erste.url });
+      const pub = await json<{ id: string }>(await call(f, `${GRAPH}/${user}/media_publish`, {
+        method: "POST", body: new URLSearchParams({ creation_id: id, access_token: token }),
+      }, "Instagram-Story"));
+      return { ref: pub.id, externalUrl: null };
+    }
+
     const container = async (params: Record<string, string>): Promise<string> => {
       const body = new URLSearchParams({ ...params, access_token: token });
       const out = await json<{ id: string }>(await call(f, `${GRAPH}/${user}/media`, { method: "POST", body }, "Instagram"));

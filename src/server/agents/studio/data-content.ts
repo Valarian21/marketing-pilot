@@ -26,7 +26,7 @@ import { applyHashtagPolicy, loadHashtags, saveHashtags } from "../../hashtags.j
 import { createProductDataProvider } from "../../data-source.js";
 import { estimateReelLineMs, planSlideshow, reelCardLine } from "../video/slideshow.js";
 import type { PriceMover, ProductDataProvider, RankedCard, ScopeCoverage } from "../../providers/product-data.js";
-import { dataFooterText, dataUrlFor, rankingCoverHtml, rankingCtaHtml, rankingSlideHtml, type RenderJob, type RankingSlide } from "./render.js";
+import { dataFooterText, dataUrlFor, rankingCoverHtml, rankingCtaHtml, rankingSlideHtml, storyHtml, type RenderJob, type RankingSlide } from "./render.js";
 import { reviseWithCritic } from "./critic.js";
 // Typ-Import: generate.ts laedt dieses Modul, deshalb darf hier nichts zur Laufzeit zurueckzeigen.
 import type { StudioContext } from "./generate.js";
@@ -301,7 +301,45 @@ export async function generateDataBundle(
   if (q.kind === "movers") notes.push(`Beruht auf ${data.withHistory} Karten mit Preisverlauf.`);
   notes.push(...reelNotes);
 
-  return writeBundlePieces({
+  // --- Story: ein Bild, das auf den Beitrag von heute hinweist ---------------
+  // Sie hängt am selben Bündel, ist aber ein eigenes Stück: 24 Stunden sichtbar,
+  // eigener Zeitpunkt, eigene Freigabe. Nur Instagram — bei allen anderen
+  // Plattformen gibt es über die API keinen Weg dorthin.
+  let storyId: string | null = null;
+  if (req.withStory && platforms.includes("instagram")) {
+    const storyFile = path.join(outDir, `${lang}-story-1080x1920.png`);
+    const storyLine = req.manualText?.storyLine || out.hook || coverTitle;
+    const storyHint = req.manualText?.storyHint || (lang === "de" ? "Die ganze Liste im Beitrag ↓" : "Full list in the post ↓");
+    await opts.renderer([{
+      html: storyHtml(base.kit, {
+        eyebrow: lang === "de" ? "Neu heute" : "New today",
+        line: storyLine, sub: totalLabel, images: coverImages, hint: storyHint,
+      }, 1080, 1920, brand, footer),
+      width: 1080, height: 1920, file: storyFile,
+    }]);
+    storyId = newId();
+    const ts = nowIso();
+    // Zeile zuerst: das Asset hat einen Fremdschluessel auf das Stueck.
+    ctx.db.insert(t.mpContentPieces).values({
+      id: storyId, projectId: base.project.id, taskId: req.taskId ?? null,
+      channel: "instagram", format: "story",
+      title: `${coverTitle} · Story`, body: storyLine,
+      assets: toJson([]), status: "review", humanEdited: false,
+      publishedAt: null, externalUrl: null, utm: toJson({}),
+      meta: toJson({
+        bundleId: leadId, platform: "instagram", size: "1080x1920", linkRule: "bio",
+        storyHint, coverTitle, footer, scopeLabel: data.scopeLabel, language: lang,
+        note: "Story: 24 Stunden sichtbar. Sticker und antippbare Links gibt die API nicht her — der Hinweis steht im Bild.",
+      }),
+      aiTellScore: null, aiTellNotes: "", rejectionReason: "",
+      createdAt: ts, updatedAt: ts,
+    }).run();
+    const storyAsset = opts.addAsset(storyId, storyFile, { size: "1080x1920", slide: "story", language: lang, dataSlide: true });
+    ctx.db.update(t.mpContentPieces).set({ assets: toJson([storyAsset]) }).where(eq(t.mpContentPieces.id, storyId)).run();
+    notes.push("Story erzeugt (1080×1920, Instagram) — eigenes Stück im selben Bündel.");
+  }
+
+  const gebaut = writeBundlePieces({
     db: ctx.db, projectId: base.project.id, leadId, format, language: lang, platforms,
     taskId: req.taskId ?? null,
     title: out.title || coverTitle,
@@ -323,6 +361,84 @@ export async function generateDataBundle(
       skippedNoImage: data.skipped, coverage: data.coverage, request: req,
     },
   });
+  return gebaut;
+}
+
+/**
+ * Eine Story zu einem Beitrag nachreichen, der schon existiert.
+ *
+ * Alles, was die Story braucht, steht in `meta` des Leit-Stücks: Titel, Hook,
+ * Fußzeile und die Kartenliste. Nur die drei Bilder werden neu geladen — sie
+ * liegen im Cache des Providers, das kostet nichts. So muss ein fertiges
+ * Bündel nicht noch einmal durch den Renderer, nur weil eine Story fehlt.
+ */
+export async function generateStoryFor(
+  ctx: StudioContext, base: DataBase, pieceId: string,
+  opts: { addAsset: (pieceId: string, file: string, meta: Record<string, unknown>) => string; renderer: (jobs: RenderJob[]) => Promise<void>; line?: string; hint?: string },
+): Promise<string> {
+  const row = ctx.db.select().from(t.mpContentPieces).where(eq(t.mpContentPieces.id, pieceId)).get();
+  if (!row) throw err("Stück nicht gefunden.", 404);
+  const meta = parseJson<Record<string, unknown>>(row.meta, {});
+  const bundleId = String(meta["bundleId"] ?? row.id);
+  const vorhanden = ctx.db.select().from(t.mpContentPieces)
+    .where(and(eq(t.mpContentPieces.projectId, base.project.id), eq(t.mpContentPieces.format, "story"))).all()
+    .find((x) => parseJson<Record<string, unknown>>(x.meta, {})["bundleId"] === bundleId);
+  if (vorhanden) throw err("Zu diesem Beitrag gibt es schon eine Story.");
+
+  const lang: "de" | "en" = String(meta["language"] ?? "de") === "en" ? "en" : "de";
+  const karten = (meta["cards"] as { id: string }[] | undefined) ?? [];
+  const provider = createProductDataProvider(ctx.db, ctx.env, base.project.id, { log: ctx.log });
+  const bilder: string[] = [];
+  try {
+    for (const k of karten.slice(0, 3)) {
+      if (!provider) break;
+      const datei = await provider.cardImage(k.id, lang);
+      const url = datei ? dataUrlFor(datei) : null;
+      if (url) bilder.push(url);
+    }
+  } finally { provider?.close(); }
+
+  const coverTitle = String(meta["coverTitle"] ?? row.title);
+  const footer = String(meta["footer"] ?? "");
+  const line = opts.line || String(meta["hook"] ?? "") || coverTitle;
+  const hint = opts.hint || (lang === "de" ? "Die ganze Liste im Beitrag ↓" : "Full list in the post ↓");
+  const totalEur = typeof meta["totalEur"] === "number" ? (meta["totalEur"] as number) : 0;
+  // Zwei Summen auf einem Bild sind eine Falle: die Zeile nennt oft schon einen
+  // Betrag, und die Gesamtsumme daneben meint etwas anderes. Trägt die Zeile
+  // eine Zahl, bleibt die Summe weg.
+  const zeileHatZahl = /\d/.test(line);
+  const sub = totalEur > 0 && !zeileHatZahl
+    ? (lang === "de" ? `Zusammen ${fmtEur(totalEur, lang)}` : `Together ${fmtEur(totalEur, lang)}`)
+    : "";
+
+  const storyId = newId();
+  const datei = path.join(ctx.dataDir, "assets", base.project.id, "pieces", bundleId, `${lang}-story-1080x1920.png`);
+  await opts.renderer([{
+    html: storyHtml(base.kit, { eyebrow: lang === "de" ? "Neu heute" : "New today", line, sub, images: bilder, hint },
+      1080, 1920, base.brief.productName, footer),
+    width: 1080, height: 1920, file: datei,
+  }]);
+  const ts = nowIso();
+  // Zeile zuerst: das Asset hat einen Fremdschluessel auf das Stueck.
+  ctx.db.insert(t.mpContentPieces).values({
+    id: storyId, projectId: base.project.id, taskId: null,
+    channel: "instagram", format: "story",
+    title: `${coverTitle} · Story`, body: line,
+    assets: toJson([]), status: "review", humanEdited: false,
+    publishedAt: null, externalUrl: null, utm: toJson({}),
+    meta: toJson({
+      bundleId, platform: "instagram", size: "1080x1920", linkRule: "bio",
+      storyHint: hint, coverTitle, footer, language: lang,
+      note: "Story: 24 Stunden sichtbar. Sticker und antippbare Links gibt die API nicht her — der Hinweis steht im Bild.",
+    }),
+    aiTellScore: null, aiTellNotes: "", rejectionReason: "",
+    createdAt: ts, updatedAt: ts,
+  }).run();
+  const assetId = opts.addAsset(storyId, datei, { size: "1080x1920", slide: "story", language: lang, dataSlide: true });
+  ctx.db.update(t.mpContentPieces).set({ assets: toJson([assetId]) }).where(eq(t.mpContentPieces.id, storyId)).run();
+  // Die fertige Zeile holt der Aufrufer über seinen eigenen Mapper — hier
+  // waere jede Nachbildung von `ContentPiece` eine zweite Wahrheit.
+  return storyId;
 }
 
 /**

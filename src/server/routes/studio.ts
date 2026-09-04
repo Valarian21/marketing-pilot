@@ -12,7 +12,7 @@ import { finishRun, startRun, writeAudit } from "../audit.js";
 import { getProject } from "../repo/projects.js";
 import { extractBrandKit, loadBrandKit, saveBrandKit } from "../agents/studio/brandkit.js";
 import { deriveVoiceProfile } from "../agents/studio/voice.js";
-import { buildPackage, directoriesFor, generateContent, getPiece, pieceOf, regenerateContent, studioView, withCosts, type StudioContext } from "../agents/studio/generate.js";
+import { addStoryToPiece, buildPackage, directoriesFor, generateContent, getPiece, pieceOf, regenerateContent, studioView, withCosts, type StudioContext } from "../agents/studio/generate.js";
 import { bundlePieces, suggestHashtagPools } from "../agents/studio/data-content.js";
 import { loadHashtags, saveHashtags } from "../hashtags.js";
 import { listPersonas } from "../agents/analysis/personas.js";
@@ -83,6 +83,19 @@ export function studioRoutes(app: FastifyInstance, db: Db, getCtx: () => StudioC
   r.post("/api/mp/content/:id/regenerate", { schema: { params: s.IdParams, body: s.RegenerateRequest, response: { 200: s.ContentPiece, 400: s.ErrorBody, 404: s.ErrorBody, 503: s.ErrorBody } } }, async (req, reply) => {
     const ctx = getCtx(); if (!ctx) return noKey(reply);
     return regenerateContent(ctx, req.params.id, req.body.hint, req.user);
+  });
+
+  /** Story zu einem fertigen Beitrag nachreichen — ein Bild, 24 Stunden, eigenes Stück. */
+  r.post("/api/mp/content/:id/story", {
+    schema: { params: s.IdParams, body: z.object({ line: z.string().trim().max(120).optional(), hint: z.string().trim().max(80).optional() }), response: { 200: s.ContentPiece, 400: s.ErrorBody, 404: s.ErrorBody, 503: s.ErrorBody } },
+  }, async (req, reply) => {
+    const ctx = getCtx(); if (!ctx) return noKey(reply);
+    const stueck = await addStoryToPiece(ctx, req.params.id, {
+      ...(req.body.line ? { line: req.body.line } : {}),
+      ...(req.body.hint ? { hint: req.body.hint } : {}),
+    });
+    writeAudit(db, { user: req.user, action: "content.story", entityType: "content_piece", entityId: req.params.id, projectId: stueck.projectId, content: { story: stueck.id } });
+    return stueck;
   });
 
   /** "Ändere …": one instruction, the agent edits the piece (text) or the script + re-renders (video). */

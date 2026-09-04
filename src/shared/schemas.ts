@@ -20,6 +20,12 @@ export const ContentFormat = z.enum([
   "data_reel",
   /** Shot 11: echte Seiten aus einem geteilten Binder — Produkt statt Nachbildung. */
   "showcase_carousel",
+  /**
+   * Hochkant 1080×1920, 24 Stunden sichtbar: der Hinweis auf den Beitrag des
+   * Tages. Eigenes Stück und nicht bloß ein Anhang, damit Freigabe, Zeitplan
+   * und Poster dieselben Wege gehen wie beim Rest.
+   */
+  "story",
 ]);
 export const ContentStatus = z.enum(["draft", "review", "approved", "published", "rejected"]);
 export const AssetKind = z.enum(["screenshot", "recording", "voiceover", "render", "image"]);
@@ -456,6 +462,8 @@ export const ContentRequest = z.object({
   reel: ReelOptions.optional(),
   /** Nur fuer `showcase_carousel`: welcher geteilte Binder abfotografiert wird. */
   showcase: ShowcaseOptions.optional(),
+  /** Zusätzlich zum Beitrag eine Story erzeugen, die auf ihn hinweist. */
+  withStory: z.boolean().default(false),
   /** Von welcher Serie der Lauf kam (Shot 9) — leer bei Handarbeit. */
   seriesId: z.string().default(""),
   /** Ein Lauf, mehrere Plattform-Stuecke mit gemeinsamen Assets. Leer = nur `platform`. */
@@ -474,6 +482,10 @@ export const ContentRequest = z.object({
     coverTitle: z.string().default(""),
     trustLine: z.string().default(""),
     hook: z.string().default(""),
+    /** Der Satz auf der Story. Leer = der Hook wird genommen. */
+    storyLine: z.string().default(""),
+    /** Was unter der Story steht, wo kein Link hinkann. */
+    storyHint: z.string().default(""),
     ctaLine: z.string().default(""),
     captions: z.array(z.object({
       platform: z.string(),

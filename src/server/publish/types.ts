@@ -21,6 +21,12 @@ export interface PostAsset {
 
 export interface PostInput {
   platform: string;
+  /**
+   * `story` statt `feed`: 24 Stunden sichtbar, kein Text daneben, kein
+   * antippbarer Link. Nur Instagram kann das über die API — für alle anderen
+   * bleibt es beim Beitrag.
+   */
+  kind?: "feed" | "story";
   text: string;
   assets: PostAsset[];
   /** Kurzlink des Stücks, falls die Plattform Links im Text erlaubt. */

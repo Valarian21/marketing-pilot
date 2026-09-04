@@ -19,7 +19,7 @@ import { loadBrandKit, type BrandExtractor } from "./brandkit.js";
 import { voiceBlock } from "./voice.js";
 import { reviseWithCritic } from "./critic.js";
 import { carouselSlideHtml, dataUrlFor, framedScreenshotHtml, pinHtml, playwrightRenderer, type RenderJob, type Renderer } from "./render.js";
-import { clearBundle, generateDataBundle, type DataBase } from "./data-content.js";
+import { clearBundle, generateDataBundle, generateStoryFor, type DataBase } from "./data-content.js";
 import { generateShowcaseBundle } from "./showcase.js";
 import { buildUtmUrl, deepLinkFor, PLATFORM_LIMITS, platformFromChannel, slugify } from "../../util/utm.js";
 import { canonicalChannel, channelLink, saneTitle } from "../../../shared/channels.js";
@@ -224,6 +224,27 @@ function linkTask(db: Db, taskId: string, pieceId: string): void {
  * gemeinsamen Assets. Zurück kommt das Leit-Stück des ersten Laufs — daran
  * hängen Freigabe-Gruppierung, Kosten und jeder Link.
  */
+/**
+ * Story zu einem fertigen Beitrag nachreichen.
+ *
+ * Steht hier und nicht in `data-content.ts`, weil nur dieses Modul weiß, wie ein
+ * Projekt-Basisobjekt und ein Asset entstehen — dieselbe Stelle, an der auch
+ * jeder andere Renderlauf beginnt.
+ */
+export async function addStoryToPiece(ctx: StudioContext, pieceId: string, opts: { line?: string; hint?: string } = {}): Promise<s.ContentPiece> {
+  const existing = getPiece(ctx.db, pieceId);
+  if (!existing) throw err("Stück nicht gefunden.", 404);
+  const base = loadBase(ctx, existing.projectId);
+  const dataBase: DataBase = { db: ctx.db, project: base.project, brief: base.brief, personas: base.personas, kit: base.kit, voice: base.voice, language: base.language };
+  const storyId = await generateStoryFor(ctx, dataBase, pieceId, {
+    addAsset: (id: string, file: string, meta: Record<string, unknown>) => addAsset(ctx.db, ctx.dataDir, base.project.id, id, "render", file, meta),
+    renderer: ctx.renderer ?? playwrightRenderer,
+    ...(opts.line ? { line: opts.line } : {}),
+    ...(opts.hint ? { hint: opts.hint } : {}),
+  });
+  return getPiece(ctx.db, storyId)!;
+}
+
 async function generateDataPieces(ctx: StudioContext, base: Base, req: s.ContentRequest, user: HostUser, reuseLeadId?: string): Promise<s.ContentPiece> {
   const languages: ("de" | "en")[] = req.language === "both" ? ["de", "en"] : [req.language === "en" ? "en" : "de"];
   // Beim Reel entsteht die MP4 im Worker. Lieber jetzt abbrechen als nach dem

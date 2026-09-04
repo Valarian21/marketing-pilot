@@ -165,6 +165,9 @@ export async function runScheduledPost(ctx: PostContext, entry: s.ScheduledPost)
   try {
     const res = await poster.post({
       platform: entry.platform, text: piece.body, assets, link, title: piece.title,
+      // Eine Story ist ein eigenes Stück — der Poster muss das wissen, sonst
+      // landet sie als normaler Beitrag im Feed und bleibt dort stehen.
+      ...(piece.format === "story" ? { kind: "story" as const } : {}),
       creds, ...(ctx.fetchImpl ? { fetchImpl: ctx.fetchImpl } : {}), log: ctx.log,
     });
     ctx.db.update(t.mpScheduledPosts).set({ status: "posted", providerRef: res.ref, externalUrl: res.externalUrl, postedAt: now.toISOString(), attempts: entry.attempts + 1, error: null })

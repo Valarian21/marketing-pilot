@@ -179,6 +179,39 @@ ${dataFoot(w, footer)}</div></div>`;
 }
 
 /**
+ * Story (1080 × 1920): der Hinweis auf den Beitrag, der heute im Feed steht.
+ *
+ * Zwei Dinge unterscheiden sie von einer Slide. Erstens ist unten und oben je
+ * ein Sechstel der Fläche von der Oberfläche der App verdeckt — Profilzeile,
+ * Antwortfeld —, deshalb liegt alles Wichtige in der Mitte. Zweitens kann eine
+ * Story über die API **keinen antippbaren Link** tragen: der Hinweis, wo es
+ * weitergeht, muss im Bild stehen, sonst steht er nirgends.
+ */
+export function storyHtml(
+  kit: BrandKit,
+  a: { eyebrow: string; line: string; sub: string; images: string[]; hint: string },
+  w: number, h: number, brand: string, footer: string,
+): string {
+  const fan = a.images.slice(0, 3).map((src, i) =>
+    `<img src="${src}" style="transform:rotate(${(i - 1) * 8}deg) translateY(${Math.abs(i - 1) * Math.round(w * 0.025)}px);left:${18 + i * 22}%">`).join("");
+  const body = `<div class="slide" style="background:var(--b-ground);padding:${Math.round(h * 0.09)}px ${Math.round(w * 0.09)}px"><div class="dwrap">
+<div class="dhead"><span class="dbrand">${esc(brand)}</span></div>
+<div class="sblock">
+  <span class="pill">${esc(a.eyebrow)}</span>
+  <h1 style="font-size:${Math.round(w * (a.line.length > 46 ? 0.085 : 0.105))}px;margin-top:${Math.round(w * 0.045)}px">${esc(a.line)}</h1>
+  ${a.sub ? `<div class="dtotal" style="margin-top:${Math.round(w * 0.03)}px">${esc(a.sub)}</div>` : ""}
+</div>
+<div class="dfan" style="flex:1.4">${fan}</div>
+<div class="sblock"><div class="dname" style="font-size:${Math.round(w * 0.05)}px">${esc(a.hint)}</div></div>
+${dataFoot(w, footer)}</div></div>`;
+  return base(kit, w, h, body, `${dataCss(w)}
+/* Story: alles Wichtige in der Mitte — oben und unten legt Instagram seine
+   eigene Oberfläche darüber. */
+.sblock{flex:0 0 auto}
+.dfan img{max-height:100%;max-width:46%}`);
+}
+
+/**
  * Binder-Showcase (Shot 11): eine echte Seite aus der geteilten Ansicht.
  *
  * Das Bild wird nie beschnitten — es ist ein Produkt-Screenshot, und ein halb
