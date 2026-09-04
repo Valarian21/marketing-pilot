@@ -65,7 +65,13 @@ function buildFixture(): void {
                            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
   const price = db.prepare("INSERT INTO card_prices (card_id,eur,updated_at,eur_holo) VALUES (?,?,?,?)");
   // Preise, die frisch genug sind, damit nichts nachgeladen wird (kein Netz im Test).
-  const fresh = new Date(Date.now() - 3600_000).toISOString().slice(0, 19).replace("T", " ");
+  // Der Zeitstempel muss auf denselben Kalendertag fallen wie das Datum, gegen
+  // das die Fußzeile geprüft wird — und das ist ein **lokales**. Zwei Fallen
+  // stecken darin: „vor einer Stunde" landet zwischen 00:00 und 01:00 im Vortag,
+  // und `toISOString()` liefert UTC, das dem lokalen Datum abends voraus- und
+  // nachts hinterherhinkt. Deshalb das lokale Datum, mittags.
+  const heuteLokal = new Date();
+  const fresh = `${heuteLokal.getFullYear()}-${String(heuteLokal.getMonth() + 1).padStart(2, "0")}-${String(heuteLokal.getDate()).padStart(2, "0")} 10:00:00`;
   Object.entries(PRICES).forEach(([id, eur], i) => {
     card.run(id, "swsh12", String(180 + i), 180 + i, `Karte ${i + 1}`, `Card ${i + 1}`, null, "Ultra Rare", "Illu A", "intl",
       `https://img/de/${id}`, `https://img/en/${id}`, null, "[]", "2022-11-11");
