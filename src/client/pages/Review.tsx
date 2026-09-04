@@ -119,7 +119,7 @@ export function ReviewPage() {
             </div>
             {siblings.length > 1 && (
               <nav className="mp-subnav" aria-label="Plattformen im Bündel">
-                {siblings.map((p) => <button key={p.id} type="button" className={`mp-subnav-item mp-linkbtn${p.id === current.id ? " is-active" : ""}`} onClick={() => go(p)}>{p.channel}{p.status !== "review" && ` · ${STATUS[p.status].label}`}</button>)}
+                {siblings.map((p) => <button key={p.id} type="button" className={`mp-subnav-item mp-linkbtn${p.id === current.id ? " is-active" : ""}`} onClick={() => go(p)}>{p.channel}{p.format === "story" && " · Story"}{p.status !== "review" && ` · ${STATUS[p.status].label}`}</button>)}
               </nav>
             )}
             <Preview piece={current} text={draft ?? current.body} />
@@ -202,6 +202,17 @@ function Preview({ piece, text }: { piece: ContentPiece; text: string }) {
         <ShotGallery shots={(piece.format === "carousel" ? piece.assets.slice(0, Math.ceil(piece.assets.length / 2)) : piece.assets).map((a, i) => ({ id: a, url: `/api/mp/assets/${a}/file`, label: piece.format === "carousel" ? `Slide ${i + 1}` : "" }))} />
         {sizes && <p className="mp-small mp-muted">Beide Größen (1080×1080, 1080×1350) liegen im Publish-Paket.</p>}
         {piece.format === "carousel" && <div className="mp-post"><p>{String(piece.meta["caption"] ?? "")}</p></div>}
+      </div>
+    );
+  }
+  if (piece.format === "story") {
+    return (
+      <div className="mp-preview">
+        <ShotGallery shots={piece.assets.map((a) => ({ id: a, url: `/api/mp/assets/${a}/file`, label: "Story 1080×1920" }))} />
+        <p className="mp-small mp-muted">
+          24 Stunden sichtbar · {String(piece.meta["storyHint"] ?? "")}
+          {" · "}Sticker und antippbare Links gibt die API nicht her — der Hinweis steht im Bild.
+        </p>
       </div>
     );
   }
