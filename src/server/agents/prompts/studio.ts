@@ -19,6 +19,49 @@ Return JSON: {"summary","address","sentenceLength","favoriteWords":[],"humor","t
   ];
 }
 
+/**
+ * Die Texte des Social-Kits: ein Nutzername, und je Plattform Anzeigename und Bio.
+ *
+ * Die Zeichengrenzen sind der eigentliche Grund fuer diesen Prompt. Ein Modell,
+ * dem man "kurz" sagt, schreibt 180 Zeichen fuer ein 80-Zeichen-Feld; deshalb
+ * steht die Grenze an jeder Zeile, und der Aufrufer kuerzt hinterher trotzdem.
+ */
+export function socialProfilesPrompt(input: {
+  brief: Brief;
+  brand: string;
+  domain: string;
+  link: string;
+  linkInBio: boolean;
+  voiceProfile: string | null;
+  targets: { platform: string; label: string; limit: number; nameLimit: number; note: string }[];
+}): LlmMessage[] {
+  return [
+    { role: "system", content: `[task:social-profiles]
+Write the PROFILE TEXTS for a product's social accounts. Output language: ${lang(input.brief.language)}.
+- "handle": one username that works on every platform - lowercase, a-z 0-9 and dots only, no spaces, 3-20 chars, ideally the bare product name.
+- "category": the business category these platforms ask for when creating a profile, 1-3 words.
+- For every platform: "displayName" (<= nameLimit chars, the product name plus at most one clarifying word - it is searchable) and "bio" (<= limit chars, HARD limit, count characters).
+Bio rules:
+- Stay 10-20% UNDER the limit and end on a complete sentence. A bio cut off mid-thought is worse than a shorter one.
+- Write a DIFFERENT bio per platform - same product, different angle and length. Never paste one text into several fields: the short ones are one crisp sentence, the long ones may add what the shorter ones had to leave out.
+- First half-sentence says what a visitor gets, in their words, not yours. No slogan openers, no "Willkommen".
+- Concrete over abstract: name the real thing (sets, cards, prices) instead of "Lösungen" or "Erlebnisse".
+- At most one emoji per bio, and only where it replaces a word. Never a wall of them. No hashtag walls.
+- Never these phrases: ${BANNED_PHRASES.slice(0, 12).join(", ")}.
+- ${input.linkInBio ? `Where a link belongs in the bio, use exactly: ${input.link}` : `Mention the site as: ${input.domain}`}
+${input.voiceProfile ? `\nVOICE PROFILE - follow it:\n${input.voiceProfile}` : ""}
+Return JSON: {"handle","category","profiles":[{"platform","displayName","bio"}]} with one entry per platform below, same "platform" keys.` },
+    { role: "user", content: `PRODUCT: ${input.brand}
+ONE-LINER: ${input.brief.oneLiner}
+CATEGORY: ${input.brief.category}
+DOMAIN: ${input.domain}
+FEATURES: ${input.brief.features.slice(0, 8).join(" | ")}
+
+PLATFORMS:
+${input.targets.map((t) => `- ${t.platform} (${t.label}): bio max ${t.limit} chars, name max ${t.nameLimit} chars.${t.note ? ` ${t.note}` : ""}`).join("\n")}` },
+  ];
+}
+
 export function criticPrompt(input: { text: string; language: string; voiceProfile: string | null; format: string; platform?: string }): LlmMessage[] {
   return [
     { role: "system", content: `[task:ai-tell-critic]

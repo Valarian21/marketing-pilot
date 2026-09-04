@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
-import type { BrandKit, ContentPiece, DirectoryStatus, HashtagPools, Job, ProductDataView, SocialKitItem, StudioView, VideoView } from "../../shared/schemas.js";
+import type { BrandKit, ContentPiece, DirectoryStatus, HashtagPools, Job, ProductDataView, SocialKitTexts, SocialKitView, StudioView, VideoView } from "../../shared/schemas.js";
 import { api } from "../api.js";
 import { Button, Card, Notice, PageHeader, Pill, fmtDateTime, type PillKind } from "../components/ui.js";
 import { ProjectNav } from "../components/ProjectNav.js";
@@ -386,6 +386,66 @@ function HashtagTab({ id, busy, run }: { id: string; busy: string | null; run: R
   );
 }
 
+/** Ein Feld zum Abschreiben: Wert, Zeichenzahl, ein Klick zum Kopieren. */
+function CopyField({ label, value, limit, hint }: { label: string; value: string; limit?: number; hint?: string }) {
+  const [done, setDone] = useState(false);
+  const zuLang = limit !== undefined && value.length > limit;
+  return (
+    <div className="mp-field">
+      <span>
+        {label}
+        {limit !== undefined && <span className={zuLang ? "mp-bad mp-small" : "mp-muted mp-small"}> · {value.length}/{limit} Zeichen</span>}
+      </span>
+      <div className="mp-inline mp-inline--top">
+        <p className="mp-profiltext">{value}</p>
+        <Button onClick={() => { void navigator.clipboard.writeText(value).then(() => { setDone(true); setTimeout(() => setDone(false), 1800); }); }}>
+          {done ? "Kopiert ✓" : "Kopieren"}
+        </Button>
+      </div>
+      {hint && <p className="mp-small mp-muted">{hint}</p>}
+    </div>
+  );
+}
+
+/**
+ * Die Profiltexte des Social-Kits.
+ *
+ * Beim Anlegen eines Kontos fragt jede Plattform nach Name, Nutzername und Bio
+ * — und zählt die Zeichen anders. Deshalb steht die Grenze an jedem Feld, und
+ * jedes Feld lässt sich einzeln kopieren: man füllt ein Formular aus, man liest
+ * keinen Text.
+ */
+function ProfileTexts({ texts }: { texts: SocialKitTexts }) {
+  const [offen, setOffen] = useState<string | null>(texts.profiles[0]?.platform ?? null);
+  return (
+    <div className="mp-profiltexte">
+      <div className="mp-form mp-form--row">
+        <CopyField label="Nutzername (überall gleich)" value={texts.handle} />
+        {texts.category && <CopyField label="Kategorie" value={texts.category} />}
+        {texts.link && <CopyField label="Link für die Bio" value={texts.link} />}
+      </div>
+      <div className="mp-inline">
+        {texts.profiles.map((p) => (
+          <button key={p.platform} type="button" className={`mp-btn${offen === p.platform ? " mp-btn--primary" : ""}`}
+            onClick={() => setOffen(offen === p.platform ? null : p.platform)}>{p.label}</button>
+        ))}
+      </div>
+      {texts.profiles.filter((p) => p.platform === offen).map((p) => (
+        <div key={p.platform} className="mp-form">
+          <CopyField label={`Name auf ${p.label}`} value={p.displayName} />
+          <CopyField label={`Bio auf ${p.label}`} value={p.bio} limit={p.limit} hint={p.note} />
+        </div>
+      ))}
+      {texts.generatedAt && (
+        <p className="mp-small mp-muted">
+          Geschrieben am {new Date(texts.generatedAt).toLocaleDateString("de-DE")} von {texts.model}. Ändern kannst du
+          alles direkt auf der Plattform — der Pilot schreibt nichts nach.
+        </p>
+      )}
+    </div>
+  );
+}
+
 /**
  * Social-Kit: Profilbilder und Banner für jeden Kanal, aus dem Brand-Kit.
  *
@@ -394,26 +454,39 @@ function HashtagTab({ id, busy, run }: { id: string; busy: string | null; run: R
  * Einrichten will man nicht sechsmal einzeln klicken.
  */
 function SocialKitCard({ id, busy, run }: { id: string; busy: string | null; run: Run }) {
-  const [items, setItems] = useState<SocialKitItem[] | null>(null);
-  const load = useCallback(async () => { try { setItems(await api<SocialKitItem[]>(`/projects/${id}/socialkit`)); } catch { setItems([]); } }, [id]);
+  const [view, setView] = useState<SocialKitView | null>(null);
+  const load = useCallback(async () => {
+    try { setView(await api<SocialKitView>(`/projects/${id}/socialkit`)); }
+    catch { setView(null); }
+  }, [id]);
   useEffect(() => { void load(); }, [load]);
+  const items = view?.assets ?? null;
+  const texts = view?.texts ?? null;
   return (
     <Card>
       <div className="mp-card-head">
-        <h2>Social-Kit <span className="mp-muted mp-small">Profilbilder &amp; Banner</span></h2>
+        <h2>Social-Kit <span className="mp-muted mp-small">Bilder &amp; Profiltexte</span></h2>
         <div className="mp-inline">
           {items && items.length > 0 && <a className="mp-btn mp-btn--primary" href={`/api/mp/projects/${id}/socialkit.zip`}>Alle als ZIP</a>}
-          <Button disabled={busy !== null} onClick={() => void run("kit", async () => { setItems(await api<SocialKitItem[]>(`/projects/${id}/socialkit`, { method: "POST" })); })}>
+          {texts && texts.profiles.length > 0 && (
+            <Button disabled={busy !== null} onClick={() => void run("kittexte", async () => {
+              const next = await api<SocialKitTexts>(`/projects/${id}/socialkit/texts`, { method: "POST" });
+              setView((cur) => (cur ? { ...cur, texts: next } : cur));
+            })}>{busy === "kittexte" ? "schreibt …" : "Nur Texte neu"}</Button>
+          )}
+          <Button disabled={busy !== null} onClick={() => void run("kit", async () => { setView(await api<SocialKitView>(`/projects/${id}/socialkit`, { method: "POST" })); })}>
             {busy === "kit" ? "rendert …" : items && items.length ? "Neu erzeugen" : "Erzeugen"}
           </Button>
         </div>
       </div>
       <p className="mp-small mp-muted">
         Farben, Logo und Einzeiler kommen aus dem Brand-Kit und dem Brief. Ohne Logo entsteht ein Monogramm.
-        Änderst du die Primärfarbe, erzeuge das Kit neu.
+        Liegt ein runder Zuschnitt im Brand-Kit, tragen ihn die Profilbilder. Änderst du die Primärfarbe,
+        erzeuge das Kit neu.
       </p>
+      {texts && texts.profiles.length > 0 && <ProfileTexts texts={texts} />}
       {!items || items.length === 0 ? (
-        <p className="mp-muted">Noch nichts erzeugt.</p>
+        <p className="mp-muted">Noch keine Bilder erzeugt.</p>
       ) : (
         <>
           <div className="mp-shots mp-shots--slides">

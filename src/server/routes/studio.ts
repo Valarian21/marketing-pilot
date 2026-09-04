@@ -18,7 +18,7 @@ import { loadHashtags, saveHashtags } from "../hashtags.js";
 import { listPersonas } from "../agents/analysis/personas.js";
 import { planChannelNames } from "../channels.js";
 import { revisePiece } from "../agents/revise.js";
-import { generateSocialKit, socialKit, socialKitZip } from "../agents/studio/socialkit.js";
+import { generateSocialKit, generateSocialTexts, socialKitView, socialKitZip } from "../agents/studio/socialkit.js";
 
 export function studioRoutes(app: FastifyInstance, db: Db, getCtx: () => StudioContext | null): void {
   const r = app.withTypeProvider<ZodTypeProvider>();
@@ -122,15 +122,33 @@ export function studioRoutes(app: FastifyInstance, db: Db, getCtx: () => StudioC
 
   // --- Social-Kit: Profilbilder und Banner ----------------------------------
 
-  r.get("/api/mp/projects/:projectId/socialkit", { schema: { params: P, response: { 200: z.array(s.SocialKitItem) } } },
-    async (req) => socialKit(db, req.params.projectId));
+  r.get("/api/mp/projects/:projectId/socialkit", { schema: { params: P, response: { 200: s.SocialKitView } } },
+    async (req) => socialKitView(db, req.params.projectId));
 
-  r.post("/api/mp/projects/:projectId/socialkit", { schema: { params: P, response: { 200: z.array(s.SocialKitItem), 404: s.ErrorBody } } }, async (req, reply) => {
+  r.post("/api/mp/projects/:projectId/socialkit", { schema: { params: P, response: { 200: s.SocialKitView, 404: s.ErrorBody } } }, async (req, reply) => {
     if (!getProject(db, req.params.projectId)) return reply.code(404).send({ detail: "Projekt nicht gefunden." });
     const ctx = getCtx();
-    const items = await generateSocialKit(db, fallbackCtx().dataDir, req.params.projectId, { ...(ctx?.renderer ? { renderer: ctx.renderer } : {}), log: (m) => app.log.info(m) });
-    writeAudit(db, { user: req.user, action: "socialkit.generate", entityType: "project", entityId: req.params.projectId, projectId: req.params.projectId, content: { formats: items.length } });
-    return items;
+    const view = await generateSocialKit(db, fallbackCtx().dataDir, req.params.projectId, {
+      ...(ctx?.renderer ? { renderer: ctx.renderer } : {}),
+      ...(ctx?.llm ? { llm: ctx.llm } : {}),
+      ...(ctx?.env.MP_PUBLIC_BASE ? { publicBase: ctx.env.MP_PUBLIC_BASE } : {}),
+      log: (m) => app.log.info(m),
+    });
+    writeAudit(db, { user: req.user, action: "socialkit.generate", entityType: "project", entityId: req.params.projectId, projectId: req.params.projectId, content: { formats: view.assets.length, texts: view.texts.profiles.length } });
+    return view;
+  });
+
+  /** Nur die Texte neu schreiben — Bilder rendern dauert, Bios nicht. */
+  r.post("/api/mp/projects/:projectId/socialkit/texts", { schema: { params: P, response: { 200: s.SocialKitTexts, 404: s.ErrorBody, 503: s.ErrorBody } } }, async (req, reply) => {
+    if (!getProject(db, req.params.projectId)) return reply.code(404).send({ detail: "Projekt nicht gefunden." });
+    const ctx = getCtx();
+    if (!ctx) return noKey(reply);
+    const texts = await generateSocialTexts(db, req.params.projectId, ctx.llm, {
+      ...(ctx.env.MP_PUBLIC_BASE ? { publicBase: ctx.env.MP_PUBLIC_BASE } : {}),
+      log: (m) => app.log.info(m),
+    });
+    writeAudit(db, { user: req.user, action: "socialkit.texts", entityType: "project", entityId: req.params.projectId, projectId: req.params.projectId, content: { handle: texts.handle, profiles: texts.profiles.length } });
+    return texts;
   });
 
   /** Alles in einer Datei — beim Einrichten will man nicht sechsmal klicken. */

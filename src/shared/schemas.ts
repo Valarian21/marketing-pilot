@@ -362,6 +362,14 @@ export const BrandKit = z.object({
   style: BrandStyle.default("weich"),
   logoAssetId: z.string().nullable().default(null),
   logoUrl: z.string().nullable().default(null),
+  /**
+   * Der runde Zuschnitt der Marke — nur für Profilbilder.
+   *
+   * Social-Profile beschneiden rund, App-Icons nicht. Wer beides aus einer
+   * Datei bedient, verliert entweder die Ecken oder verschenkt Fläche. Liegt
+   * hier nichts, nimmt das Social-Kit weiter `logoAssetId`.
+   */
+  avatarAssetId: z.string().nullable().default(null),
   fonts: z.array(z.string()).default([]),
   extractedAt: Iso.nullable().default(null),
   voiceSamples: z.array(VoiceSample).default([]),
@@ -809,6 +817,41 @@ export const SocialKitItem = z.object({
   size: z.string(), assetId: Id, url: z.string(), filename: z.string(),
 });
 
+/**
+ * Ein Profil in Textform — die andere Hälfte des Social-Kits.
+ *
+ * Ein neues Konto braucht nicht nur ein Bild, sondern auch einen Namen, einen
+ * Nutzernamen und eine Bio, die in die Zeichengrenze der Plattform passt.
+ * Genau daran scheitert das Einrichten sonst: 80 Zeichen bei TikTok, 150 bei
+ * Instagram, und jede Plattform zählt anders.
+ */
+export const SocialProfile = z.object({
+  platform: z.string(),
+  label: z.string(),
+  /** Anzeigename, wie er ins Namensfeld gehört. */
+  displayName: z.string(),
+  /** Die Bio, garantiert innerhalb von `limit`. */
+  bio: z.string(),
+  /** Zeichengrenze der Plattform für die Bio. */
+  limit: z.number().int(),
+  /** Was beim Ausfüllen dieser Plattform zu beachten ist. */
+  note: z.string(),
+});
+
+export const SocialKitTexts = z.object({
+  /** Ein Nutzername für alle Kanäle — gleiche Marke, gleicher Griff. */
+  handle: z.string().default(""),
+  /** Kategorie/Branche, die mehrere Plattformen beim Anlegen abfragen. */
+  category: z.string().default(""),
+  /** Die Adresse, die in die Bio gehört (Link-in-Bio oder Domain). */
+  link: z.string().default(""),
+  profiles: z.array(SocialProfile).default([]),
+  generatedAt: Iso.nullable().default(null),
+  model: z.string().default(""),
+});
+
+export const SocialKitView = z.object({ assets: z.array(SocialKitItem), texts: SocialKitTexts });
+
 export const StudioView = z.object({
   brandKit: BrandKit,
   hasBrief: z.boolean(),
@@ -1011,6 +1054,9 @@ export type ProductDataStatus = z.infer<typeof ProductDataStatus>;
 export type ProductDataView = z.infer<typeof ProductDataView>;
 export type StudioView = z.infer<typeof StudioView>;
 export type SocialKitItem = z.infer<typeof SocialKitItem>;
+export type SocialProfile = z.infer<typeof SocialProfile>;
+export type SocialKitTexts = z.infer<typeof SocialKitTexts>;
+export type SocialKitView = z.infer<typeof SocialKitView>;
 export type VideoAction = z.infer<typeof VideoAction>;
 export type VideoScene = z.infer<typeof VideoScene>;
 export type VideoScript = z.infer<typeof VideoScript>;

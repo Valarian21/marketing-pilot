@@ -432,12 +432,12 @@ describe("ZIP-Schreiber", () => {
 
 describe("Social-Kit", () => {
   it("erzeugt alle Formate, ersetzt den alten Satz und packt sie mit Anleitung", async () => {
-    const { generateSocialKit, socialKit, socialKitZip, SOCIAL_FORMATS } = await import("../src/server/agents/studio/socialkit.js");
+    const { generateSocialKit, socialKit, socialKitView, socialKitZip, SOCIAL_FORMATS } = await import("../src/server/agents/studio/socialkit.js");
     const rendered: string[] = [];
     const renderer = async (jobs: { html: string; file: string }[]) => {
       for (const j of jobs) { fs.mkdirSync(path.dirname(j.file), { recursive: true }); fs.writeFileSync(j.file, PNG); rendered.push(j.html); }
     };
-    const items = await generateSocialKit(built.db, DATA, pid, { renderer: renderer as never });
+    const { assets: items } = await generateSocialKit(built.db, DATA, pid, { renderer: renderer as never });
     expect(items.length).toBe(SOCIAL_FORMATS.length);
     expect(items.map((x) => x.format)).toContain("banner-youtube");
     // Ohne Logo im Brand-Kit entsteht ein Monogramm
@@ -448,6 +448,8 @@ describe("Social-Kit", () => {
     // Ein zweiter Lauf ersetzt, statt zu häufen
     await generateSocialKit(built.db, DATA, pid, { renderer: renderer as never });
     expect(socialKit(built.db, pid).length).toBe(SOCIAL_FORMATS.length);
+    // Ohne LLM bleibt der Textteil leer — die Bilder stehen trotzdem
+    expect(socialKitView(built.db, pid).texts.profiles).toEqual([]);
 
     const zip = socialKitZip(built.db, DATA, pid)!;
     expect(zip.name).toContain("social-kit.zip");
@@ -456,4 +458,22 @@ describe("Social-Kit", () => {
     expect(zip.data.includes(Buffer.from("WOHIN-GEHOERT-WAS.txt"))).toBe(true);
     expect(zip.data.includes(Buffer.from("1546 × 423", "utf8"))).toBe(true);
   }, 60_000);
+
+  it("kürzt Bios an der Wortgrenze auf die Zeichenzahl der Plattform", async () => {
+    const { fitLength, PROFILE_TARGETS } = await import("../src/server/agents/studio/socialkit.js");
+    // Was passt, bleibt unangetastet
+    expect(fitLength("  Kurz   und   knapp ", 80)).toBe("Kurz und knapp");
+    // TikTok zaehlt 80 Zeichen - danach ist Schluss, aber nicht mitten im Wort
+    const lang = "Du planst deinen Pokémon-Binder Fach für Fach, siehst echte Cardmarket-Preise und druckst Platzhalter.";
+    const kurz = fitLength(lang, 80);
+    expect(kurz.length).toBeLessThanOrEqual(80);
+    expect(lang.startsWith(kurz.slice(0, -1))).toBe(true);
+    // Passt ein ganzer Satz, endet die Bio auch wie einer - ohne Auslassungszeichen
+    expect(fitLength("Plane Fach für Fach. Sieh echte Preise. Drucke Platzhalter.", 45)).toBe("Plane Fach für Fach. Sieh echte Preise.");
+    // Passt kein Satz, wird an der Satzteil-Grenze aufgehoert statt mitten im Gedanken
+    expect(fitLength("Plane deine Sammelalben, sieh Preise und drucke Platzhalter für fehlende Karten.", 60))
+      .toBe("Plane deine Sammelalben, sieh Preise.");
+    // Jede Plattform hat eine Grenze, und keine ist versehentlich null
+    expect(PROFILE_TARGETS.every((t) => t.limit > 0 && t.nameLimit > 0)).toBe(true);
+  });
 });

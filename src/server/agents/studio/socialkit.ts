@@ -16,8 +16,14 @@ import { eq } from "drizzle-orm";
 import * as s from "../../../shared/schemas.js";
 import * as t from "../../db/schema.js";
 import { newId, nowIso, parseJson, toJson, type Db } from "../../db/index.js";
+import { modelFor } from "../../../../config/models.js";
+import type { LlmProvider } from "../../providers/index.js";
+import { chatJson, withRun } from "../runner.js";
+import { socialProfilesPrompt } from "../prompts/studio.js";
 import { getProject } from "../../repo/projects.js";
+import { loadBio } from "../../publish/bio.js";
 import { loadBrandKit } from "./brandkit.js";
+import { voiceBlock } from "./voice.js";
 import { dataUrlFor, istKontur, playwrightRenderer, themeVars, type RenderJob, type Renderer } from "./render.js";
 import { markPng, pngSize } from "../../util/png.js";
 import { buildZip, safeName, type ZipEntry } from "../../util/zip.js";
@@ -52,6 +58,132 @@ export const SOCIAL_FORMATS: SocialFormat[] = [
   { key: "og-bild", label: "Link-Vorschaubild", usedFor: "Website, WhatsApp, Discord, Link-in-Bio", w: 1200, h: 630, kind: "banner",
     note: "Das Bild, das erscheint, wenn jemand deinen Link teilt." },
 ];
+
+/**
+ * Die Textfelder, die beim Anlegen eines Profils abgefragt werden.
+ *
+ * `limit` ist die harte Zeichengrenze der Plattform für die Bio, `nameLimit`
+ * die fürs Namensfeld. Beide sind der Grund, warum es diese Tabelle gibt:
+ * dieselbe Bio passt bei Bluesky (256) und reißt bei TikTok (80) ab.
+ */
+export interface ProfileTarget { platform: string; label: string; limit: number; nameLimit: number; note: string }
+
+export const PROFILE_TARGETS: ProfileTarget[] = [
+  { platform: "instagram", label: "Instagram", limit: 150, nameLimit: 30,
+    note: "Der Name ist durchsuchbar — Produktname plus höchstens ein Schlagwort. Einziger klickbarer Link ist der in der Bio." },
+  { platform: "threads", label: "Threads", limit: 150, nameLimit: 30,
+    note: "Übernimmt die Instagram-Bio nicht automatisch — hier getrennt eintragen." },
+  { platform: "facebook", label: "Facebook-Seite", limit: 255, nameLimit: 75,
+    note: "Gehört unter „Info → Beschreibung“. Der Seitenname lässt sich später nur eingeschränkt ändern." },
+  { platform: "bluesky", label: "Bluesky", limit: 256, nameLimit: 64,
+    note: "Links im Beitragstext sind klickbar — die Bio muss den Link nicht allein tragen." },
+  { platform: "telegram", label: "Telegram-Kanal", limit: 255, nameLimit: 128,
+    note: "Die Beschreibung sieht man vor allem vor dem Beitreten — sie muss zum Abonnieren überreden." },
+  { platform: "pinterest", label: "Pinterest", limit: 160, nameLimit: 30,
+    note: "Pinterest ist eine Suchmaschine: die Wörter, nach denen jemand sucht, gehören in Name und Bio." },
+  { platform: "tiktok", label: "TikTok", limit: 80, nameLimit: 30,
+    note: "Nur 80 Zeichen — ein Satz, keine Aufzählung." },
+  { platform: "youtube", label: "YouTube", limit: 1000, nameLimit: 100,
+    note: "Über dem Kanal stehen nur die ersten rund 100 Zeichen — das Wichtigste nach vorn." },
+  { platform: "x", label: "X", limit: 160, nameLimit: 50, note: "" },
+];
+
+const TEXT_KEY = (projectId: string) => `socialkit-texts:${projectId}`;
+
+/**
+ * Auf die Zeichengrenze kürzen — und zwar so, dass es niemand merkt.
+ *
+ * Zuerst wird versucht, ganze Sätze stehen zu lassen: eine Bio, die einen Satz
+ * weniger hat, liest sich fertig. Erst wenn schon der erste Satz zu lang ist,
+ * wird an der Wortgrenze geschnitten und mit Auslassungszeichen markiert —
+ * dann ist der Text sichtbar abgeschnitten, statt heimlich sinnentstellt.
+ */
+export function fitLength(text: string, limit: number): string {
+  const clean = text.replace(/\s+/g, " ").trim();
+  if (clean.length <= limit) return clean;
+
+  // Satzenden, an denen man sauber aufhören kann.
+  let satzende = "";
+  for (const m of clean.matchAll(/[^.!?]*[.!?](?:\s|$)/g)) {
+    const bis = (m.index ?? 0) + m[0].trimEnd().length;
+    if (bis > limit) break;
+    satzende = clean.slice(0, bis);
+  }
+  if (satzende.length >= Math.min(40, limit * 0.5)) return satzende;
+
+  // Kein ganzer Satz passt (TikTok hat 80 Zeichen): dann wenigstens an einer
+  // Satzteil-Grenze aufhören — „A, B und C" wird zu „A, B." statt zu „A, B und…".
+  const teile = [...clean.slice(0, limit).matchAll(/,|\sund\s|\ssowie\s|\s–\s/g)];
+  const letzte = teile.map((m) => m.index ?? 0).filter((i) => i > 0).at(-1);
+  if (letzte !== undefined && letzte >= limit * 0.5) return `${clean.slice(0, letzte).replace(/[.,;:]$/, "")}.`;
+
+  const cut = clean.slice(0, limit - 1);
+  const atWord = cut.replace(/[\s,;:–—-]+\S*$/, "");
+  return `${(atWord.length >= limit * 0.6 ? atWord : cut).replace(/[.,;:]$/, "")}…`;
+}
+
+export function loadSocialTexts(db: Db, projectId: string): s.SocialKitTexts {
+  const row = db.select({ value: t.mpSettings.value }).from(t.mpSettings).where(eq(t.mpSettings.key, TEXT_KEY(projectId))).get();
+  return s.SocialKitTexts.parse(parseJson<unknown>(row?.value ?? "{}", {}));
+}
+
+function saveSocialTexts(db: Db, projectId: string, texts: s.SocialKitTexts): void {
+  const value = toJson(texts);
+  db.insert(t.mpSettings).values({ key: TEXT_KEY(projectId), value, updatedAt: nowIso() })
+    .onConflictDoUpdate({ target: t.mpSettings.key, set: { value, updatedAt: nowIso() } }).run();
+}
+
+const HandleRe = /[^a-z0-9._]/g;
+
+const Out = s.SocialKitTexts.pick({ handle: true, category: true }).extend({
+  profiles: s.SocialProfile.pick({ platform: true, displayName: true, bio: true }).array(),
+});
+
+/**
+ * Namen, Nutzername und Bios erzeugen.
+ *
+ * Der Modellaufruf liefert Vorschläge, die Grenzen erzwingt aber diese
+ * Funktion: `fitLength` schneidet nach, was das Modell zu lang geschrieben hat.
+ * Lieber ein gekürzter Satz als ein Feld, das die Plattform beim Speichern
+ * abschneidet.
+ */
+export async function generateSocialTexts(
+  db: Db, projectId: string, llm: LlmProvider, opts: { publicBase?: string; log?: (m: string) => void } = {},
+): Promise<s.SocialKitTexts> {
+  const project = getProject(db, projectId);
+  if (!project) throw err("Projekt nicht gefunden.", 404);
+  const parsed = s.Brief.safeParse(project.brief);
+  if (!parsed.success) throw err("Ohne bestätigten Produkt-Brief gibt es keine Profiltexte.");
+  const brief = parsed.data;
+  const kit = loadBrandKit(db, projectId);
+  const domain = project.url.replace(/^https?:\/\//, "").replace(/\/$/, "");
+  const bio = loadBio(db, projectId);
+  const bioAdresse = bio.enabled && bio.code && opts.publicBase
+    ? `${opts.publicBase.replace(/\/$/, "")}/go/bio/${bio.code}`
+    : "";
+  const link = bioAdresse || domain;
+
+  const model = modelFor("content");
+  const { result } = await withRun(db, { task: "studio.social-profiles", model, projectId }, (usage) =>
+    chatJson(llm, model, Out, socialProfilesPrompt({
+      brief, brand: brief.productName, domain, link, linkInBio: Boolean(bioAdresse),
+      voiceProfile: voiceBlock(kit), targets: PROFILE_TARGETS,
+    }), usage, { maxTokens: 2500 }));
+
+  const handle = result.handle.toLowerCase().replace(HandleRe, "").slice(0, 20)
+    || brief.productName.toLowerCase().replace(HandleRe, "").slice(0, 20);
+  const profiles: s.SocialProfile[] = PROFILE_TARGETS.map((target) => {
+    const hit = result.profiles.find((p) => p.platform.trim().toLowerCase() === target.platform);
+    const displayName = fitLength(hit?.displayName || brief.productName, target.nameLimit);
+    const bioText = fitLength(hit?.bio || brief.oneLiner, target.limit);
+    if (hit && hit.bio.trim().length > target.limit) opts.log?.(`Social-Kit: Bio für ${target.label} war ${hit.bio.trim().length} Zeichen, gekürzt auf ${target.limit}.`);
+    return { platform: target.platform, label: target.label, displayName, bio: bioText, limit: target.limit, note: target.note };
+  });
+
+  const texts: s.SocialKitTexts = { handle, category: result.category.trim(), link, profiles, generatedAt: nowIso(), model };
+  saveSocialTexts(db, projectId, texts);
+  return texts;
+}
 
 const base = (kit: s.BrandKit, w: number, h: number, body: string, extra = "") => `<!doctype html><html><head><meta charset="utf-8">${FONT_LINK}<style>
 :root{${themeVars(kit)}} *{box-sizing:border-box;margin:0} html,body{width:${w}px;height:${h}px;overflow:hidden}
@@ -127,9 +259,15 @@ export function socialKit(db: Db, projectId: string): SocialKitAsset[] {
   return out;
 }
 
+/** Bilder und Texte zusammen — das ist der Stand, den das UI zeigt. */
+export function socialKitView(db: Db, projectId: string): s.SocialKitView {
+  return { assets: socialKit(db, projectId), texts: loadSocialTexts(db, projectId) };
+}
+
 export async function generateSocialKit(
-  db: Db, dataDir: string, projectId: string, opts: { renderer?: Renderer; log?: (m: string) => void } = {},
-): Promise<SocialKitAsset[]> {
+  db: Db, dataDir: string, projectId: string,
+  opts: { renderer?: Renderer; log?: (m: string) => void; llm?: LlmProvider; publicBase?: string } = {},
+): Promise<s.SocialKitView> {
   const log = opts.log;
   const project = getProject(db, projectId);
   if (!project) throw err("Projekt nicht gefunden.", 404);
@@ -150,6 +288,14 @@ export async function generateSocialKit(
   const logoDataUrl = logoFile && looksLikeLogo ? dataUrlFor(logoFile) : null;
   if (logoFile && !looksLikeLogo) log?.(`Social-Kit: ${path.basename(logoFile)} ist ${dim!.width}×${dim!.height} und damit kein Logo — Monogramm verwendet.`);
 
+  // Profilbilder werden rund beschnitten, App-Icons nicht. Liegt im Brand-Kit
+  // ein eigener runder Zuschnitt, gilt er für die Avatare — sonst muss das
+  // Icon beides leisten und verliert im Kreis seine Ecken.
+  const avatarAsset = kit.avatarAssetId ? db.select().from(t.mpAssets).where(eq(t.mpAssets.id, kit.avatarAssetId)).get() : null;
+  const avatarFile = avatarAsset ? path.join(dataDir, avatarAsset.path) : null;
+  const avatarDataUrl = avatarFile && fs.existsSync(avatarFile) ? dataUrlFor(avatarFile) : logoDataUrl;
+  if (avatarFile && avatarDataUrl !== logoDataUrl) log?.(`Social-Kit: runder Zuschnitt ${path.basename(avatarFile)} für die Profilbilder.`);
+
   const outDir = path.join(dataDir, "assets", projectId, "socialkit");
   fs.mkdirSync(outDir, { recursive: true });
   const jobs: RenderJob[] = [];
@@ -157,7 +303,7 @@ export async function generateSocialKit(
   for (const f of SOCIAL_FORMATS) {
     const file = path.join(outDir, `${safeName(brand)}-${f.key}-${f.w}x${f.h}.png`);
     const html = f.kind === "avatar"
-      ? avatarHtml(kit, { brand, logoDataUrl }, f.w, f.h)
+      ? avatarHtml(kit, { brand, logoDataUrl: avatarDataUrl }, f.w, f.h)
       : bannerHtml(kit, { brand, claim, domain, logoDataUrl, ...safeArea(f) }, f.w, f.h);
     jobs.push({ html, width: f.w, height: f.h, file });
     files.push({ f, file });
@@ -179,7 +325,21 @@ export async function generateSocialKit(
       createdAt: ts,
     }).run();
   }
-  return socialKit(db, projectId);
+
+  // Die Texte sind die zweite Hälfte des Kits — aber die Bilder stehen schon.
+  // Fällt der Modellaufruf aus, bleibt der letzte Textstand erhalten, statt
+  // den ganzen Lauf scheitern zu lassen.
+  if (opts.llm) {
+    try {
+      await generateSocialTexts(db, projectId, opts.llm, {
+        ...(opts.publicBase ? { publicBase: opts.publicBase } : {}),
+        ...(log ? { log } : {}),
+      });
+    } catch (e) {
+      log?.(`Social-Kit: Profiltexte fehlgeschlagen (${e instanceof Error ? e.message : String(e)}) — Bilder sind fertig.`);
+    }
+  }
+  return socialKitView(db, projectId);
 }
 
 /** Alles in einer Datei — das ist es, was man beim Einrichten wirklich braucht. */
@@ -195,6 +355,31 @@ export function socialKitZip(db: Db, dataDir: string, projectId: string): { name
     if (fs.existsSync(file)) entries.push({ name: it.filename, data: fs.readFileSync(file) });
   }
   if (!entries.length) return null;
+  // Die Profiltexte gehoeren in dieselbe Datei: beim Anlegen eines Kontos
+  // braucht man Bild und Bio im selben Moment, nicht in zwei Downloads.
+  const texts = loadSocialTexts(db, projectId);
+  if (texts.profiles.length) {
+    entries.push({
+      name: "PROFILTEXTE.txt",
+      data: Buffer.from([
+        `Profiltexte für ${project?.name ?? "das Projekt"}`,
+        "",
+        `Nutzername (überall gleich): ${texts.handle}`,
+        texts.category ? `Kategorie beim Anlegen: ${texts.category}` : "",
+        texts.link ? `Link für die Bio: ${texts.link}` : "",
+        "",
+        ...texts.profiles.map((p) => [
+          `--- ${p.label}`,
+          `Name: ${p.displayName}`,
+          `Bio (${p.bio.length}/${p.limit} Zeichen):`,
+          p.bio,
+          p.note ? `Hinweis: ${p.note}` : "",
+          "",
+        ].filter(Boolean).join("\n")),
+        texts.generatedAt ? `Erzeugt am ${texts.generatedAt.slice(0, 10)} mit ${texts.model}.` : "",
+      ].filter(Boolean).join("\n"), "utf8"),
+    });
+  }
   // Eine Kurzanleitung dazu - sonst raet man beim Hochladen, was wohin gehoert.
   entries.push({
     name: "WOHIN-GEHOERT-WAS.txt",
