@@ -845,6 +845,18 @@ export const PublishPackage = z.object({
 export const ScheduleRequest = z.object({ date: Iso });
 
 /** Ein Stück des Social-Kits (Shot 12). */
+/** Ein Erklär-Beitrag: vier Slides aus Produktbildern und Text, kein Modellaufruf. */
+export const ExplainerRequest = z.object({
+  title: z.string().min(1),
+  coverTitle: z.string().min(1),
+  hook: z.string().default(""),
+  ctaLine: z.string().default(""),
+  trustLine: z.string().default(""),
+  slides: z.array(z.object({ headline: z.string(), sub: z.string().default(""), rang: z.number().int().min(0).max(9) })).min(1).max(6),
+  captions: z.array(z.object({ platform: z.string(), caption: z.string(), hashtags: z.array(z.string()).default([]) })).min(1),
+  platforms: z.array(z.string()).min(1),
+});
+
 export const SocialKitItem = z.object({
   format: z.string(), label: z.string(), usedFor: z.string(), note: z.string(),
   size: z.string(), assetId: Id, url: z.string(), filename: z.string(),
@@ -1087,6 +1099,7 @@ export type ProductDataStatus = z.infer<typeof ProductDataStatus>;
 export type ProductDataView = z.infer<typeof ProductDataView>;
 export type StudioView = z.infer<typeof StudioView>;
 export type SocialKitItem = z.infer<typeof SocialKitItem>;
+export type ExplainerRequest = z.infer<typeof ExplainerRequest>;
 export type SocialProfile = z.infer<typeof SocialProfile>;
 export type SocialKitTexts = z.infer<typeof SocialKitTexts>;
 export type SocialKitView = z.infer<typeof SocialKitView>;

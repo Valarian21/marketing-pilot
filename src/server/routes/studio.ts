@@ -12,7 +12,7 @@ import { finishRun, startRun, writeAudit } from "../audit.js";
 import { getProject } from "../repo/projects.js";
 import { extractBrandKit, loadBrandKit, saveBrandKit } from "../agents/studio/brandkit.js";
 import { deriveVoiceProfile } from "../agents/studio/voice.js";
-import { addStoryToPiece, buildPackage, directoriesFor, generateContent, getPiece, pieceOf, regenerateContent, studioView, withCosts, type StudioContext } from "../agents/studio/generate.js";
+import { addExplainerPost, addStoryToPiece, buildPackage, directoriesFor, generateContent, getPiece, pieceOf, regenerateContent, studioView, withCosts, type StudioContext } from "../agents/studio/generate.js";
 import { bundlePieces, suggestHashtagPools } from "../agents/studio/data-content.js";
 import { loadHashtags, saveHashtags } from "../hashtags.js";
 import { listPersonas } from "../agents/analysis/personas.js";
@@ -83,6 +83,20 @@ export function studioRoutes(app: FastifyInstance, db: Db, getCtx: () => StudioC
   r.post("/api/mp/content/:id/regenerate", { schema: { params: s.IdParams, body: s.RegenerateRequest, response: { 200: s.ContentPiece, 400: s.ErrorBody, 404: s.ErrorBody, 503: s.ErrorBody } } }, async (req, reply) => {
     const ctx = getCtx(); if (!ctx) return noKey(reply);
     return regenerateContent(ctx, req.params.id, req.body.hint, req.user);
+  });
+
+  /**
+   * Erklär-Beitrag: was das Werkzeug kann, ohne Produktdaten und ohne Modell.
+   * Gedacht zum Anheften im Profil — anheften selbst geht nur in der App.
+   */
+  r.post("/api/mp/projects/:projectId/explainer", {
+    schema: { params: P, body: s.ExplainerRequest, response: { 201: s.ContentPiece, 400: s.ErrorBody, 404: s.ErrorBody, 503: s.ErrorBody } },
+  }, async (req, reply) => {
+    const ctx = getCtx(); if (!ctx) return noKey(reply);
+    if (!getProject(db, req.params.projectId)) return reply.code(404).send({ detail: "Projekt nicht gefunden." });
+    const stueck = await addExplainerPost(ctx, req.params.projectId, req.body);
+    writeAudit(db, { user: req.user, action: "content.explainer", entityType: "content_piece", entityId: stueck.id, projectId: req.params.projectId, content: { titel: stueck.title } });
+    return reply.code(201).send(stueck);
   });
 
   /** Story zu einem fertigen Beitrag nachreichen — ein Bild, 24 Stunden, eigenes Stück. */

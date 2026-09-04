@@ -18,11 +18,11 @@ import { currentVersion } from "../strategy/plan.js";
 import { loadBrandKit, type BrandExtractor } from "./brandkit.js";
 import { voiceBlock } from "./voice.js";
 import { reviseWithCritic } from "./critic.js";
-import { carouselSlideHtml, dataUrlFor, framedScreenshotHtml, pinHtml, playwrightRenderer, type RenderJob, type Renderer } from "./render.js";
-import { clearBundle, generateDataBundle, generateStoryFor, type DataBase } from "./data-content.js";
+import { carouselSlideHtml, dataUrlFor, framedScreenshotHtml, pinHtml, playwrightRenderer, rankingCtaHtml, showcaseCoverHtml, showcaseSlideHtml, type RenderJob, type Renderer } from "./render.js";
+import { clearBundle, generateDataBundle, generateStoryFor, type DataBase, writeBundlePieces } from "./data-content.js";
 import { generateShowcaseBundle } from "./showcase.js";
 import { buildUtmUrl, deepLinkFor, PLATFORM_LIMITS, platformFromChannel, slugify } from "../../util/utm.js";
-import { canonicalChannel, channelLink, saneTitle } from "../../../shared/channels.js";
+import { canonicalChannel, channelLink, linkRuleFor, saneTitle } from "../../../shared/channels.js";
 import { loadProfiles, planChannelNames } from "../../channels.js";
 import { ensureShortlink, shortUrl } from "../../shortlinks.js";
 import { markdownToHtml } from "../../util/markdown.js";
@@ -224,6 +224,84 @@ function linkTask(db: Db, taskId: string, pieceId: string): void {
  * gemeinsamen Assets. Zurück kommt das Leit-Stück des ersten Laufs — daran
  * hängen Freigabe-Gruppierung, Kosten und jeder Link.
  */
+/**
+ * Erklär-Beitrag: was das Werkzeug kann, in vier Slides.
+ *
+ * Kein Modellaufruf und keine Produktdaten — die Bilder sind die Ansichten der
+ * Startseite, die Texte kommen herein. Gedacht für die drei Beiträge, die oben
+ * im Profil angeheftet werden: **Anheften geht nur in der App**, über die API
+ * gibt es dafür keinen Weg. Deshalb entstehen sie hier einmal und bleiben dann
+ * liegen, statt in einer Serie zu rotieren.
+ */
+export interface ExplainerSpec {
+  title: string; coverTitle: string; hook: string; ctaLine: string; trustLine: string;
+  /** Je Slide ein Produktbild aus dem Projekt (`meta.produktbild`) plus Text. */
+  slides: { headline: string; sub: string; rang: number }[];
+  captions: { platform: string; caption: string; hashtags: string[] }[];
+  platforms: string[];
+}
+
+export async function addExplainerPost(ctx: StudioContext, projectId: string, spec: ExplainerSpec): Promise<s.ContentPiece> {
+  const base = loadBase(ctx, projectId);
+  const renderer = ctx.renderer ?? playwrightRenderer;
+  const domain = base.project.url.replace(/^https?:\/\//, "").replace(/\/$/, "");
+  const footer = domain;
+  const brand = base.brief.productName;
+
+  const bilder = new Map<number, string>();
+  for (const a of ctx.db.select().from(t.mpAssets).where(eq(t.mpAssets.projectId, projectId)).all()) {
+    const m = parseJson<Record<string, unknown>>(a.meta, {});
+    if (m["produktbild"] !== true) continue;
+    const url = dataUrlFor(path.join(ctx.dataDir, a.path));
+    if (url) bilder.set(Number(m["rang"] ?? 0), url);
+  }
+  if (!bilder.size) throw err("Keine Produktbilder im Projekt — erst welche mit `produktbild` hinterlegen.", 400);
+
+  const leadId = newId();
+  insertPlaceholder(ctx.db, projectId, leadId, s.ContentRequest.parse({ format: "carousel", platform: spec.platforms[0] ?? "instagram" }), null);
+  const outDir = path.join(ctx.dataDir, "assets", projectId, "pieces", leadId);
+  const dateien: string[] = [];
+  const jobs = [];
+  const cover = path.join(outDir, "de-1080x1350-00-cover.png");
+  jobs.push({
+    html: showcaseCoverHtml(base.kit, { title: spec.coverTitle, stats: spec.hook, imageDataUrl: bilder.get(0) ?? null }, 1080, 1350, brand, footer),
+    width: 1080, height: 1350, file: cover,
+  });
+  dateien.push(cover);
+  spec.slides.forEach((sl, i) => {
+    const datei = path.join(outDir, `de-1080x1350-${String(i + 1).padStart(2, "0")}-schritt.png`);
+    jobs.push({
+      html: showcaseSlideHtml(base.kit, { headline: sl.headline, sub: sl.sub, imageDataUrl: bilder.get(sl.rang) ?? null }, 1080, 1350, brand, footer),
+      width: 1080, height: 1350, file: datei,
+    });
+    dateien.push(datei);
+  });
+  const cta = path.join(outDir, "de-1080x1350-99-cta.png");
+  jobs.push({
+    html: rankingCtaHtml(base.kit, {
+      line: spec.ctaLine, linkLabel: "Link in Bio", imageDataUrl: null, trustLine: spec.trustLine,
+      productImages: [...bilder.entries()].sort((a, b) => a[0] - b[0]).map(([, url]) => ({ url, label: "" })),
+    }, 1080, 1350, brand, footer),
+    width: 1080, height: 1350, file: cta,
+  });
+  dateien.push(cta);
+  await renderer(jobs);
+
+  const assetIds = dateien.map((f, i) => addAsset(ctx.db, ctx.dataDir, projectId, leadId, "render", f, { size: "1080x1350", slide: i }));
+  const stuecke = writeBundlePieces({
+    db: ctx.db, projectId, leadId, format: "carousel", language: "de", platforms: spec.platforms,
+    taskId: null, title: spec.title, score: null,
+    notes: "Erklär-Beitrag, Texte von Hand. Zum Anheften im Profil — das geht nur in der App.",
+    captionFor: (p) => spec.captions.find((c) => c.platform === p)?.caption ?? spec.captions[0]?.caption ?? "",
+    hashtagsFor: (p) => spec.captions.find((c) => c.platform === p)?.hashtags ?? [],
+    assetsFor: () => assetIds,
+    sizeFor: () => "1080x1350",
+    ruleFor: (p) => linkRuleFor(p),
+    meta: { coverTitle: spec.coverTitle, hook: spec.hook, ctaLine: spec.ctaLine, footer, erklaerBeitrag: true, anheften: true },
+  });
+  return stuecke[0]!;
+}
+
 /**
  * Story zu einem fertigen Beitrag nachreichen.
  *
