@@ -183,6 +183,27 @@ export function buildSlideArgs(image: string, durationMs: number, w: number, h: 
     "-c:v", "libx264", "-preset", "ultrafast", "-crf", "18", "-pix_fmt", "yuv420p", out];
 }
 
+/**
+ * Aufdeck-Segment: das verdeckte und das aufgedeckte Bild fahren **denselben**
+ * Zoom, das verdeckte liegt obenauf und blendet nach `hiddenMs` in 250 ms aus.
+ * So erscheint der Preis mitten in der Bewegung, ohne dass der Zoom neu ansetzt.
+ * Zwei getrennte Segmente sprangen sichtbar zurück, sobald der Preis kam.
+ */
+export function buildRevealArgs(hidden: string, revealed: string, hiddenMs: number, durationMs: number, w: number, h: number, out: string, fps = OUTPUT_FPS, zoomTo = 1.06): string[] {
+  const frames = Math.max(1, Math.round((durationMs / 1000) * fps));
+  const zoom = `scale=${w * 2}:${h * 2}:flags=lanczos,zoompan=z='min(1+${(zoomTo - 1).toFixed(4)}*on/${frames},${zoomTo})':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:fps=${fps}:s=${w}x${h},trim=duration=${s3(durationMs)},setpts=PTS-STARTPTS`;
+  const blende = 0.25;
+  const f = [
+    `[0:v]${zoom},format=yuv420p[unten]`,
+    `[1:v]${zoom},format=yuva420p,fade=t=out:st=${s3(Math.max(0, hiddenMs - blende * 1000))}:d=${blende}:alpha=1[oben]`,
+    `[unten][oben]overlay=0:0:format=auto,format=yuv420p[v]`,
+  ];
+  return ["-loop", "1", "-framerate", String(fps), "-t", s3(durationMs), "-i", revealed,
+    "-loop", "1", "-framerate", String(fps), "-t", s3(durationMs), "-i", hidden,
+    "-filter_complex", f.join(";"), "-map", "[v]", "-an", "-r", String(fps),
+    "-c:v", "libx264", "-preset", "ultrafast", "-crf", "18", "-pix_fmt", "yuv420p", out];
+}
+
 export interface SlideshowCompose {
   body: string;
   /** Segmente in Reihenfolge, je mit optionaler Tonspur. */
@@ -358,9 +379,16 @@ export const renderSlideshowJob: JobHandler<VideoContext> = async (ctx, job, pro
       : [];
     const cues: CaptionCue[] = [];
     /** Segmente in Reihenfolge: (Hook), Cover, Karten (Anzeigereihenfolge), CTA. */
-    const segs: { image: string; durationMs: number; audio: string | null; key: string }[] = fest
+    const segs: { image: string; durationMs: number; audio: string | null; key: string; hidden?: { image: string; ms: number } }[] = fest
       // Fester Zeitplan: Slide für Slide, Standzeit mindestens so lang wie die Stimme.
-      ? fest.map((x, i) => ({ image: slideFiles[i]!, durationMs: Math.max(x.ms, (voice.get(x.key)?.durationMs ?? 0) + 250), audio: voice.get(x.key)?.file ?? null, key: x.key }))
+      // Ein verdecktes Bild („c3q") und sein aufgedecktes („c3") werden ein
+      // Segment mit durchlaufendem Zoom — die Stimme gehört zum aufgedeckten.
+      ? fest.flatMap((x, i) => {
+        if (x.key.endsWith("q")) return [];
+        const q = fest[i - 1]?.key === `${x.key}q` ? { image: slideFiles[i - 1]!, ms: fest[i - 1]!.ms } : null;
+        const eigene = Math.max(x.ms, (voice.get(x.key)?.durationMs ?? 0) + 250);
+        return [{ image: slideFiles[i]!, durationMs: eigene + (q?.ms ?? 0), audio: voice.get(x.key)?.file ?? null, key: x.key, ...(q ? { hidden: q } : {}) }];
+      })
       : [
         ...(opts.hookCard ? [{ image: hookCard, durationMs: plan.hookMs, audio: voice.get("hook")?.file ?? null, key: "hook" }] : []),
         { image: cover, durationMs: plan.coverMs, audio: null, key: "cover" },
@@ -390,7 +418,9 @@ export const renderSlideshowJob: JobHandler<VideoContext> = async (ctx, job, pro
     const segFiles: string[] = [];
     for (const [k, seg] of segments.entries()) {
       const file = path.join(outDir, `seg-${String(k).padStart(2, "0")}.mp4`);
-      await ffmpeg(buildSlideArgs(seg.image, seg.durationMs, lay.w, lay.h, file));
+      await ffmpeg(seg.hidden
+        ? buildRevealArgs(seg.hidden.image, seg.image, seg.hidden.ms, seg.durationMs, lay.w, lay.h, file)
+        : buildSlideArgs(seg.image, seg.durationMs, lay.w, lay.h, file));
       segFiles.push(file);
     }
     const body = path.join(outDir, "body.mp4");

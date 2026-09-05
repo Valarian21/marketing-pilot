@@ -6,7 +6,7 @@
  */
 import { describe, expect, it } from "vitest";
 import {
-  buildSlideArgs, buildSlideshowComposeArgs, englishNumber, estimateReelLineMs, euroInWords, germanNumber,
+  buildRevealArgs, buildSlideArgs, buildSlideshowComposeArgs, englishNumber, estimateReelLineMs, euroInWords, germanNumber,
   MAX_REEL_MS, MIN_SECONDS_PER_CARD, planSlideshow, reelCardLine, reelLayout,
 } from "../src/server/agents/video/slideshow.js";
 import { formatForTask } from "../src/server/agents/strategy/execute.js";
@@ -92,6 +92,18 @@ describe("ffmpeg-Aufrufe", () => {
     expect(filter).toContain("scale=2160:3840");
     expect(filter).toContain("s=1080x1920");
     expect(args[args.length - 1]).toBe("/tmp/seg.mp4");
+  });
+
+  it("deckt den Preis mitten im Zoom auf, ohne dass der Zoom neu ansetzt", () => {
+    const args = buildRevealArgs("/tmp/frage.png", "/tmp/preis.png", 900, 2700, 1080, 1920, "/tmp/seg.mp4");
+    const fc = args[args.indexOf("-filter_complex") + 1]!;
+    // Beide Bilder laufen dieselbe Zoom-Kurve über die GESAMTE Dauer (81 Frames bei 30 fps).
+    expect(fc.match(/zoompan=/g)).toHaveLength(2);
+    expect(fc.match(/on\/\d+/g)).toHaveLength(2);
+    // Das verdeckte Bild liegt oben und blendet 250 ms vor der Aufdeckung aus.
+    expect(fc).toContain("fade=t=out:st=0.650:d=0.25:alpha=1");
+    expect(fc).toContain("overlay=0:0");
+    expect(args.filter((a) => a === "-i")).toHaveLength(2);
   });
 
   it("legt Untertitel und Stimme über die fertige Bildspur", () => {
