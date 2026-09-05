@@ -299,6 +299,23 @@ export const TimelineView = z.object({
   rows: z.array(z.object({ channel: z.string(), items: z.array(TimelineItem) })),
 });
 
+/**
+ * Die Pipeline-Ansicht: je Kanal die Slots der nächsten Tage und was sie füllt.
+ * `review` und `approved` sind Projektionen aus der Warteschlange, `queued`,
+ * `published` und `failed` stehen wirklich in `mp_scheduled_posts`.
+ */
+export const PipelineSlot = z.object({
+  at: Iso, date: z.string(), hour: z.number().int(),
+  state: z.enum(["published", "queued", "failed", "approved", "review", "empty"]),
+  pieceId: z.string().nullable(), title: z.string(), format: z.string(), error: z.string(), missed: z.boolean(),
+});
+export const PipelineRow = z.object({
+  platform: z.string(), label: z.string(), stage: z.string(), automatic: z.boolean(),
+  slots: z.array(PipelineSlot), backlog: z.number().int(),
+});
+export const PipelineView = z.object({ from: z.string(), days: z.number().int(), today: z.string(), rows: z.array(PipelineRow), withoutSlots: z.array(z.string()) });
+export const AutoScheduled = z.object({ pieceId: z.string(), platform: z.string(), at: z.string().nullable(), note: z.string() });
+
 export const TodayPost = z.object({ piece: ContentPiece, platform: z.string(), composeLink: z.string().nullable(), composeLabel: z.string().nullable(), profileLink: z.string().nullable(), appOnly: z.boolean() });
 export const TodayView = z.object({
   startDate: z.string(), week: z.number().int(), weekPlanned: z.boolean(),
@@ -1114,6 +1131,10 @@ export type ProductDataStatus = z.infer<typeof ProductDataStatus>;
 export type ProductDataView = z.infer<typeof ProductDataView>;
 export type StudioView = z.infer<typeof StudioView>;
 export type SocialKitItem = z.infer<typeof SocialKitItem>;
+export type PipelineSlot = z.infer<typeof PipelineSlot>;
+export type PipelineRow = z.infer<typeof PipelineRow>;
+export type PipelineView = z.infer<typeof PipelineView>;
+export type AutoScheduled = z.infer<typeof AutoScheduled>;
 export type ExplainerRequest = z.infer<typeof ExplainerRequest>;
 export type SocialProfile = z.infer<typeof SocialProfile>;
 export type SocialKitTexts = z.infer<typeof SocialKitTexts>;

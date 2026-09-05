@@ -19,6 +19,7 @@ import { listPersonas } from "../agents/analysis/personas.js";
 import { planChannelNames } from "../channels.js";
 import { revisePiece } from "../agents/revise.js";
 import { generateSocialKit, generateSocialTexts, socialKitView, socialKitZip } from "../agents/studio/socialkit.js";
+import { autoScheduleOnApprove } from "../publish/pipeline.js";
 
 export function studioRoutes(app: FastifyInstance, db: Db, getCtx: () => StudioContext | null): void {
   const r = app.withTypeProvider<ZodTypeProvider>();
@@ -227,6 +228,12 @@ export function studioRoutes(app: FastifyInstance, db: Db, getCtx: () => StudioC
     const ts = nowIso();
     for (const row of rows) {
       db.update(t.mpContentPieces).set({ status: req.body.status, rejectionReason: req.body.reason, updatedAt: ts }).where(eq(t.mpContentPieces.id, row.id)).run();
+    }
+    // Pipeline: „Alle freigeben" plant auch ein — Beitrag zuerst, damit die
+    // Story ihren Slot findet. Kanäle auf „Vorbereiten" bekommen nur den Status.
+    if (req.body.status === "approved") {
+      const reihenfolge = [...rows].sort((a, b) => (a.format === "story" ? 1 : 0) - (b.format === "story" ? 1 : 0));
+      for (const row of reihenfolge) autoScheduleOnApprove(db, row.id, req.user);
     }
     writeAudit(db, { user: req.user, action: `content.bundle.${req.body.status}`, entityType: "content_piece", entityId: bundleId, projectId: piece.projectId, content: { pieces: rows.map((x) => x.id), platforms: rows.map((x) => x.channel), reason: req.body.reason } });
     return withCosts(db, bundlePieces(db, piece.projectId, bundleId).map(pieceOf));

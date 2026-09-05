@@ -19,6 +19,7 @@ import { enqueueJob, getJob, hasActiveJob, workerAlive } from "../jobs.js";
 import { getPiece } from "../agents/studio/generate.js";
 import { loadCredentials, platformStatus, posterFor, saveCredentials } from "../publish/index.js";
 import { cancelScheduled, listScheduled, nextFreeSlot, postedToday, schedulePiece } from "../publish/schedule.js";
+import { pipelineView } from "../publish/pipeline.js";
 import { PUBLISH_STEPS } from "../publish/job.js";
 import { loadBio, saveBio } from "../publish/bio.js";
 
@@ -122,6 +123,14 @@ export function publishRoutes(app: FastifyInstance, db: Db, env: Env): void {
       hasSlots: (profile?.slots.length ?? 0) > 0,
       canPost: Boolean(posterFor(req.query.platform)) && posterFor(req.query.platform)!.missing(loadCredentials(db, req.params.projectId)[req.query.platform] ?? {}).length === 0,
     };
+  });
+
+  /** Die Ampel: je Kanal die Slots der nächsten Tage und was sie füllt. */
+  r.get("/api/mp/projects/:projectId/pipeline", {
+    schema: { params: P, querystring: z.object({ days: z.coerce.number().int().min(1).max(31).default(10) }), response: { 200: s.PipelineView, 404: s.ErrorBody } },
+  }, async (req, reply) => {
+    if (!getProject(db, req.params.projectId)) return reply.code(404).send({ detail: "Projekt nicht gefunden." });
+    return pipelineView(db, req.params.projectId, { days: req.query.days });
   });
 
   /** Fällige Einträge sofort abarbeiten, statt auf den Zehn-Minuten-Takt zu warten. */

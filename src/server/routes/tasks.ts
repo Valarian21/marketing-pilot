@@ -7,6 +7,7 @@ import * as s from "../../shared/schemas.js";
 import * as t from "../db/schema.js";
 import { newId, nowIso, type Db } from "../db/index.js";
 import { writeAudit } from "../audit.js";
+import { autoScheduleOnApprove } from "../publish/pipeline.js";
 import { getProject, listProjects } from "../repo/projects.js";
 import type { AgentContext } from "../agents/runner.js";
 import { executeTask, rowToTask } from "../agents/strategy/execute.js";
@@ -154,6 +155,10 @@ export function taskRoutes(app: FastifyInstance, db: Db, getCtx: () => AgentCont
       }
     }
     db.update(t.mpContentPieces).set(set).where(eq(t.mpContentPieces.id, row.id)).run();
+    // Pipeline: Auf einem Kanal ab Stufe „Freigeben" ist die Freigabe der
+    // Auslöser fürs Einplanen. Sonst liegt das Stück freigegeben herum und um
+    // neun Uhr passiert nichts — genau das ist am ersten Morgen passiert.
+    if (req.body.status === "approved" && row.status !== "approved") autoScheduleOnApprove(db, row.id, req.user);
     return withCosts(db, [pieceOf(db.select().from(t.mpContentPieces).where(eq(t.mpContentPieces.id, row.id)).get()!)])[0]!;
   });
 }

@@ -443,3 +443,28 @@ button, input { font: inherit; color: inherit; }
 .mp-nav-group--later .mp-nav-group-label { cursor: pointer; user-select: none; display: flex; justify-content: space-between; }
 .mp-nav-group--later .mp-nav-item { opacity: .75; }
 @media (max-width: 900px) { .mp-stage-legend { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* --- Pipeline: die Ampel je Kanal und Tag ------------------------------------
+   Rot = Slot ohne Stück, Gelb = wartet in der Freigabe (Projektion),
+   Grün = eingeplant oder freigegeben, Blau = veröffentlicht. */
+.mp-pipeline { display: grid; grid-template-columns: 200px repeat(var(--tage, 10), minmax(84px, 1fr)); min-width: 900px; }
+.mp-pipe-label { flex-direction: column; align-items: flex-start; justify-content: center; gap: 2px; height: auto; min-height: var(--mp-row-h); padding: 6px 10px 6px 0; }
+.mp-pipe-cell { height: auto; min-height: var(--mp-row-h); flex-direction: column; align-items: stretch; justify-content: center; gap: 3px; padding: 4px; }
+.mp-pipe-leer { color: var(--mp-ink-3); text-align: center; font-size: var(--mp-text-xs); }
+.mp-chip { display: flex; align-items: center; gap: 5px; height: 22px; padding: 0 6px; border: 1px solid transparent; border-radius: 6px; font-size: var(--mp-text-xs); cursor: pointer; text-align: left; overflow: hidden; white-space: nowrap; }
+.mp-chip-zeit { font-family: var(--mp-font-mono); font-weight: 600; flex: none; opacity: .85; }
+.mp-chip-text { overflow: hidden; text-overflow: ellipsis; }
+.mp-chip--rot { background: var(--mp-bad-soft); color: var(--mp-bad); border-color: color-mix(in srgb, var(--mp-bad) 35%, transparent); }
+.mp-chip--rot.is-verpasst { opacity: .45; text-decoration: line-through; }
+.mp-chip--gelb { background: var(--mp-warn-soft); color: var(--mp-warn); border-color: color-mix(in srgb, var(--mp-warn) 35%, transparent); }
+.mp-chip--gruen { background: var(--mp-pill-done-bg); color: var(--mp-pill-done-fg); border-color: color-mix(in srgb, var(--mp-pill-done-fg) 35%, transparent); }
+.mp-chip--fertig { background: var(--mp-accent-soft); color: var(--mp-accent); border-color: color-mix(in srgb, var(--mp-accent) 35%, transparent); }
+.mp-chip--fehler { background: var(--mp-bad); color: #fff; }
+.mp-ampel-legende { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin: 0 0 12px; font-size: var(--mp-text-sm); }
+.mp-ampel { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-left: 10px; }
+.mp-ampel:first-child { margin-left: 0; }
+.mp-ampel--rot { background: var(--mp-bad); }
+.mp-ampel--gelb { background: var(--mp-warn); }
+.mp-ampel--gruen { background: var(--mp-pill-done-fg); }
+.mp-ampel--fertig { background: var(--mp-accent); }
+.mp-ampel--fehler { background: var(--mp-bad); outline: 2px solid var(--mp-bad); outline-offset: 1px; }

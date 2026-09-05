@@ -15,7 +15,7 @@ import { linkFacets, blueskyPoster, telegramPoster, instagramPoster, threadsPost
 import { platformStatus, posterFor, saveCredentials } from "../src/server/publish/index.js";
 import { duePosts, nextFreeSlot, runScheduledPost, schedulePiece } from "../src/server/publish/schedule.js";
 import { PLATFORM_POSTING } from "../src/server/publish/types.js";
-import { saveProfiles } from "../src/server/channels.js";
+import { loadProfiles, patchChannel, saveProfiles } from "../src/server/channels.js";
 import { fullProfile } from "../src/shared/channels.js";
 import { autoScheduleBundle } from "../src/server/publish/auto.js";
 import { fakeHost } from "./helpers.js";
@@ -112,6 +112,45 @@ describe("Was auf welcher Plattform erlaubt ist", () => {
     saveCredentials(built.db, pid, { bluesky: { handle: "neu.bsky.social" } });
     const st = platformStatus(built.db, pid).find((x) => x.platform === "bluesky")!;
     expect(st.configured).toBe(true);   // das Passwort steht noch
+  });
+});
+
+describe("Pipeline: Freigabe = Einplanen", () => {
+  // Die Kanal-Tests weiter unten erwarten ein Projekt ohne Profile — was hier
+  // gesetzt wird, muss hinterher wieder weg.
+  let profileVorher: ReturnType<typeof loadProfiles> = [];
+  beforeAll(() => { profileVorher = loadProfiles(built.db, pid); });
+  afterAll(() => { saveProfiles(built.db, pid, profileVorher); });
+  it("legt ein freigegebenes Stück auf den nächsten Slot und zeigt es grün", async () => {
+    const { pipelineView } = await import("../src/server/publish/pipeline.js");
+    // Bluesky auf „Freigeben" mit Slots — der Zugang steht aus dem Test oben.
+    // Nur diesen Kanal anfassen — `saveProfiles` ersetzt die ganze Liste und
+    // würde den Kanal-Tests weiter unten die Kanäle wegnehmen.
+    patchChannel(built.db, pid, "bluesky", { stage: "approve", slots: [{ day: "mon", hour: 9 }, { day: "tue", hour: 9 }, { day: "wed", hour: 9 }, { day: "thu", hour: 9 }, { day: "fri", hour: 9 }, { day: "sat", hour: 9 }, { day: "sun", hour: 9 }] });
+    built.db.run(`INSERT INTO mp_content_pieces (id, project_id, task_id, channel, format, title, body, assets, status, human_edited, published_at, external_url, utm, meta, ai_tell_score, ai_tell_notes, rejection_reason, created_at, updated_at)
+      VALUES ('pipe1', '${pid}', NULL, 'bluesky', 'data_carousel', 'Pipeline-Probe', 'Text', '["a1"]', 'review', 0, NULL, NULL, '{}', '{"platform":"bluesky"}', NULL, '', '', '2026-09-05T00:00:00.000Z', '2026-09-05T00:00:00.000Z')` as never);
+    // Vorher: gelb — es wartet in der Freigabe und würde auf den ersten freien Slot fallen.
+    const vorher = pipelineView(built.db, pid).rows.find((r) => r.platform === "bluesky")!;
+    expect(vorher.slots.some((s) => s.state === "review" && s.pieceId === "pipe1")).toBe(true);
+    // Freigeben — ohne „& einplanen". Die Pipeline plant selbst.
+    const res = await built.app.inject({ method: "PATCH", url: "/api/mp/content/pipe1", headers: auth, payload: { status: "approved" } });
+    expect(res.statusCode).toBe(200);
+    const queued = built.db.select().from((await import("../src/server/db/schema.js")).mpScheduledPosts).all().filter((x) => x.pieceId === "pipe1" && x.status === "queued");
+    expect(queued).toHaveLength(1);
+    // Nachher: grün — und derselbe Slot, den die Projektion vorhergesagt hat.
+    const nachher = pipelineView(built.db, pid).rows.find((r) => r.platform === "bluesky")!;
+    const gruen = nachher.slots.find((s) => s.pieceId === "pipe1");
+    expect(gruen?.state).toBe("queued");
+    expect(gruen?.at).toBe(queued[0]!.scheduledAt);
+  });
+  it("lässt Kanäle auf „Vorbereiten“ in Ruhe — dort postet der Mensch", async () => {
+    const { autoScheduleOnApprove } = await import("../src/server/publish/pipeline.js");
+    patchChannel(built.db, pid, "instagram", { stage: "prepare" });
+    built.db.run(`INSERT INTO mp_content_pieces (id, project_id, task_id, channel, format, title, body, assets, status, human_edited, published_at, external_url, utm, meta, ai_tell_score, ai_tell_notes, rejection_reason, created_at, updated_at)
+      VALUES ('pipe2', '${pid}', NULL, 'instagram', 'data_carousel', 'Hand-Probe', 'Text', '["a1"]', 'approved', 0, NULL, NULL, '{}', '{"platform":"instagram"}', NULL, '', '', '2026-09-05T00:00:00.000Z', '2026-09-05T00:00:00.000Z')` as never);
+    const out = autoScheduleOnApprove(built.db, "pipe2", { id: "t", name: "Test" });
+    expect(out.at).toBeNull();
+    expect(out.note).toContain("Vorbereiten");
   });
 });
 

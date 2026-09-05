@@ -18,6 +18,7 @@ import { VideoPage } from "./pages/Video.js";
 import { StrategyPage } from "./pages/Strategy.js";
 import { TasksPage } from "./pages/Tasks.js";
 import { TimelinePage } from "./pages/Timeline.js";
+import { PipelinePage } from "./pages/Pipeline.js";
 import { ReviewPage } from "./pages/Review.js";
 import { ProjectScoped } from "./pages/ProjectScoped.js";
 import { StoragePage } from "./pages/Storage.js";
@@ -39,6 +40,7 @@ function Gate() {
           <Route path="projects/:id/strategy" element={<StrategyPage />} />
           <Route path="projects/:id/tasks" element={<TasksPage />} />
           <Route path="projects/:id/timeline" element={<TimelinePage />} />
+          <Route path="projects/:id/pipeline" element={<PipelinePage />} />
           <Route path="projects/:id/review" element={<ReviewPage />} />
           <Route path="projects/:id/series" element={<SeriesPage />} />
           <Route path="projects/:id/channels" element={<ChannelsPage />} />
@@ -47,6 +49,7 @@ function Gate() {
           <Route path="projects/:id/studio/video" element={<VideoPage />} />
           <Route path="projects/:id/publish/:pieceId" element={<PublishPage />} />
           <Route path="timeline" element={<ProjectScoped page="timeline" title="Timeline" />} />
+          <Route path="pipeline" element={<ProjectScoped page="pipeline" title="Pipeline" />} />
           <Route path="tasks" element={<ProjectScoped page="tasks" title="Aufgaben" />} />
           <Route path="series" element={<ProjectScoped page="series" title="Serien" />} />
           <Route path="channels" element={<ProjectScoped page="channels" title="Kanäle" />} />
