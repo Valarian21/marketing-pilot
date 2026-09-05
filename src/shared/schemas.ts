@@ -482,6 +482,12 @@ export const ContentRequest = z.object({
   screenshotAssetIds: z.array(Id).optional(),
   /** Nur fuer Daten-Formate: welcher Ausschnitt der Produktdaten die Slides fuellt. */
   dataQuery: DataQuery.optional(),
+  /**
+   * Aufbau der Daten-Slides. Fehlt die Angabe, gilt die Projekt-Einstellung
+   * (`SlideSettings.layout`). „binder" legt die Karten in Fächer einer
+   * Binderseite: Cover, Übersicht als 9er-Seiten, Top 5 einzeln, Abschluss.
+   */
+  layout: z.enum(["klassisch", "binder"]).optional(),
   /** Nur fuer `data_reel`: wie aus den Slides ein Video wird. */
   reel: ReelOptions.optional(),
   /** Nur fuer `showcase_carousel`: welcher geteilte Binder abfotografiert wird. */
@@ -561,6 +567,21 @@ export const DirectoryStatus = DirectoryDef.extend({
 
 /** Welche Produktdatenbank hinter einem Projekt haengt. `none` = brief-basiert wie bisher. */
 export const DataSource = z.object({ provider: z.enum(["none", "binderplan"]).default("none") });
+
+/**
+ * Wie die Daten-Slides eines Projekts gebaut werden. Liegt neben der
+ * Datenquelle in `mp_settings`, weil es dieselbe Art Entscheidung ist: einmal
+ * je Projekt, nicht je Beitrag.
+ */
+export const SlideSettings = z.object({
+  layout: z.enum(["klassisch", "binder"]).default("klassisch"),
+  /**
+   * Adresse, die auf Slides und im Link-Text steht, wenn sie von der
+   * Projekt-URL abweicht (z. B. „binderplan.de" für deutsche Beiträge, während
+   * die App unter binderplan.app läuft). Leer = Projekt-URL.
+   */
+  linkDomain: z.string().default(""),
+});
 
 export const ProductSet = z.object({
   id: z.string(), name: z.string(), nameEn: z.string(), serieId: z.string(), serieName: z.string(),
@@ -1129,6 +1150,7 @@ export type ChannelPatch = z.infer<typeof ChannelPatch>;
 export type ChannelRequirement = z.infer<typeof ChannelRequirement>;
 export type ChannelCard = z.infer<typeof ChannelCard>;
 export type DataSource = z.infer<typeof DataSource>;
+export type SlideSettings = z.infer<typeof SlideSettings>;
 export type ProductSet = z.infer<typeof ProductSet>;
 export type ProductEra = z.infer<typeof ProductEra>;
 export type RankedCard = z.infer<typeof RankedCard>;

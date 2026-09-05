@@ -335,6 +335,156 @@ export const playwrightRenderer: Renderer = async (jobs) => {
   for (const job of jobs) markPng(job.file, { aiGenerated: true, generator: "Marketing Pilot (template render)" });
 };
 
+
+// --- Binderseite -------------------------------------------------------------
+//
+// Der Aufbau, mit dem Binderplan seit September 2026 postet: jede Karte liegt
+// in einem Fach einer 9er-Binderseite. Die Seite ist das Produkt, das Fach ist
+// die Funktion — deshalb erklärt jede Slide das Werkzeug, ohne es zu nennen.
+// Farben und Schriften kommen aus dem Brand-Kit (Kontur: Bungee + Archivo,
+// Schwarz, Gelb), die Vorlagen selbst sind stilunabhängig.
+
+export interface BinderChrome {
+  brand: string;
+  footer: string;
+  /** Icon oben links; ohne Logo steht nur die Wortmarke. */
+  logoDataUrl: string | null;
+  /** Oben rechts: „3 / 9" — oder ein Wort wie „Set-Check" auf der Deckseite. */
+  corner: string;
+}
+export interface BinderPocket { rank: number; price: string; imageDataUrl: string | null }
+export interface BinderRankSlide {
+  rank: number; name: string;
+  /** „Nr. 161 / 131" — fertig formatiert. */
+  numLine: string;
+  illustrator: string;
+  price: string;
+  imageDataUrl: string | null;
+  hidePrice?: boolean;
+}
+
+/** Der Pfeil: ein gezeichneter Strich im Kreis, immer mittig, immer gleich dick. */
+export const binderArrow = (size: number, rotate = 0): string =>
+  `<svg class="arr" width="${size}" height="${size}" viewBox="0 0 100 100" style="flex:0 0 auto;transform:rotate(${rotate}deg)"><circle cx="50" cy="50" r="50" fill="var(--b-contour)"/><path d="M27 50h46M52 29l21 21-21 21" fill="none" stroke="var(--b-accent2)" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+
+const binderCss = (w: number, h: number): string => {
+  const u = (x: number) => Math.round(w * x);
+  const hoch = h / w > 1.5;  // Reel- und Story-Format: mehr Rand oben und unten, größere Schrift
+  return `
+.slide{width:${w}px;height:${h}px;position:relative;padding:${hoch ? Math.round(h * 0.078) : u(0.072)}px ${u(0.072)}px ${hoch ? Math.round(h * 0.073) : u(0.072)}px;display:flex;flex-direction:column;gap:${u(0.028)}px;background:var(--b-bg)}
+.top{display:flex;justify-content:space-between;align-items:center;flex:0 0 auto}
+.logo{display:flex;align-items:center;gap:${u(0.015)}px;font-family:var(--f-body);font-weight:800;font-size:${u(0.025)}px;letter-spacing:.05em;text-transform:uppercase}
+.logo img{width:${u(0.054)}px;height:${u(0.054)}px;border-radius:${u(0.012)}px;display:block}
+.corner{font-family:var(--f-body);font-size:${u(0.023)}px;font-weight:700;opacity:.55;letter-spacing:.06em;text-transform:uppercase;font-variant-numeric:tabular-nums}
+.bfoot{font-family:var(--f-body);font-size:${u(0.0185)}px;opacity:.5;text-align:center;flex:0 0 auto}
+.mid{flex:1;min-height:0;display:flex;flex-direction:column;justify-content:center}
+.disp{font-family:var(--f-display);font-weight:700;line-height:1.04;text-wrap:balance}
+.sub{font-family:var(--f-body);font-size:${u(0.028)}px;opacity:.7}
+.hint{display:inline-flex;align-items:center;gap:${u(0.024)}px;font-family:var(--f-display);font-weight:700;font-size:${u(hoch ? 0.052 : 0.048)}px;line-height:1}
+.page{background:var(--b-contour);border-radius:${u(0.028)}px;padding:${u(0.02)}px;display:grid;gap:${u(0.015)}px;position:relative}
+.pk{background:#fff;border-radius:${u(0.011)}px;overflow:hidden;position:relative;aspect-ratio:63/88}
+.pk img{width:100%;height:100%;object-fit:cover;display:block}
+.pk::after{content:"";position:absolute;inset:0;background:linear-gradient(155deg,rgba(255,255,255,.26),rgba(255,255,255,0) 40%);pointer-events:none}
+.pk .rk{position:absolute;top:${u(0.007)}px;left:${u(0.007)}px;background:rgba(20,22,28,.82);color:var(--b-accent2);font-family:var(--f-body);font-weight:800;font-size:${u(0.0185)}px;line-height:1;padding:${u(0.004)}px ${u(0.0075)}px;border-radius:${u(0.0065)}px;z-index:2;font-variant-numeric:tabular-nums}
+.pk .pr{position:absolute;left:0;right:0;bottom:0;background:rgba(20,22,28,.88);color:#fff;font-family:var(--f-body);font-weight:800;font-size:${u(0.022)}px;text-align:center;padding:${u(0.0085)}px ${u(0.004)}px;z-index:2;font-variant-numeric:tabular-nums}
+.pk.leer{background:#22242B;aspect-ratio:auto;display:grid;place-items:center}.pk.leer::after{display:none}
+.pk.leer .hint{color:#fff;font-size:${u(0.04)}px;gap:${u(0.018)}px}
+.pk.leer .hint svg circle{fill:var(--b-accent2)}.pk.leer .hint svg path{stroke:var(--b-contour)}
+.tab{display:inline-block;background:var(--b-accent2);color:var(--b-contour);font-family:var(--f-display);font-weight:700;font-size:${u(0.028)}px;line-height:1;padding:${u(0.011)}px ${u(0.02)}px ${u(0.0075)}px;border-radius:${u(0.011)}px ${u(0.011)}px 0 0}
+.name{font-family:var(--f-display);font-weight:700;font-size:${u(hoch ? 0.07 : 0.057)}px;line-height:1.05;text-wrap:balance}
+.daten{display:flex;gap:${u(0.031)}px;margin-top:${u(0.013)}px;font-family:var(--f-body);font-size:${u(hoch ? 0.028 : 0.023)}px}
+.daten span{opacity:.6}.daten b{font-weight:700;opacity:1}
+.price{font-family:var(--f-display);font-weight:700;font-size:${u(hoch ? 0.139 : 0.085)}px;line-height:1;margin-top:${u(0.018)}px;font-variant-numeric:tabular-nums;white-space:nowrap;display:inline-block;color:var(--b-contour);background-image:linear-gradient(transparent 58%,var(--b-accent2) 58%,var(--b-accent2) 90%,transparent 90%);padding:0 .1em}
+.price.frage{background-image:none;opacity:.3}
+.prod{color:#fff;font-family:var(--f-body);font-weight:700;font-size:${u(0.021)}px;margin-top:${u(0.011)}px;text-align:center}`;
+};
+
+const binderTop = (c: BinderChrome) =>
+  `<div class="top"><div class="logo">${c.logoDataUrl ? `<img src="${c.logoDataUrl}">` : ""}${esc(c.brand)}</div><div class="corner">${esc(c.corner)}</div></div>`;
+const binderFoot = (c: BinderChrome) => `<div class="bfoot">${esc(c.footer)}</div>`;
+
+/** Deckseite: eine 9er-Seite mit Karten ohne Rang, Bereich, Fakten, der Pfeil. */
+export function binderCoverHtml(kit: BrandKit, a: { title: string; sub: string; images: string[]; hint: string }, w: number, h: number, c: BinderChrome): string {
+  const u = (x: number) => Math.round(w * x);
+  const pk = a.images.slice(0, 9).map((src) => `<div class="pk"><img src="${src}"></div>`).join("");
+  const body = `<div class="slide">${binderTop(c)}
+<div class="mid" style="gap:${u(0.037)}px"><div class="page" style="grid-template-columns:repeat(3,1fr);transform:rotate(-3deg);width:52%;margin:${u(0.013)}px auto 0">${pk}</div>
+<div><div class="disp" style="font-size:${u(a.title.length > 22 ? 0.066 : 0.074)}px">${esc(a.title)}</div>${a.sub ? `<div class="sub" style="margin-top:${u(0.013)}px">${esc(a.sub)}</div>` : ""}</div>
+<div class="hint">${esc(a.hint)}${binderArrow(u(0.1))}</div></div>
+${binderFoot(c)}</div>`;
+  return base(kit, w, h, body, binderCss(w, h));
+}
+
+/**
+ * Eine 9er-Seite als Übersicht. Bleiben Fächer leer, tragen sie den Hinweis auf
+ * das, was als Nächstes kommt — ein leeres Fach ohne Grund sähe nach Fehler aus.
+ */
+export function binderPageHtml(
+  kit: BrandKit,
+  a: { tab: string; pockets: BinderPocket[]; leerText: string; hint: string; hintRotate?: number; width?: string },
+  w: number, h: number, c: BinderChrome,
+): string {
+  const u = (x: number) => Math.round(w * x);
+  const pockets = a.pockets.slice(0, 9);
+  const rest = 9 - pockets.length;
+  const cells = pockets.map((p) => `<div class="pk">${p.imageDataUrl ? `<img src="${p.imageDataUrl}">` : ""}<span class="rk">${p.rank}</span><span class="pr">${esc(p.price)}</span></div>`);
+  // Mehr als drei freie Fächer: die überzähligen bleiben schlicht dunkel, der
+  // Hinweis füllt die letzte Reihe.
+  for (let i = 3; i < rest; i++) cells.push(`<div class="pk leer"></div>`);
+  if (rest > 0) cells.push(`<div class="pk leer" style="grid-column:span ${Math.min(rest, 3)}"><div class="hint">${esc(a.leerText)}${binderArrow(u(0.085))}</div></div>`);
+  const body = `<div class="slide">${binderTop(c)}
+<div><span class="tab">${esc(a.tab)}</span><div class="page" style="grid-template-columns:repeat(3,1fr);border-top-left-radius:0;width:${a.width ?? "72%"}">${cells.join("")}</div></div>
+<div class="mid"><div class="hint">${esc(a.hint)}${binderArrow(u(0.1), a.hintRotate ?? 0)}</div></div>
+${binderFoot(c)}</div>`;
+  return base(kit, w, h, body, binderCss(w, h));
+}
+
+/** Rang-Kachel: ein Fach mit Etikett „Platz 5", darunter Name, Nummer, Illustrator, Preis. */
+export function binderRankHtml(kit: BrandKit, s: BinderRankSlide, w: number, h: number, c: BinderChrome, labels: { platz: string; nr: string; illu: string }): string {
+  const u = (x: number) => Math.round(w * x);
+  const hoch = h / w > 1.5;
+  const body = `<div class="slide">${binderTop(c)}
+<div class="mid" style="align-items:center"><div style="width:${hoch ? 62 : 50}%"><span class="tab">${esc(labels.platz)} ${s.rank}</span><div class="page" style="grid-template-columns:1fr;border-top-left-radius:0"><div class="pk">${s.imageDataUrl ? `<img src="${s.imageDataUrl}">` : ""}</div></div></div></div>
+<div><div class="name">${esc(s.name)}</div>
+<div class="daten"><span>${esc(labels.nr)} <b>${esc(s.numLine)}</b></span>${s.illustrator ? `<span>${esc(labels.illu)} <b>${esc(s.illustrator)}</b></span>` : ""}</div>
+<div class="price${s.hidePrice ? " frage" : ""}">${s.hidePrice ? "? ? ?" : esc(s.price)}</div></div>
+${binderFoot(c)}</div>`;
+  return base(kit, w, h, body, binderCss(w, h) + `\n.pk .rk,.pk .pr{display:none}`);
+}
+
+/** Abschluss: die drei Produktseiten in Fächern, ein Satz, die Adresse. */
+export function binderCtaHtml(
+  kit: BrandKit,
+  a: { line: string; trustLine: string; linkLabel: string; productImages: { url: string; label: string }[] },
+  w: number, h: number, c: BinderChrome,
+): string {
+  const u = (x: number) => Math.round(w * x);
+  const hoch = h / w > 1.5;
+  const bilder = a.productImages.slice(0, 3);
+  const kachel = bilder.length
+    ? `<div class="page" style="grid-template-columns:repeat(${bilder.length},1fr);gap:${u(0.017)}px;padding:${u(0.024)}px ${u(0.02)}px ${u(0.02)}px">${bilder.map((b) => `<div><div class="pk" style="aspect-ratio:860/1160"><img src="${b.url}"></div><div class="prod">${esc(b.label)}</div></div>`).join("")}</div>`
+    : "";
+  const body = `<div class="slide">${binderTop(c)}
+${kachel}
+<div class="mid" style="gap:${u(0.02)}px"><div class="disp" style="font-size:${u(hoch ? 0.07 : a.line.length > 60 ? 0.054 : 0.06)}px;line-height:1.08">${esc(a.line)}</div>
+${a.trustLine ? `<div class="sub">${esc(a.trustLine)}</div>` : ""}
+<div class="hint" style="font-size:${u(0.036)}px">${esc(a.linkLabel)}${binderArrow(u(0.075), -45)}</div></div>
+${binderFoot(c)}</div>`;
+  return base(kit, w, h, body, binderCss(w, h) + `\n.pk::after{display:none}`);
+}
+
+/** Story und Reel-Hook: eine Zeile groß, eine Reihe Karten, ein Pfeil (Story: nach unten). */
+export function binderTeaserHtml(kit: BrandKit, a: { line: string; images: string[]; hint: string; down: boolean }, w: number, h: number, c: BinderChrome): string {
+  const u = (x: number) => Math.round(w * x);
+  const pk = a.images.slice(0, 3).map((src) => `<div class="pk"><img src="${src}"></div>`).join("");
+  const body = `<div class="slide" style="justify-content:space-between">${binderTop(c)}
+<div class="disp" style="font-size:${u(a.line.length > 40 ? 0.078 : 0.09)}px">${esc(a.line)}</div>
+<div class="page" style="grid-template-columns:repeat(3,1fr);transform:rotate(-3deg)">${pk}</div>
+<div class="hint">${esc(a.hint)}${binderArrow(u(0.1), a.down ? 90 : 0)}</div>
+${binderFoot(c)}</div>`;
+  return base(kit, w, h, body, binderCss(w, h));
+}
+
 export function dataUrlFor(file: string): string | null {
   try {
     const ext = path.extname(file).slice(1).toLowerCase();

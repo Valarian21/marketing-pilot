@@ -278,6 +278,15 @@ export const renderSlideshowJob: JobHandler<VideoContext> = async (ctx, job, pro
   const cardFiles = slideFiles.slice(1, -1);
   // Anzeigereihenfolge der Karten: beim Countdown steht der letzte Platz vorn.
   const cardOrder = countdown ? [...cards].reverse() : cards;
+  /**
+   * Fester Zeitplan (Binderseite, „Reel B"): das Stück bringt je Slide einen
+   * Schlüssel und eine Standzeit mit — Hook, Übersichtsseite, dann die Top 3
+   * je zweimal (Preis verdeckt, Preis aufgedeckt), Abschluss. Dann wird hier
+   * nichts mehr geplant oder gekappt; die Reihenfolge ist die der Slides.
+   */
+  const fest = Array.isArray(meta["reelSegments"]) ? (meta["reelSegments"] as { key: string; ms: number }[]) : null;
+  if (fest && fest.length !== slideFiles.length) throw new Error(`Reel-Zeitplan passt nicht zu den Slides (${fest.length} Einträge, ${slideFiles.length} Slides).`);
+  const gesprochen = fest ? new Set(fest.map((x) => x.key)) : null;
 
   const outDir = path.join(ctx.dataDir, "assets", piece.projectId, "video", pieceId);
   fs.mkdirSync(outDir, { recursive: true });
@@ -302,7 +311,9 @@ export const renderSlideshowJob: JobHandler<VideoContext> = async (ctx, job, pro
     const parts = new Map<string, Part>();
     if (!opts.voiceover) { progress("voice", { status: "skipped", detail: "stumm gerendert (Sound kommt von der Plattform)" }); return parts; }
     const spoken = [{ id: "hook", text: hookText }, ...cardOrder.map((c) => ({ id: `c${c.rank}`, text: cardLine(c) })), { id: "end", text: ctaText }]
-      .filter((x) => x.text.trim());
+      .filter((x) => x.text.trim())
+      // Beim festen Zeitplan wird nur gesprochen, was auch eine Slide hat.
+      .filter((x) => !gesprochen || gesprochen.has(x.id));
     if (!ctx.voice?.synthesizeScript) {
       for (const x of spoken) { const ms = estimateReelLineMs(x.text); parts.set(x.id, { file: null, durationMs: ms, words: estimateWords(x.text, ms - 300).filter((w) => isSpokenWord(w.word)) }); }
       warnings.push("Ohne Voiceover gerendert (ELEVENLABS_API_KEY/VOICE_ID fehlen) — Timing geschätzt.");
@@ -329,7 +340,7 @@ export const renderSlideshowJob: JobHandler<VideoContext> = async (ctx, job, pro
   });
 
   // 2. Zeitplan + Overlays (Hook-Karte, Wort-Captions)
-  const plan = planSlideshow(cardOrder.map((c) => ({ key: `c${c.rank}`, ...(voice.get(`c${c.rank}`) ? { voiceMs: voice.get(`c${c.rank}`)!.durationMs } : {}) })), {
+  const plan = fest ? { hookMs: 0, coverMs: 0, endMs: fest[fest.length - 1]!.ms, cards: [], dropped: [] as string[], secondsPerCard: opts.secondsPerCard, totalMs: fest.reduce((n, x) => n + x.ms, 0) } : planSlideshow(cardOrder.map((c) => ({ key: `c${c.rank}`, ...(voice.get(`c${c.rank}`) ? { voiceMs: voice.get(`c${c.rank}`)!.durationMs } : {}) })), {
     secondsPerCard: opts.secondsPerCard,
     // Ohne Textkachel faellt ihre Zeit weg — sonst stuende dem Video eine
     // Sekunde zu viel im Budget und die letzten Karten flogen unnoetig raus.
@@ -342,23 +353,26 @@ export const renderSlideshowJob: JobHandler<VideoContext> = async (ctx, job, pro
   const lay = reelLayout();
   const hookCard = path.join(outDir, "hook.png");
   const { captions, segments } = await step("overlays", async () => {
-    const jobs: RenderJob[] = opts.hookCard
+    const jobs: RenderJob[] = opts.hookCard && !fest
       ? [{ html: hookCardHtml(kit, hookText || String(meta["coverTitle"] ?? ""), brand, lay.w, lay.h), width: lay.w, height: lay.h, file: hookCard }]
       : [];
     const cues: CaptionCue[] = [];
     /** Segmente in Reihenfolge: (Hook), Cover, Karten (Anzeigereihenfolge), CTA. */
-    const segs: { image: string; durationMs: number; audio: string | null; key: string }[] = [
-      ...(opts.hookCard ? [{ image: hookCard, durationMs: plan.hookMs, audio: voice.get("hook")?.file ?? null, key: "hook" }] : []),
-      { image: cover, durationMs: plan.coverMs, audio: null, key: "cover" },
-    ];
-    plan.cards.forEach((c) => {
+    const segs: { image: string; durationMs: number; audio: string | null; key: string }[] = fest
+      // Fester Zeitplan: Slide für Slide, Standzeit mindestens so lang wie die Stimme.
+      ? fest.map((x, i) => ({ image: slideFiles[i]!, durationMs: Math.max(x.ms, (voice.get(x.key)?.durationMs ?? 0) + 250), audio: voice.get(x.key)?.file ?? null, key: x.key }))
+      : [
+        ...(opts.hookCard ? [{ image: hookCard, durationMs: plan.hookMs, audio: voice.get("hook")?.file ?? null, key: "hook" }] : []),
+        { image: cover, durationMs: plan.coverMs, audio: null, key: "cover" },
+      ];
+    if (!fest) plan.cards.forEach((c) => {
       const rank = Number(c.key.slice(1));
       // Die Slide-Dateien liegen bereits in Anzeigereihenfolge - gekappte Karten fallen vorne weg.
       const idx = cardOrder.findIndex((x) => x.rank === rank);
       const image = cardFiles[idx];
       if (image) segs.push({ image, durationMs: c.durationMs, audio: voice.get(c.key)?.file ?? null, key: c.key });
     });
-    segs.push({ image: cta, durationMs: plan.endMs, audio: voice.get("end")?.file ?? null, key: "end" });
+    if (!fest) segs.push({ image: cta, durationMs: plan.endMs, audio: voice.get("end")?.file ?? null, key: "end" });
 
     let offset = 0;
     for (const seg of segs) {
@@ -410,7 +424,7 @@ export const renderSlideshowJob: JobHandler<VideoContext> = async (ctx, job, pro
     };
     // Thumbnail: der erste Platz - nicht die Hook-Karte, das Bild soll die Karte zeigen
     const thumb = path.join(outDir, "reel-thumb.png");
-    const topSlide = cardFiles[cardOrder.findIndex((c) => c.rank === 1)] ?? cover;
+    const topSlide = (fest ? slideFiles[fest.findIndex((x) => x.key === "c1")] : cardFiles[cardOrder.findIndex((c) => c.rank === 1)]) ?? cover;
     fs.copyFileSync(topSlide, thumb);
     markPng(thumb, { aiGenerated: true, generator: "Marketing Pilot (data reel thumbnail)" });
     const thumbId = addAsset("image", thumb, { role: "thumbnail" });

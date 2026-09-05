@@ -301,7 +301,7 @@ export class BinderplanProvider implements ProductDataProvider {
 
   // --- Top-Listen ------------------------------------------------------------
 
-  private scopeCards(q: TopCardsQuery): { rows: CardRow[]; label: string; labelEn: string } {
+  private scopeCards(q: TopCardsQuery): { rows: CardRow[]; label: string; labelEn: string; sub: string; subEn: string; official: number } {
     const select = `SELECT cards.id, cards.set_id, cards.local_id, cards.local_num, cards.name_de, cards.name_en,
         cards.name_ja, cards.rarity, cards.illustrator, cards.region, cards.image_de, cards.image_en, cards.image_alt, cards.kinds,
         (SELECT name FROM sets WHERE sets.id = cards.set_id) set_name,
@@ -310,9 +310,16 @@ export class BinderplanProvider implements ProductDataProvider {
     if (q.scope.set) {
       const set = this.resolveSet(q.scope.set);
       if (!set) throw new Error(`Set unbekannt: ${q.scope.set}`);
+      const rows = this.sqlite.prepare(`${select} WHERE cards.set_id = ?`).all(set.id) as CardRow[];
+      const official = Number((this.sqlite.prepare("SELECT official FROM sets WHERE id = ?").get(set.id) as { official?: number } | undefined)?.official ?? 0);
+      const monat = (lang: "de" | "en") => set.releaseDate
+        ? new Date(set.releaseDate).toLocaleDateString(lang === "de" ? "de-DE" : "en-GB", { month: "long", year: "numeric" })
+        : "";
       return {
-        rows: this.sqlite.prepare(`${select} WHERE cards.set_id = ?`).all(set.id) as CardRow[],
-        label: set.name, labelEn: set.nameEn,
+        rows, label: set.name, labelEn: set.nameEn,
+        sub: [set.serieName, monat("de"), `${rows.length} Karten`].filter(Boolean).join(" · "),
+        subEn: [set.serieName, monat("en"), `${rows.length} cards`].filter(Boolean).join(" · "),
+        official,
       };
     }
     if (q.scope.era) {
@@ -326,7 +333,9 @@ export class BinderplanProvider implements ProductDataProvider {
       const rows = this.sqlite.prepare(
         `${select} WHERE cards.set_id IN (SELECT id FROM sets WHERE region = ? AND (${filter.sql}))`,
       ).all(region, ...filter.params) as CardRow[];
-      return { rows, label: era.name, labelEn: era.nameEn };
+      const jahre = `${era.from.slice(0, 4)}–${era.to.slice(0, 4)}`;
+      const sets = new Set(rows.map((r) => r.set_id)).size;
+      return { rows, label: era.name, labelEn: era.nameEn, sub: `${sets} Sets · ${jahre} · ${rows.length} Karten`, subEn: `${sets} sets · ${jahre} · ${rows.length} cards`, official: 0 };
     }
     if (q.scope.illustrator) {
       const region = q.scope.region ?? "intl";
@@ -334,7 +343,7 @@ export class BinderplanProvider implements ProductDataProvider {
         `${select} WHERE cards.illustrator = ? AND cards.set_id IN (SELECT id FROM sets WHERE region = ?)`,
       ).all(q.scope.illustrator, region) as CardRow[];
       if (!rows.length) throw new Error(`Kein Kartenbestand fuer Illustrator: ${q.scope.illustrator}`);
-      return { rows, label: q.scope.illustrator, labelEn: q.scope.illustrator };
+      return { rows, label: q.scope.illustrator, labelEn: q.scope.illustrator, sub: `Illustrator · ${rows.length} Karten`, subEn: `Illustrator · ${rows.length} cards`, official: 0 };
     }
     throw new Error("Bereich fehlt: set, era oder illustrator angeben.");
   }
@@ -373,7 +382,7 @@ export class BinderplanProvider implements ProductDataProvider {
   async topCards(q: TopCardsQuery): Promise<TopCardsResult> {
     const basis = q.priceBasis ?? "max";
     const n = Math.max(1, Math.min(q.n, 50));
-    const { rows, label, labelEn } = this.scopeCards(q);
+    const { rows, label, labelEn, sub, subEn, official } = this.scopeCards(q);
     const exclude = new Set((q.excludeKinds ?? []).map((k) => k.toLowerCase()));
     const pool = exclude.size
       ? rows.filter((r) => !(JSON.parse(r.kinds || "[]") as string[]).some((k) => exclude.has(String(k).toLowerCase())))
@@ -423,7 +432,7 @@ export class BinderplanProvider implements ProductDataProvider {
 
     const priced = pool.filter((r) => this.effective(prices.get(r.id), basis) !== null).length;
     return {
-      cards, scopeLabel: label, scopeLabelEn: labelEn,
+      cards, scopeLabel: label, scopeLabelEn: labelEn, scopeSub: sub, scopeSubEn: subEn, scopeOfficial: official,
       totalEur: Math.round(cards.reduce((s, c) => s + c.priceEur, 0) * 100) / 100,
       // Ältester Stand der Liste – ehrlicher als der neueste, denn er gilt für alle.
       priceStand: isoDate(cards.reduce((oldest, c) => (!oldest || c.priceUpdatedAt < oldest ? c.priceUpdatedAt : oldest), "")),

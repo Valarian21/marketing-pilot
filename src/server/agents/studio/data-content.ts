@@ -26,7 +26,8 @@ import { applyHashtagPolicy, loadHashtags, saveHashtags } from "../../hashtags.j
 import { createProductDataProvider } from "../../data-source.js";
 import { estimateReelLineMs, planSlideshow, reelCardLine } from "../video/slideshow.js";
 import type { PriceMover, ProductDataProvider, RankedCard, ScopeCoverage } from "../../providers/product-data.js";
-import { dataFooterText, dataUrlFor, rankingCoverHtml, rankingCtaHtml, rankingOverviewHtml, rankingSlideHtml, storyHtml, type RenderJob, type RankingSlide } from "./render.js";
+import { binderCoverHtml, binderCtaHtml, binderPageHtml, binderRankHtml, binderTeaserHtml, dataFooterText, dataUrlFor, rankingCoverHtml, rankingCtaHtml, rankingOverviewHtml, rankingSlideHtml, storyHtml, type BinderChrome, type RenderJob, type RankingSlide } from "./render.js";
+import { loadSlideSettings } from "../../slide-settings.js";
 import { reviseWithCritic } from "./critic.js";
 // Typ-Import: generate.ts laedt dieses Modul, deshalb darf hier nichts zur Laufzeit zurueckzeigen.
 import type { StudioContext } from "./generate.js";
@@ -58,6 +59,12 @@ const fmtEur = (v: number, lang: "de" | "en") =>
   lang === "de"
     ? `${v.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`
     : `€${v.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+/**
+ * Gerundet, nur für die Fächer der Übersichtsseite: auf 15 Kacheln passt
+ * „1.171 €", nicht „1.170,71 €". Einzelslides bleiben auf den Cent genau.
+ */
+const fmtEurRund = (v: number, lang: "de" | "en") =>
+  lang === "de" ? `${Math.round(v).toLocaleString("de-DE")} €` : `€${Math.round(v).toLocaleString("en-GB")}`;
 /** Immer zweistellig — die Fußzeile jeder Slide soll „31.08.2026“ zeigen, nicht „31.8.2026“. */
 const fmtDate = (iso: string, lang: "de" | "en") => {
   const d = iso ? new Date(iso) : null;
@@ -74,6 +81,27 @@ const changeLabel = (m: PriceMover, lang: "de" | "en") => {
   const pct = Math.abs(m.changePct).toLocaleString(lang === "de" ? "de-DE" : "en-GB", { maximumFractionDigits: 1 });
   return `${m.changePct > 0 ? "▲ +" : "▼ −"}${pct} % ${lang === "de" ? `in ${m.days} Tagen` : `in ${m.days} days`}`;
 };
+
+/**
+ * Aufteilung der Binderseite: die Top-Plätze einzeln, der Rest in 9er-Seiten,
+ * absteigend — Platz 20 steht auf der ersten Seite oben links.
+ */
+export function binderPlan(n: number, einzeln = 5): { pages: number[][]; singles: number[] } {
+  const top = Math.min(einzeln, Math.max(0, n));
+  const rest = Array.from({ length: Math.max(0, n - top) }, (_, i) => n - i);
+  const pages: number[][] = [];
+  for (let i = 0; i < rest.length; i += 9) pages.push(rest.slice(i, i + 9));
+  return { pages, singles: Array.from({ length: top }, (_, i) => top - i) };
+}
+/** Slides eines Binderseiten-Carousels: Deckseite, Seiten, Einzelplätze, Abschluss. */
+export const binderSlideCount = (n: number): number => { const pl = binderPlan(n); return 1 + pl.pages.length + pl.singles.length + 1; };
+
+/** Reel B: Hook, eine Seite, die Top 3 je verdeckt und aufgedeckt, Abschluss — Standzeiten in ms. */
+export const REEL_B_SEGMENTS: { key: string; ms: number }[] = [
+  { key: "hook", ms: 2000 }, { key: "seite", ms: 3000 },
+  { key: "c3q", ms: 900 }, { key: "c3", ms: 1800 }, { key: "c2q", ms: 900 }, { key: "c2", ms: 1800 },
+  { key: "c1q", ms: 1000 }, { key: "c1", ms: 2600 }, { key: "end", ms: 2500 },
+];
 
 const Out = z.object({
   title: z.string().default(""),
@@ -104,7 +132,7 @@ interface Loaded { card: RankedCard | PriceMover; dataUrl: string }
 
 async function loadCards(
   provider: ProductDataProvider, q: s.DataQuery, lang: "de" | "en",
-): Promise<{ loaded: Loaded[]; skipped: string[]; scopeLabel: string; totalEur: number; priceStand: string; coverage: ScopeCoverage | null; withHistory: number }> {
+): Promise<{ loaded: Loaded[]; skipped: string[]; scopeLabel: string; scopeSub: string; scopeSubEn: string; scopeOfficial: number; totalEur: number; priceStand: string; coverage: ScopeCoverage | null; withHistory: number }> {
   const want = q.n + IMAGE_SPARE;
   if (q.kind === "movers") {
     const res = await provider.priceMovers({ days: q.days, direction: q.direction, minBaseEur: q.minBaseEur, n: want, region: q.region, minPoints: q.minPoints });
@@ -114,7 +142,7 @@ async function loadCards(
     const verworfen = res.cards.length - plausible.length;
     const { loaded, skipped } = await withImages(provider, plausible, q.n, lang);
     if (verworfen > 0) skipped.push(`${verworfen} Karten mit über ${q.maxChangePct} % Ausschlag verworfen (unglaubwürdig bei dieser Datenlage)`);
-    return { loaded, skipped, scopeLabel: res.scopeLabel, totalEur: 0, priceStand: res.priceStand, coverage: null, withHistory: res.withHistory };
+    return { loaded, skipped, scopeLabel: res.scopeLabel, scopeSub: "", scopeSubEn: "", scopeOfficial: 0, totalEur: 0, priceStand: res.priceStand, coverage: null, withHistory: res.withHistory };
   }
   if (!q.set && !q.era && !q.illustrator) throw err("Bereich fehlt: Set, Ära oder Illustrator wählen.");
   const res = await provider.topCards({
@@ -125,7 +153,7 @@ async function loadCards(
   // Gesamtwert der Liste, die wirklich veroeffentlicht wird - nicht der ueberholten Abfrage.
   const totalEur = Math.round(loaded.reduce((sum, x) => sum + x.card.priceEur, 0) * 100) / 100;
   const scopeLabel = lang === "en" && res.scopeLabelEn ? res.scopeLabelEn : res.scopeLabel;
-  return { loaded, skipped, scopeLabel, totalEur, priceStand: res.priceStand, coverage: res.coverage, withHistory: 0 };
+  return { loaded, skipped, scopeLabel, scopeSub: res.scopeSub, scopeSubEn: res.scopeSubEn, scopeOfficial: res.scopeOfficial, totalEur, priceStand: res.priceStand, coverage: res.coverage, withHistory: 0 };
 }
 
 /** Bilder in der Reihenfolge der Rangliste laden, bis `n` Karten zusammen sind. */
@@ -163,6 +191,15 @@ export async function generateDataBundle(
   try { data = await loadCards(provider, q, lang); } finally { provider.close(); }
   if (data.loaded.length < 3) throw err(`Zu wenige Karten mit Bild und Preis im gewählten Bereich (${data.loaded.length}).`);
 
+  // Aufbau der Slides: Binderseite (Projekt-Einstellung oder Anfrage) oder klassisch.
+  // Im Ratemodus bleibt es klassisch — dort kommt jede Karte zweimal.
+  const slideSettings = loadSlideSettings(ctx.db, base.project.id);
+  const binder = (req.layout ?? slideSettings.layout) === "binder" && q.kind !== "guess";
+  const projektDomain = base.project.url.replace(/^https?:\/\//, "").replace(/\/$/, "");
+  const domain = lang === "de" && slideSettings.linkDomain ? slideSettings.linkDomain : projektDomain;
+  const logoAsset = base.kit.logoAssetId ? ctx.db.select().from(t.mpAssets).where(eq(t.mpAssets.id, base.kit.logoAssetId)).get() : undefined;
+  const logoDataUrl = logoAsset ? dataUrlFor(path.join(ctx.dataDir, logoAsset.path)) : null;
+
   /**
    * Ein Reel muss unter 60 s bleiben. Die Entscheidung, wie viele Karten das
    * hergibt, faellt **vor** dem Modellaufruf — sonst schriebe es „die Top 10“
@@ -171,7 +208,16 @@ export async function generateDataBundle(
    */
   const reelOpts = s.ReelOptions.parse(req.reel ?? {});
   const reelNotes: string[] = [];
-  if (format === "data_reel") {
+  if (format === "data_reel" && binder) {
+    const pl = binderPlan(data.loaded.length, 3);
+    if (pl.pages.length > 1) {
+      const vorher = data.loaded.length;
+      data.loaded = data.loaded.slice(0, 12);
+      data.totalEur = Math.round(data.loaded.reduce((sum, x) => sum + x.card.priceEur, 0) * 100) / 100;
+      if (req.manualText) throw err(`${vorher} Karten passen nicht in ein Binder-Reel: eine Seite trägt neun, dazu die Top 3 — höchstens 12 Karten anfragen (n=12).`);
+      reelNotes.push(`Aus ${vorher} Karten wurden 12: eine Binderseite trägt neun, dazu die Top 3.`);
+    }
+  } else if (format === "data_reel") {
     const display = q.countdown ? [...data.loaded].reverse() : data.loaded;
     const rankOfId = new Map(data.loaded.map((x, i) => [x.card.id, i + 1]));
     const fit = planSlideshow(display.map((x) => ({
@@ -210,7 +256,20 @@ export async function generateDataBundle(
    * teuersten" darüberschreibt.
    */
   let kappNotiz = "";
-  if (format === "data_carousel") {
+  if (format === "data_carousel" && binder) {
+    const zaehlen = platforms.filter((p) => mediaLimitFor(p) > 1);
+    const platz = zaehlen.length ? Math.min(...zaehlen.map((p) => mediaLimitFor(p))) : Infinity;
+    if (binderSlideCount(data.loaded.length) > platz) {
+      let passen = data.loaded.length;
+      while (passen > 3 && binderSlideCount(passen) > platz) passen--;
+      const vorher = data.loaded.length;
+      const engste = zaehlen.reduce((a, b) => (mediaLimitFor(a) <= mediaLimitFor(b) ? a : b));
+      if (req.manualText) throw err(`${vorher} Karten ergeben ${binderSlideCount(vorher)} Slides — ${engste} nimmt nur ${platz}. Höchstens ${passen} Karten anfragen (n=${passen}).`);
+      data.loaded = data.loaded.slice(0, passen);
+      data.totalEur = Math.round(data.loaded.reduce((sum, x) => sum + x.card.priceEur, 0) * 100) / 100;
+      kappNotiz = `Aus ${vorher} Karten wurden ${passen}: ${engste} nimmt nur ${platz} Bilder je Beitrag.`;
+    }
+  } else if (format === "data_carousel") {
     // Abschluss-Slide, Deckseite und Übersichtskachel belegen Plätze, bevor die
     // erste Karte drankommt.
     const feste = 1 + (req.cover ? 1 : 0) + (req.overview && q.kind !== "guess" ? 1 : 0);
@@ -239,7 +298,7 @@ export async function generateDataBundle(
       kappNotiz = `Aus ${vorher} Karten wurden ${passen}: ${engste} nimmt nur ${platz} Bilder je Beitrag.`;
     }
   }
-  const footer = dataFooterText(fmtDate(data.priceStand, lang), base.project.url.replace(/^https?:\/\//, "").replace(/\/$/, ""), q.priceBasis);
+  const footer = dataFooterText(fmtDate(data.priceStand, lang), domain, q.priceBasis);
   const brand = base.brief.productName;
 
   // --- der einzige Modellaufruf des Laufs -----------------------------------
@@ -310,8 +369,89 @@ export async function generateDataBundle(
   /** size-tag -> Dateien in Slide-Reihenfolge; CTA getrennt, weil er je Link-Regel anders lautet. */
   const bySize = new Map<string, string[]>();
   const ctaFiles = new Map<string, string>();
+  // Etiketten und Hinweise der Binderseite, je Sprache.
+  const L = lang === "de"
+    ? { platz: "Platz", nr: "Nr.", illu: "Illustration", bis: "bis", karten: "Karten", naechste: "Nächste Seite", setcheck: "Set-Check" }
+    : { platz: "No.", nr: "No.", illu: "Illustration", bis: "to", karten: "cards", naechste: "Next page", setcheck: "Set check" };
+  const chrome = (corner: string): BinderChrome => ({ brand, footer, logoDataUrl, corner });
+  const pocketOf = (x: Loaded): { rank: number; price: string; imageDataUrl: string | null } => ({ rank: rankOf.get(x.card.id)!, price: fmtEurRund(x.card.priceEur, lang), imageDataUrl: x.dataUrl });
+  const rankSlideOf = (x: Loaded, hidePrice = false) => ({
+    rank: rankOf.get(x.card.id)!, name: lang === "en" && x.card.nameEn ? x.card.nameEn : x.card.name,
+    numLine: `${x.card.localId}${data.scopeOfficial ? ` / ${data.scopeOfficial}` : ""}`, illustrator: x.card.illustrator,
+    price: fmtEur(x.card.priceEur, lang), imageDataUrl: x.dataUrl, ...(hidePrice ? { hidePrice: true } : {}),
+  });
+  const byRank = new Map(data.loaded.map((x) => [rankOf.get(x.card.id)!, x]));
+  const coverSub = lang === "en" ? data.scopeSubEn : data.scopeSub;
+  const linkLabelFor = (rule: string) => (rule === "bio" ? (lang === "de" ? "Link in Bio" : "Link in bio") : domain);
+  /** Reel B: der feste Zeitplan, den der Video-Job übernimmt — nur beim Binder-Reel gesetzt. */
+  let reelSegments: { key: string; ms: number }[] | null = null;
+
   for (const size of sizes) {
     const files: string[] = [];
+    if (binder && format === "data_carousel") {
+      const pl = binderPlan(data.loaded.length);
+      const gesamt = binderSlideCount(data.loaded.length);
+      let i = 1;
+      const cover = path.join(outDir, `${lang}-${size.tag}-00-cover.png`);
+      jobs.push({ html: binderCoverHtml(base.kit, { title: coverTitle, sub: coverSub, images: data.loaded.slice(0, 9).map((x) => x.dataUrl), hint: `Top ${data.loaded.length} ${L.karten}` }, size.w, size.h, chrome(L.setcheck)), width: size.w, height: size.h, file: cover });
+      files.push(cover);
+      pl.pages.forEach((ranks, k) => {
+        i++;
+        const file = path.join(outDir, `${lang}-${size.tag}-00${String.fromCharCode(98 + k)}-seite${k + 1}.png`);
+        const letzte = k === pl.pages.length - 1;
+        jobs.push({ html: binderPageHtml(base.kit, {
+          tab: `${L.platz} ${ranks[0]} ${L.bis} ${ranks[ranks.length - 1]}`,
+          pockets: ranks.map((r) => pocketOf(byRank.get(r)!)),
+          leerText: `Top ${pl.singles.length}`, hint: letzte ? `Top ${pl.singles.length} ${L.karten}` : L.naechste,
+        }, size.w, size.h, chrome(`${i} / ${gesamt}`)), width: size.w, height: size.h, file });
+        files.push(file);
+      });
+      pl.singles.forEach((r) => {
+        i++;
+        const file = path.join(outDir, `${lang}-${size.tag}-${String(i).padStart(2, "0")}-rang${r}.png`);
+        jobs.push({ html: binderRankHtml(base.kit, rankSlideOf(byRank.get(r)!), size.w, size.h, chrome(`${i} / ${gesamt}`), L), width: size.w, height: size.h, file });
+        files.push(file);
+      });
+      for (const rule of linkRules) {
+        const file = path.join(outDir, `${lang}-${size.tag}-99-cta-${rule}.png`);
+        jobs.push({ html: binderCtaHtml(base.kit, { line: ctaLine, trustLine: out.trustLine, linkLabel: linkLabelFor(rule), productImages: produktBilder }, size.w, size.h, chrome(`${gesamt} / ${gesamt}`)), width: size.w, height: size.h, file });
+        ctaFiles.set(`${size.tag}:${rule}`, file);
+      }
+      bySize.set(size.tag, files);
+      continue;
+    }
+    if (binder && format === "data_reel") {
+      // Reel B: Hook (Frage), eine Seite mit Platz n bis 4, Top 3 je verdeckt und
+      // aufgedeckt, Abschluss. Die Reihenfolge hier ist die Reihenfolge im Video.
+      const pl = binderPlan(data.loaded.length, 3);
+      const hook = path.join(outDir, `${lang}-${size.tag}-00-hook.png`);
+      jobs.push({ html: binderTeaserHtml(base.kit, { line: out.hook || coverTitle, images: data.loaded.slice(3, 6).map((x) => x.dataUrl), hint: `Top ${data.loaded.length}`, down: false }, size.w, size.h, chrome("")), width: size.w, height: size.h, file: hook });
+      files.push(hook);
+      const ranks = pl.pages[0] ?? [];
+      const seite = path.join(outDir, `${lang}-${size.tag}-01-seite.png`);
+      jobs.push({ html: binderPageHtml(base.kit, {
+        tab: ranks.length ? `${L.platz} ${ranks[0]} ${L.bis} ${ranks[ranks.length - 1]}` : coverTitle,
+        pockets: ranks.map((r) => pocketOf(byRank.get(r)!)), leerText: "Top 3", hint: `Top 3 ${L.karten}`, width: "84%",
+      }, size.w, size.h, chrome("")), width: size.w, height: size.h, file: seite });
+      files.push(seite);
+      let i = 1;
+      for (const r of pl.singles) {
+        for (const frage of [true, false]) {
+          i++;
+          const file = path.join(outDir, `${lang}-${size.tag}-${String(i).padStart(2, "0")}-rang${r}${frage ? "-frage" : ""}.png`);
+          jobs.push({ html: binderRankHtml(base.kit, rankSlideOf(byRank.get(r)!, frage), size.w, size.h, chrome(""), L), width: size.w, height: size.h, file });
+          files.push(file);
+        }
+      }
+      for (const rule of linkRules) {
+        const file = path.join(outDir, `${lang}-${size.tag}-99-cta-${rule}.png`);
+        jobs.push({ html: binderCtaHtml(base.kit, { line: ctaLine, trustLine: out.trustLine, linkLabel: linkLabelFor(rule), productImages: produktBilder }, size.w, size.h, chrome("")), width: size.w, height: size.h, file });
+        ctaFiles.set(`${size.tag}:${rule}`, file);
+      }
+      reelSegments = [REEL_B_SEGMENTS[0]!, REEL_B_SEGMENTS[1]!, ...pl.singles.flatMap((r) => [{ key: `c${r}q`, ms: r === 1 ? 1000 : 900 }, { key: `c${r}`, ms: r === 1 ? 2600 : 1800 }]), REEL_B_SEGMENTS[REEL_B_SEGMENTS.length - 1]!];
+      bySize.set(size.tag, files);
+      continue;
+    }
     if (req.cover) {
       const cover = path.join(outDir, `${lang}-${size.tag}-00-cover.png`);
       jobs.push({ html: rankingCoverHtml(base.kit, { title: coverTitle, totalLabel, images: coverImages, ...(out.hook ? { hook: out.hook } : {}) }, size.w, size.h, brand, footer), width: size.w, height: size.h, file: cover });
@@ -338,9 +478,7 @@ export async function generateDataBundle(
     });
     for (const rule of linkRules) {
       const file = path.join(outDir, `${lang}-${size.tag}-99-cta-${rule}.png`);
-      const linkLabel = rule === "bio"
-        ? (lang === "de" ? "Link in Bio" : "Link in bio")
-        : base.project.url.replace(/^https?:\/\//, "").replace(/\/$/, "");
+      const linkLabel = linkLabelFor(rule);
       jobs.push({ html: rankingCtaHtml(base.kit, { line: ctaLine, linkLabel, imageDataUrl: shot, trustLine: out.trustLine, productImages: produktBilder }, size.w, size.h, brand, footer), width: size.w, height: size.h, file });
       ctaFiles.set(`${size.tag}:${rule}`, file);
     }
@@ -376,10 +514,14 @@ export async function generateDataBundle(
   let storyId: string | null = null;
   if (req.withStory && platforms.includes("instagram")) {
     const storyFile = path.join(outDir, `${lang}-story-1080x1920.png`);
-    const storyLine = req.manualText?.storyLine || out.hook || coverTitle;
-    const storyHint = req.manualText?.storyHint || (lang === "de" ? "Die ganze Liste im Beitrag ↓" : "Full list in the post ↓");
+    const storyLine = req.manualText?.storyLine || (binder
+      ? (lang === "de" ? `Die ${data.loaded.length} teuersten Karten aus ${coverTitle}` : `The ${data.loaded.length} most valuable cards from ${coverTitle}`)
+      : out.hook || coverTitle);
+    const storyHint = req.manualText?.storyHint || (binder
+      ? (lang === "de" ? "Alle im Beitrag" : "All in the post")
+      : (lang === "de" ? "Die ganze Liste im Beitrag ↓" : "Full list in the post ↓"));
     await opts.renderer([{
-      html: storyHtml(base.kit, {
+      html: binder ? binderTeaserHtml(base.kit, { line: storyLine, images: coverImages, hint: storyHint, down: true }, 1080, 1920, chrome(lang === "de" ? "Neu im Feed" : "New in the feed")) : storyHtml(base.kit, {
         eyebrow: lang === "de" ? "Neu heute" : "New today",
         line: storyLine, sub: totalLabel, images: coverImages, hint: storyHint,
       }, 1080, 1920, brand, footer),
@@ -423,8 +565,9 @@ export async function generateDataBundle(
     ruleFor: (platform) => (format === "data_reel" ? linkRuleFor(leadPlatform) : linkRuleFor(platform)),
     meta: {
       ...(format === "data_reel" ? { reel: reelOpts } : {}),
-      hook: out.hook, coverTitle, ctaLine, footer,
-      dataQuery: q, scopeLabel: data.scopeLabel, priceStand: data.priceStand, totalEur: data.totalEur,
+      hook: out.hook, coverTitle, ctaLine, footer, layout: binder ? "binder" : "klassisch", linkDomain: domain,
+      ...(reelSegments ? { reelSegments } : {}),
+      dataQuery: q, scopeLabel: data.scopeLabel, scopeSub: coverSub, priceStand: data.priceStand, totalEur: data.totalEur,
       cards: data.loaded.map((x, n) => ({ rank: n + 1, id: x.card.id, name: x.card.name, nameEn: x.card.nameEn, setName: x.card.setName, localId: x.card.localId, priceEur: x.card.priceEur, priceBasisUsed: x.card.priceBasisUsed, priceUpdatedAt: x.card.priceUpdatedAt })),
       skippedNoImage: data.skipped, coverage: data.coverage, request: req,
     },
@@ -481,9 +624,17 @@ export async function generateStoryFor(
 
   const storyId = newId();
   const datei = path.join(ctx.dataDir, "assets", base.project.id, "pieces", bundleId, `${lang}-story-1080x1920.png`);
+  // Binderseite: dieselbe Kachel wie beim Erzeugen — eine Zeile, eine Reihe Karten, Pfeil nach unten.
+  const binder = meta["layout"] === "binder";
+  const logoAsset = base.kit.logoAssetId ? ctx.db.select().from(t.mpAssets).where(eq(t.mpAssets.id, base.kit.logoAssetId)).get() : undefined;
+  const chrome = { brand: base.brief.productName, footer, logoDataUrl: logoAsset ? dataUrlFor(path.join(ctx.dataDir, logoAsset.path)) : null, corner: lang === "de" ? "Neu im Feed" : "New in the feed" };
+  const binderLine = opts.line || (lang === "de" ? `Die ${karten.length} teuersten Karten aus ${coverTitle}` : `The ${karten.length} most valuable cards from ${coverTitle}`);
+  const binderHint = opts.hint || (lang === "de" ? "Alle im Beitrag" : "All in the post");
   await opts.renderer([{
-    html: storyHtml(base.kit, { eyebrow: lang === "de" ? "Neu heute" : "New today", line, sub, images: bilder, hint },
-      1080, 1920, base.brief.productName, footer),
+    html: binder
+      ? binderTeaserHtml(base.kit, { line: binderLine, images: bilder, hint: binderHint, down: true }, 1080, 1920, chrome)
+      : storyHtml(base.kit, { eyebrow: lang === "de" ? "Neu heute" : "New today", line, sub, images: bilder, hint },
+        1080, 1920, base.brief.productName, footer),
     width: 1080, height: 1920, file: datei,
   }]);
   const ts = nowIso();
@@ -491,7 +642,7 @@ export async function generateStoryFor(
   ctx.db.insert(t.mpContentPieces).values({
     id: storyId, projectId: base.project.id, taskId: null,
     channel: "instagram", format: "story",
-    title: `${coverTitle} · Story`, body: line,
+    title: `${coverTitle} · Story`, body: binder ? binderLine : line,
     assets: toJson([]), status: "review", humanEdited: false,
     publishedAt: null, externalUrl: null, utm: toJson({}),
     meta: toJson({

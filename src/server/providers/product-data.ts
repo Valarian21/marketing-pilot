@@ -84,6 +84,11 @@ export interface TopCardsResult {
   cards: RankedCard[];
   scopeLabel: string;
   scopeLabelEn: string;
+  /** Eine Zeile Fakten zum Bereich fuer die Deckseite („Karmesin & Purpur · Januar 2025 · 180 Karten"). */
+  scopeSub: string;
+  scopeSubEn: string;
+  /** Offizielle Kartenzahl des Sets („161 / 131") — nur bei Set-Bereichen, sonst 0. */
+  scopeOfficial: number;
   /** Summe der `priceEur` der gelieferten Karten. */
   totalEur: number;
   /** Ältester Preisstand der Liste als ISO-Datum – das gehört in die Fußzeile. */

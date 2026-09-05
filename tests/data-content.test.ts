@@ -188,6 +188,57 @@ describe("Übersichtskachel", () => {
   });
 });
 
+describe("Binderseite", () => {
+  it("teilt Top 20 in zwei 9er-Seiten und fünf Einzelplätze — neun Slides", async () => {
+    const { binderPlan, binderSlideCount } = await import("../src/server/agents/studio/data-content.js");
+    const pl = binderPlan(20);
+    expect(pl.pages).toEqual([[20, 19, 18, 17, 16, 15, 14, 13, 12], [11, 10, 9, 8, 7, 6]]);
+    expect(pl.singles).toEqual([5, 4, 3, 2, 1]);
+    expect(binderSlideCount(20)).toBe(9);
+    // Top 14 passt auf eine Seite; unter sechs Karten gibt es keine Seite.
+    expect(binderPlan(14).pages).toHaveLength(1);
+    expect(binderSlideCount(14)).toBe(8);
+    expect(binderPlan(5).pages).toEqual([]);
+    // Reel: die Top 3 einzeln, der Rest auf einer Seite.
+    expect(binderPlan(10, 3)).toEqual({ pages: [[10, 9, 8, 7, 6, 5, 4]], singles: [3, 2, 1] });
+  });
+
+  it("füllt leere Fächer der letzten Seite mit dem Hinweis auf die Top 5", async () => {
+    const { binderPageHtml } = await import("../src/server/agents/studio/render.js");
+    const kit = { colors: [], primary: null, ink: null, background: null, accent2: null, contour: null, style: "kontur",
+      logoAssetId: null, logoUrl: null, avatarAssetId: null, fonts: [], extractedAt: null, voiceSamples: [], voiceProfile: null } as never;
+    const chrome = { brand: "Binderplan", footer: "Fußzeile", logoDataUrl: null, corner: "3 / 9" };
+    const sechs = Array.from({ length: 6 }, (_, i) => ({ rank: 11 - i, price: `${100 - i} €`, imageDataUrl: "data:image/png;base64,AA" }));
+    const html = binderPageHtml(kit, { tab: "Platz 11 bis 6", pockets: sechs, leerText: "Top 5", hint: "Top 5 Karten" }, 1080, 1350, chrome);
+    // Sechs Fächer belegt, die drei freien werden EIN Hinweisfach über die ganze Reihe.
+    expect(html.match(/<span class="rk">/g)).toHaveLength(6);
+    expect(html).toContain('grid-column:span 3');
+    expect(html).toContain("Top 5");
+    // Der Pfeil ist gezeichnet, kein Schriftzeichen — mittig und immer gleich dick.
+    expect(html).toContain('stroke-width="12"');
+    expect(html).not.toContain("→");
+    // Neun Fächer: kein Hinweisfach.
+    const voll = binderPageHtml(kit, { tab: "Platz 20 bis 12", pockets: Array.from({ length: 9 }, (_, i) => ({ rank: 20 - i, price: "1 €", imageDataUrl: null })), leerText: "Top 5", hint: "Nächste Seite" }, 1080, 1350, chrome);
+    expect(voll).not.toContain('class="pk leer"');
+  });
+
+  it("zeigt auf der Rang-Kachel Platz, Nummer und Illustrator, aber keinen Rang im Fach", async () => {
+    const { binderRankHtml } = await import("../src/server/agents/studio/render.js");
+    const kit = { colors: [], primary: null, ink: null, background: null, accent2: null, contour: null, style: "kontur",
+      logoAssetId: null, logoUrl: null, avatarAssetId: null, fonts: [], extractedAt: null, voiceSamples: [], voiceProfile: null } as never;
+    const chrome = { brand: "Binderplan", footer: "Fußzeile", logoDataUrl: null, corner: "7 / 9" };
+    const html = binderRankHtml(kit, { rank: 1, name: "Nachtara-ex", numLine: "161 / 131", illustrator: "YASHIRO Nanaco", price: "1.170,71 €", imageDataUrl: null }, 1080, 1350, chrome, { platz: "Platz", nr: "Nr.", illu: "Illustration" });
+    expect(html).toContain("Platz 1</span>");
+    expect(html).toContain("161 / 131");
+    expect(html).toContain("YASHIRO Nanaco");
+    expect(html).toContain("1.170,71 €");
+    expect(html).not.toContain("Fach");
+    const frage = binderRankHtml(kit, { rank: 1, name: "X", numLine: "1", illustrator: "", price: "9 €", imageDataUrl: null, hidePrice: true }, 1080, 1920, chrome, { platz: "Platz", nr: "Nr.", illu: "Illustration" });
+    expect(frage).toContain("? ? ?");
+    expect(frage).not.toContain("9 €");
+  });
+});
+
 describe("Reel-Planung", () => {
   it("gibt die Zeit der Textkachel an die Karten weiter, wenn sie wegfaellt", async () => {
     const { planSlideshow } = await import("../src/server/agents/video/slideshow.js");
