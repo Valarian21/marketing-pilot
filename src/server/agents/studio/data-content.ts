@@ -20,7 +20,7 @@ import { newId, nowIso, parseJson, toJson, type Db } from "../../db/index.js";
 import { modelFor } from "../../../../config/models.js";
 import { chatJson, withRun, type UsageCollector } from "../runner.js";
 import { dataContentPrompt, hashtagPoolPrompt } from "../prompts/studio.js";
-import { hashtagPolicy, linkRuleFor } from "../../../shared/channels.js";
+import { hashtagPolicy, linkRuleFor, mediaLimitFor } from "../../../shared/channels.js";
 import { PLATFORM_LIMITS } from "../../util/utm.js";
 import { applyHashtagPolicy, loadHashtags, saveHashtags } from "../../hashtags.js";
 import { createProductDataProvider } from "../../data-source.js";
@@ -200,6 +200,43 @@ export async function generateDataBundle(
 
   const platforms = (req.bundlePlatforms.length ? req.bundlePlatforms : [req.platform ?? "instagram"]).map((p) => p.trim().toLowerCase()).filter((p, i, all) => p && all.indexOf(p) === i);
   const leadPlatform = platforms[0]!;
+
+  /**
+   * Karten auf das Bilder-Limit der engsten Plattform bringen — **vor** dem Text.
+   *
+   * Instagram nimmt zehn Bilder je Carousel und wirft den Rest wortlos weg. Bei
+   * einer Rangliste im Countdown wären das Platz 1 bis 6 und der Abschluss-Slide.
+   * Dieselbe Regel wie beim Reel: die Zahl steht fest, bevor jemand „die 15
+   * teuersten" darüberschreibt.
+   */
+  let kappNotiz = "";
+  if (format === "data_carousel") {
+    const feste = 1 + (req.cover ? 1 : 0);   // Abschluss-Slide, dazu die Deckseite
+    const proKarte = q.kind === "guess" ? 2 : 1;  // im Ratemodus kommt jede Karte zweimal
+    // Plattformen, die grundsätzlich nur ein Bild zeigen (Pinterest: ein Pin ist
+    // ein Bild), dürfen die Länge des Carousels nicht bestimmen — sie nehmen
+    // ohnehin die Deckseite und ignorieren den Rest.
+    const zaehlen = platforms.filter((p) => mediaLimitFor(p) > 1);
+    const platz = zaehlen.length ? Math.min(...zaehlen.map((p) => mediaLimitFor(p))) : Infinity;
+    const passen = Math.max(1, Math.floor((platz - feste) / proKarte));
+    if (data.loaded.length > passen) {
+      const vorher = data.loaded.length;
+      data.loaded = data.loaded.slice(0, passen);
+      data.totalEur = Math.round(data.loaded.reduce((sum, x) => sum + x.card.priceEur, 0) * 100) / 100;
+      const engste = zaehlen.reduce((a, b) => (mediaLimitFor(a) <= mediaLimitFor(b) ? a : b));
+      // Bei fertigen Texten muss der Lauf abbrechen: „die 15 teuersten" über
+      // acht Karten zu schreiben wäre eine Falschaussage, und niemand kann den
+      // Text hinterher noch anpassen. Schreibt das Modell, reicht die Notiz —
+      // es sieht die gekürzte Liste und formuliert danach.
+      if (req.manualText) {
+        throw err(
+          `${vorher} Karten ergeben ${vorher * proKarte + feste} Slides — ${engste} nimmt nur ${platz}. `
+          + `Höchstens ${passen} Karten anfragen (n=${passen}), sonst fehlen im Beitrag die vorderen Plätze.`,
+        );
+      }
+      kappNotiz = `Aus ${vorher} Karten wurden ${passen}: ${engste} nimmt nur ${platz} Bilder je Beitrag.`;
+    }
+  }
   const footer = dataFooterText(fmtDate(data.priceStand, lang), base.project.url.replace(/^https?:\/\//, "").replace(/\/$/, ""), q.priceBasis);
   const brand = base.brief.productName;
 
@@ -314,6 +351,7 @@ export async function generateDataBundle(
   if (data.coverage && data.coverage.skipped > 0) notes.push(`${data.coverage.skipped} Karten im Bereich wurden nicht nachbepreist (Deckel je Abfrage).`);
   if (q.kind === "movers") notes.push(`Beruht auf ${data.withHistory} Karten mit Preisverlauf.`);
   notes.push(...reelNotes);
+  if (kappNotiz) notes.push(kappNotiz);
 
   // --- Story: ein Bild, das auf den Beitrag von heute hinweist ---------------
   // Sie hängt am selben Bündel, ist aber ein eigenes Stück: 24 Stunden sichtbar,

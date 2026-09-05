@@ -215,6 +215,28 @@ export function normalizeHashtag(raw: string): string {
 }
 
 /** Wie der Link in den Beitrag kommt: bei App-Uploads gibt es keinen klickbaren Link. */
+/**
+ * Wie viele Bilder ein Beitrag auf dieser Plattform tragen darf.
+ *
+ * Instagram lässt **10** Elemente je Carousel zu — eine harte Grenze der API.
+ * Wer mehr schickt, bekommt keine Fehlermeldung: die Plattform nimmt die ersten
+ * zehn und wirft den Rest weg. Bei einer Rangliste im Countdown sind das
+ * ausgerechnet die billigsten Karten, und die Auflösung fehlt.
+ */
+export const MEDIA_LIMIT: Record<string, number> = {
+  instagram: 10,
+  threads: 20,
+  facebook: 10,
+  bluesky: 4,
+  mastodon: 4,
+  pinterest: 1,
+  x: 4,
+  tiktok: 35,
+};
+export const DEFAULT_MEDIA_LIMIT = 10;
+export const mediaLimitFor = (platform: string): number =>
+  MEDIA_LIMIT[platform.trim().toLowerCase()] ?? DEFAULT_MEDIA_LIMIT;
+
 export function linkRuleFor(platform: string): "bio" | "link" {
   return PLATFORMS[platform.trim().toLowerCase()]?.appOnly ? "bio" : "link";
 }

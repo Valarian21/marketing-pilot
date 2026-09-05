@@ -8,7 +8,7 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import type { PlatformPoster, PostInput, PostOutput } from "./types.js";
+import type { PlatformPoster, PostAsset, PostInput, PostOutput } from "./types.js";
 
 const TIMEOUT = 60_000;
 const need = (creds: Record<string, string>, keys: string[]): string[] => keys.filter((k) => !creds[k]?.trim());
@@ -139,6 +139,22 @@ export const mastodonPoster: PlatformPoster = {
 const GRAPH = "https://graph.facebook.com/v21.0";
 
 /**
+ * Zu viele Bilder auf das Limit der Plattform bringen — ohne das Wichtigste
+ * wegzuwerfen.
+ *
+ * Ein Rangliste-Carousel zählt rückwärts: vorne stehen die billigen Karten,
+ * hinten Platz 1 und der Abschluss-Slide. Einfach die ersten zehn zu nehmen
+ * (`slice(0, 10)`) schneidet damit genau die Auflösung ab. Deshalb bleiben das
+ * erste Bild (die Deckseite) und das Ende erhalten, gekürzt wird in der Mitte.
+ */
+export function aufLimit(assets: PostAsset[], limit: number, log?: (m: string) => void): PostAsset[] {
+  if (assets.length <= limit) return assets;
+  const weg = assets.length - limit;
+  log?.(`${assets.length} Bilder, die Plattform nimmt ${limit} — ${weg} aus der Mitte weggelassen, Anfang und Ende bleiben.`);
+  return [assets[0]!, ...assets.slice(assets.length - (limit - 1))];
+}
+
+/**
  * Auf die Verarbeitung eines Medien-Containers warten.
  *
  * Instagram und Threads laden das Video von unserer Adresse und kodieren es
@@ -180,7 +196,7 @@ export const instagramPoster: PlatformPoster = {
     const user = i.creds["igUserId"]!;
     const token = i.creds["accessToken"]!;
     const caption = i.text.slice(0, 2200);
-    const media = i.assets.filter((a) => a.url).slice(0, 10);
+    const media = aufLimit(i.assets.filter((a) => a.url), 10, i.log);
     if (!media.length) throw new Error("Instagram braucht mindestens ein Bild oder Video.");
 
     // Eine Story ist ein einziges Medium ohne Caption. Sticker — Link, Umfrage,

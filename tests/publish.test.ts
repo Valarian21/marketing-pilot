@@ -115,6 +115,23 @@ describe("Was auf welcher Plattform erlaubt ist", () => {
   });
 });
 
+describe("Bilder-Limit der Plattform", () => {
+  it("kürzt in der Mitte — Deckseite und Auflösung bleiben", async () => {
+    const { aufLimit } = await import("../src/server/publish/posters.js");
+    const a = (n: string) => ({ path: `/${n}.png`, url: `https://x/${n}`, mime: "image/png", alt: "", kind: "image" as const });
+    // Cover, Rang 15 bis 1 (Countdown), CTA — genau die Reihenfolge eines Carousels.
+    const alle = [a("cover"), ...Array.from({ length: 15 }, (_, i) => a(`rang${15 - i}`)), a("cta")];
+    const kurz = aufLimit(alle, 10);
+    expect(kurz).toHaveLength(10);
+    expect(kurz[0]!.url).toContain("cover");
+    // Ohne diese Regel schnitte `slice(0, 10)` Platz 1 bis 6 und den Abschluss ab.
+    expect(kurz.at(-1)!.url).toContain("cta");
+    expect(kurz.some((x) => x.url.endsWith("rang1"))).toBe(true);
+    // Passt alles, bleibt alles.
+    expect(aufLimit(alle.slice(0, 5), 10)).toHaveLength(5);
+  });
+});
+
 describe("Instagram-Reel", () => {
   it("veröffentlicht erst, wenn die Plattform das Video fertig verarbeitet hat", async () => {
     const zustaende = ["IN_PROGRESS", "IN_PROGRESS", "FINISHED"];
