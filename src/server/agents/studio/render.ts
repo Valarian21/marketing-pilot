@@ -223,17 +223,23 @@ export function rankingOverviewHtml(
   // Spalten nach Kartenzahl: 8 Karten sind 4×2, 15 sind 5×3. Mehr als fünf
   // Spalten machen die Karten kleiner als einen Daumennagel.
   const spalten = a.cards.length <= 4 ? a.cards.length : a.cards.length <= 8 ? 4 : 5;
-  const zellen = a.cards.map((c) => `<figure class="ozelle">
+  // Geht die letzte Reihe nicht auf (7 Karten auf 4 Spalten), steht sie sonst
+  // linksbuendig neben einer Luecke und liest sich wie ein Fehler. Das Raster
+  // laeuft deshalb in halben Spalten, damit die Restreihe um eine halbe Spalte
+  // versetzt — also mittig — beginnen kann.
+  const rest = a.cards.length % spalten;
+  const ersteDerRestreihe = rest ? a.cards.length - rest : -1;
+  const zellen = a.cards.map((c, i) => `<figure class="ozelle"${i === ersteDerRestreihe ? ` style="grid-column-start:${spalten - rest + 1}"` : ""}>
 <span class="okarte">${c.imageDataUrl ? `<img src="${c.imageDataUrl}">` : ""}<b>${c.rank}</b></span>
 <figcaption>${esc(c.price)}</figcaption></figure>`).join("");
   const body = `<div class="slide" style="background:var(--b-ground)"><div class="dwrap">
 <div class="dhead"><span class="dbrand">${esc(brand)}</span></div>
 <div><h1 style="font-size:${Math.round(w * 0.062)}px">${esc(a.title)}</h1>${a.sub ? `<div class="dtotal" style="margin-top:.4em">${esc(a.sub)}</div>` : ""}</div>
-<div class="oraster" style="grid-template-columns:repeat(${spalten},1fr)">${zellen}</div>
+<div class="oraster" style="grid-template-columns:repeat(${spalten * 2},1fr)">${zellen}</div>
 ${dataFoot(w, footer)}</div></div>`;
   return base(kit, w, h, body, `${dataCss(w)}
 .oraster{flex:1;min-height:0;display:grid;gap:${Math.round(w * 0.028)}px ${Math.round(w * 0.022)}px;align-content:center}
-.ozelle{margin:0;display:flex;flex-direction:column;align-items:center;gap:${Math.round(w * 0.012)}px;min-height:0}
+.ozelle{margin:0;grid-column:span 2;display:flex;flex-direction:column;align-items:center;gap:${Math.round(w * 0.012)}px;min-height:0}
 .okarte{position:relative;display:block;flex:1;min-height:0;display:flex;align-items:center;justify-content:center}
 .okarte img{max-width:100%;max-height:100%;object-fit:contain;border-radius:${Math.round(w * 0.008)}px}
 .stil-kontur .okarte img{border:${Math.round(w * 0.005)}px solid var(--b-contour)}

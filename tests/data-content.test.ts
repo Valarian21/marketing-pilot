@@ -168,7 +168,23 @@ describe("Übersichtskachel", () => {
     for (const k of karten) expect(html).toContain(k.price);
     expect(html).toContain(">8<");
     // Acht Karten ergeben vier Spalten; bei fünf wären sie daumennagelgroß.
-    expect(html).toContain("repeat(4,1fr)");
+    // Gezaehlt wird in halben Spalten, damit eine unvollstaendige letzte Reihe
+    // mittig beginnen kann — acht Karten gehen auf, also ohne Versatz.
+    expect(html).toContain("repeat(8,1fr)");
+    expect(html).not.toContain("grid-column-start");
+  });
+
+  it("rueckt eine unvollstaendige letzte Reihe in die Mitte", async () => {
+    const { rankingOverviewHtml } = await import("../src/server/agents/studio/render.js");
+    const kit = { colors: [], primary: null, ink: null, background: null, accent2: null, contour: null, style: "kontur",
+      logoAssetId: null, logoUrl: null, avatarAssetId: null, fonts: [], extractedAt: null, voiceSamples: [], voiceProfile: null } as never;
+    // Sieben auf vier Spalten: die zweite Reihe traegt drei Karten und stuende
+    // sonst linksbuendig neben einer Luecke.
+    const karten = Array.from({ length: 7 }, (_, i) => ({ rank: i + 1, price: `${100 - i * 10},00 €`, imageDataUrl: "data:image/png;base64,AA" }));
+    const html = rankingOverviewHtml(kit, { title: "Alle auf einen Blick", sub: "", cards: karten }, 1080, 1350, "Binderplan", "Fußzeile");
+    // Versatz um eine halbe Spalte: Spalten 4 minus Rest 3, plus eins.
+    expect(html).toContain("grid-column-start:2");
+    expect(html.match(/grid-column-start/g)).toHaveLength(1);
   });
 });
 
