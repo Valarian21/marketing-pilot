@@ -229,7 +229,7 @@ export function rankingOverviewHtml(
   // versetzt — also mittig — beginnen kann.
   const rest = a.cards.length % spalten;
   const ersteDerRestreihe = rest ? a.cards.length - rest : -1;
-  const zellen = a.cards.map((c, i) => `<figure class="ozelle"${i === ersteDerRestreihe ? ` style="grid-column-start:${spalten - rest + 1}"` : ""}>
+  const zellen = a.cards.map((c, i) => `<figure class="ozelle"${i === ersteDerRestreihe ? ` style="grid-column:${spalten - rest + 1} / span 2"` : ""}>
 <span class="okarte">${c.imageDataUrl ? `<img src="${c.imageDataUrl}">` : ""}<b>${c.rank}</b></span>
 <figcaption>${esc(c.price)}</figcaption></figure>`).join("");
   const body = `<div class="slide" style="background:var(--b-ground)"><div class="dwrap">
@@ -245,7 +245,7 @@ ${dataFoot(w, footer)}</div></div>`;
 .stil-kontur .okarte img{border:${Math.round(w * 0.005)}px solid var(--b-contour)}
 .okarte b{position:absolute;top:${Math.round(w * -0.012)}px;left:${Math.round(w * -0.012)}px;width:${Math.round(w * 0.055)}px;height:${Math.round(w * 0.055)}px;border-radius:50%;
   background:var(--b-contour);color:var(--b-accent2);font-family:var(--f-body);font-weight:800;font-size:${Math.round(w * 0.028)}px;display:flex;align-items:center;justify-content:center}
-.ozelle figcaption{font-family:var(--f-body);font-weight:800;font-size:${Math.round(w * 0.03)}px;font-variant-numeric:tabular-nums;flex:0 0 auto}`);
+.ozelle figcaption{font-family:var(--f-body);font-weight:800;font-size:${Math.round(w * (spalten >= 5 ? 0.023 : 0.03))}px;font-variant-numeric:tabular-nums;white-space:nowrap;flex:0 0 auto}`);
 }
 
 /**
