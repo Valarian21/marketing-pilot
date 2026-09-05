@@ -490,17 +490,23 @@ ${binderFoot(c)}</div>`;
  * Aussagen. Angeheftete Beiträge werden meist nur als erste Slide gesehen —
  * deshalb muss diese eine Slide den ganzen Beitrag tragen.
  */
-export function binderExplainerCoverHtml(kit: BrandKit, a: { title: string; claims: string[]; imageDataUrl: string | null; hint: string }, w: number, h: number, c: BinderChrome): string {
+export function binderExplainerCoverHtml(kit: BrandKit, a: { title: string; claims: string[]; imageDataUrl: string | null; hint: string; ratio?: string }, w: number, h: number, c: BinderChrome): string {
   const u = (x: number) => Math.round(w * x);
   const claims = a.claims.slice(0, 3).map((x) => `<li>${binderArrow(u(0.05))}<span>${esc(x)}</span></li>`).join("");
+  const quer = a.ratio ? (Number(a.ratio.split("/")[0]) > Number(a.ratio.split("/")[1])) : false;
+  // Das Bild darf groß sein und der Text darauf liegen: ein weißes Feld mit
+  // weicher Kante hält die Schrift lesbar, ohne das Bild zu verstecken.
   const body = `<div class="slide">${binderTop(c)}
-<div class="page" style="grid-template-columns:1fr;padding:${u(0.014)}px;width:40%;margin:0 auto"><div class="pk" style="aspect-ratio:1472/2032">${a.imageDataUrl ? `<img src="${a.imageDataUrl}">` : ""}</div></div>
-<div class="mid" style="gap:${u(0.018)}px;justify-content:flex-end"><div class="disp" style="font-size:${u(a.title.length > 28 ? 0.056 : 0.066)}px">${esc(a.title)}</div>
+<div class="buehne"><div class="page" style="grid-template-columns:1fr;padding:${u(0.014)}px;width:${quer ? 100 : 62}%;margin:0 auto"><div class="pk" style="aspect-ratio:${a.ratio ?? "1472/2032"}">${a.imageDataUrl ? `<img src="${a.imageDataUrl}">` : ""}</div></div>
+<div class="feld"><div class="disp" style="font-size:${u(a.title.length > 28 ? 0.056 : 0.066)}px">${esc(a.title)}</div>
 <ul class="claims">${claims}</ul>
-<div class="hint" style="font-size:${u(0.034)}px">${esc(a.hint)}${binderArrow(u(0.07), -45)}</div></div>
+<div class="hint" style="font-size:${u(0.034)}px">${esc(a.hint)}${binderArrow(u(0.07), -45)}</div></div></div>
 ${binderFoot(c)}</div>`;
   return base(kit, w, h, body, binderCss(w, h) + `
 .pk::after{display:none}
+.buehne{flex:1;min-height:0;display:flex;flex-direction:column;justify-content:flex-end;position:relative}
+.buehne .page{position:absolute;top:0;left:0;right:0}
+.feld{position:relative;z-index:2;background:linear-gradient(rgba(255,255,255,0),rgba(255,255,255,.96) ${u(0.05)}px,#fff);padding:${u(0.06)}px 0 0;display:flex;flex-direction:column;gap:${u(0.018)}px}
 .claims{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:${u(0.01)}px}
 .claims li{display:flex;align-items:center;gap:${u(0.016)}px;font-family:var(--f-body);font-weight:700;font-size:${u(0.028)}px;line-height:1.2}`);
 }
@@ -508,12 +514,17 @@ ${binderFoot(c)}</div>`;
 /** Erklär-Beitrag, ein Schritt: Bild im Fach-Rahmen, Überschrift, ein Satz. */
 export function binderExplainerSlideHtml(kit: BrandKit, a: { headline: string; sub: string; imageDataUrl: string | null; ratio?: string }, w: number, h: number, c: BinderChrome): string {
   const u = (x: number) => Math.round(w * x);
+  const quer = a.ratio ? (Number(a.ratio.split("/")[0]) > Number(a.ratio.split("/")[1])) : false;
   const body = `<div class="slide">${binderTop(c)}
-<div class="mid" style="align-items:center"><div class="page" style="grid-template-columns:1fr;padding:${u(0.016)}px;width:${a.ratio && a.ratio.startsWith("16") ? 100 : 62}%"><div class="pk" style="aspect-ratio:${a.ratio ?? "1472/2032"}">${a.imageDataUrl ? `<img src="${a.imageDataUrl}">` : ""}</div></div></div>
-<div><div class="disp" style="font-size:${u(a.headline.length > 30 ? 0.054 : 0.062)}px">${esc(a.headline)}</div>
-${a.sub ? `<div class="sub" style="margin-top:${u(0.014)}px;font-size:${u(0.03)}px;line-height:1.35;opacity:.8">${esc(a.sub)}</div>` : ""}</div>
+<div class="buehne"><div class="page" style="grid-template-columns:1fr;padding:${u(0.016)}px;width:${quer ? 100 : 78}%;margin:0 auto"><div class="pk" style="aspect-ratio:${a.ratio ?? "1472/2032"}">${a.imageDataUrl ? `<img src="${a.imageDataUrl}">` : ""}</div></div>
+<div class="feld"><div class="disp" style="font-size:${u(a.headline.length > 30 ? 0.054 : 0.062)}px">${esc(a.headline)}</div>
+${a.sub ? `<div class="sub" style="margin-top:${u(0.012)}px;font-size:${u(0.029)}px;line-height:1.35;opacity:.85">${esc(a.sub)}</div>` : ""}</div></div>
 ${binderFoot(c)}</div>`;
-  return base(kit, w, h, body, binderCss(w, h) + `\n.pk::after{display:none}`);
+  return base(kit, w, h, body, binderCss(w, h) + `
+.pk::after{display:none}
+.buehne{flex:1;min-height:0;display:flex;flex-direction:column;justify-content:flex-end;position:relative}
+.buehne .page{position:absolute;top:0;left:0;right:0}
+.feld{position:relative;z-index:2;background:linear-gradient(rgba(255,255,255,0),rgba(255,255,255,.96) ${u(0.05)}px,#fff);padding:${u(0.06)}px 0 0}`);
 }
 
 export function dataUrlFor(file: string): string | null {

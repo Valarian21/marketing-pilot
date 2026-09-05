@@ -291,7 +291,7 @@ export async function addExplainerPost(ctx: StudioContext, projectId: string, sp
   const cover = path.join(outDir, "de-1080x1350-00-cover.png");
   jobs.push({
     html: binder
-      ? binderExplainerCoverHtml(base.kit, { title: spec.coverTitle, claims: spec.coverClaims, imageDataUrl: assetBild(spec.coverAssetId) ?? bilder.get(0) ?? null, hint: "Link in Bio" }, 1080, 1350, chrome(spec.hook || "Binderplan"))
+      ? binderExplainerCoverHtml(base.kit, { title: spec.coverTitle, claims: spec.coverClaims, imageDataUrl: assetBild(spec.coverAssetId) ?? bilder.get(0) ?? null, hint: "Link in Bio", ...(ratioOf(spec.coverAssetId) ? { ratio: ratioOf(spec.coverAssetId)! } : {}) }, 1080, 1350, chrome(spec.hook || "Binderplan"))
       : showcaseCoverHtml(base.kit, { title: spec.coverTitle, stats: spec.hook, imageDataUrl: bilder.get(0) ?? null }, 1080, 1350, brand, footer),
     width: 1080, height: 1350, file: cover,
   });
