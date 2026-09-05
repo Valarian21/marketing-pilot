@@ -143,6 +143,19 @@ describe("Instagram-Reel", () => {
 });
 
 describe("Signierte Asset-Adressen", () => {
+  it("liefert PNG als JPEG aus — Instagram nimmt nichts anderes", async () => {
+    const { jpegFuerMeta } = await import("../src/server/publish/asset-tokens.js");
+    const png = path.join(DATA, "probe.png");
+    fs.writeFileSync(png, PNG);
+    const jpeg = jpegFuerMeta(png);
+    expect(jpeg.endsWith(".meta.jpg")).toBe(true);
+    expect(fs.existsSync(jpeg)).toBe(true);
+    // Zweiter Aufruf nutzt die vorhandene Datei, statt erneut zu wandeln.
+    const vorher = fs.statSync(jpeg).mtimeMs;
+    expect(jpegFuerMeta(png)).toBe(jpeg);
+    expect(fs.statSync(jpeg).mtimeMs).toBe(vorher);
+  }, 30_000);
+
   it("gibt die Asset-ID zurück und läuft danach ab", () => {
     const now = Date.now();
     const tok = assetToken(built.db, "a1", now);
@@ -159,7 +172,16 @@ describe("Signierte Asset-Adressen", () => {
     const tok = assetToken(built.db, "a1");
     const ok = await built.app.inject({ method: "GET", url: `/go/a/${tok}` });
     expect(ok.statusCode).toBe(200);
-    expect(ok.headers["content-type"]).toContain("image/png");
+    // Echte Asset-IDs sind UUIDs, damit werden die Token über 100 Zeichen lang —
+    // Fastifys Standardgrenze für Routen-Parameter. Ohne `maxParamLength`
+    // antwortet die Route mit 414, und Meta meldet daraufhin einen Medientyp-
+    // Fehler, weil es JSON statt eines Bildes bekommt.
+    const langerToken = assetToken(built.db, "11111111-2222-3333-4444-555555555555");
+    expect(langerToken.length).toBeGreaterThan(100);
+    expect((await built.app.inject({ method: "GET", url: `/go/a/${langerToken}` })).statusCode).toBe(404);
+    // Ausgeliefert wird JPEG, auch wenn die Datei ein PNG ist: diese Adresse
+    // ruft nur Meta ab, und Instagram nimmt kein PNG an.
+    expect(ok.headers["content-type"]).toContain("image/jpeg");
     expect((await built.app.inject({ method: "GET", url: "/go/a/erfunden" })).statusCode).toBe(404);
   });
 });

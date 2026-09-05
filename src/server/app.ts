@@ -30,7 +30,7 @@ import { resolveShortlink } from "./shortlinks.js";
 import { eq } from "drizzle-orm";
 import * as schema from "./db/schema.js";
 import { bioHtml, projectByBioCode } from "./publish/bio.js";
-import { readAssetToken } from "./publish/asset-tokens.js";
+import { jpegFuerMeta, readAssetToken } from "./publish/asset-tokens.js";
 
 declare module "fastify" {
   interface FastifyRequest { user: HostUser }
@@ -46,7 +46,11 @@ export async function buildApp(env: Env, opts: { host?: HostAdapter; dbFile?: st
   const host = opts.host ?? await createHostAdapter(env);
   const { db, sqlite } = openDatabase(env.MP_DATA_DIR, opts.dbFile);
 
-  const app = Fastify({ logger: opts.logger ?? true, trustProxy: true });
+  // `maxParamLength` steht bei Fastify auf 100 Zeichen. Die signierten
+  // Asset-Adressen (`/go/a/<token>`) sind 111 Zeichen lang — ohne diese Zeile
+  // antwortet die Route mit 414, und Meta meldet daraufhin „Only photo or video
+  // can be accepted as media type": es hat JSON statt eines Bildes bekommen.
+  const app = Fastify({ logger: opts.logger ?? true, trustProxy: true, maxParamLength: 500 });
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
   await app.register(cookie);
@@ -123,7 +127,19 @@ export async function buildApp(env: Env, opts: { host?: HostAdapter; dbFile?: st
     const file = asset ? path.resolve(env.MP_DATA_DIR, asset.path) : null;
     if (!file || !file.startsWith(path.resolve(env.MP_DATA_DIR) + path.sep) || !fs.existsSync(file)) return reply.code(404).send({ detail: "Nicht gefunden." });
     const ext = path.extname(file).toLowerCase();
-    const type = ext === ".mp4" ? "video/mp4" : ext === ".webp" ? "image/webp" : ext === ".jpg" || ext === ".jpeg" ? "image/jpeg" : "image/png";
+    // Diese Adresse ruft nur Meta ab, und Meta nimmt als Bild ausschliesslich
+    // JPEG. Ein PNG quittiert Instagram mit „Only photo or video can be accepted
+    // as media type" — eine Meldung, die den Grund nicht nennt.
+    if (ext === ".png") {
+      try {
+        const jpeg = jpegFuerMeta(file);
+        return reply.type("image/jpeg").header("Cache-Control", "public, max-age=3600").send(fs.createReadStream(jpeg));
+      } catch (e) {
+        app.log.error(`Asset ${assetId}: ${e instanceof Error ? e.message : String(e)}`);
+        return reply.code(500).send({ detail: "Bild konnte nicht ausgeliefert werden." });
+      }
+    }
+    const type = ext === ".mp4" ? "video/mp4" : ext === ".webp" ? "image/webp" : "image/jpeg";
     return reply.type(type).header("Cache-Control", "public, max-age=3600").send(fs.createReadStream(file));
   });
   app.get("/", async (_req, reply) => reply.redirect("/mp/"));

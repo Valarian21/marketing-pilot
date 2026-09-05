@@ -7,6 +7,9 @@
  * ist der Link tot.
  */
 import crypto from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
+import { spawnSync } from "node:child_process";
 import { eq } from "drizzle-orm";
 import * as t from "../db/schema.js";
 import { nowIso, type Db } from "../db/index.js";
@@ -45,3 +48,24 @@ export function readAssetToken(db: Db, token: string, now = Date.now()): string 
 }
 
 export const assetUrl = (publicBase: string, token: string): string => `${publicBase.replace(/\/$/, "")}/go/a/${token}`;
+
+/**
+ * PNG in JPEG umwandeln — für Meta, das nichts anderes annimmt.
+ *
+ * Instagram akzeptiert als Bildformat **ausschließlich JPEG**; ein PNG quittiert
+ * die API mit „Only photo or video can be accepted as media type", was den
+ * eigentlichen Grund nicht nennt. Unsere Slides sind PNG, weil sie aus dem
+ * Renderer kommen — also wird beim Ausliefern umgewandelt und das Ergebnis
+ * neben der Datei behalten. Diese Adresse ruft ohnehin nur Meta ab.
+ */
+export function jpegFuerMeta(pngFile: string): string {
+  const ziel = pngFile.replace(/\.png$/i, ".meta.jpg");
+  if (fs.existsSync(ziel) && fs.statSync(ziel).mtimeMs >= fs.statSync(pngFile).mtimeMs) return ziel;
+  // -q:v 2 ist die beste Stufe unterhalb von verlustfrei; die Slides sind Flächen
+  // und Text, da fällt jede stärkere Kompression sofort als Kantenflimmern auf.
+  const res = spawnSync("ffmpeg", ["-y", "-v", "error", "-i", pngFile, "-q:v", "2", ziel]);
+  if (res.status !== 0 || !fs.existsSync(ziel)) {
+    throw new Error(`Konnte ${path.basename(pngFile)} nicht in JPEG wandeln: ${res.stderr?.toString().slice(0, 200) ?? "ffmpeg fehlt"}`);
+  }
+  return ziel;
+}
