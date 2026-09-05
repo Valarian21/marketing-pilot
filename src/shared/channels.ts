@@ -187,8 +187,13 @@ export function saneTitle(title: string, body: string, fallback = ""): string {
 export interface HashtagPolicy { min: number; max: number; note: string }
 
 export const HASHTAG_POLICY: Record<string, HashtagPolicy> = {
-  instagram: { min: 6, max: 10, note: "Discovery läuft über Hashtags — Mischung aus Marke, Thema und Sprache." },
-  tiktok: { min: 3, max: 6, note: "Wenige, präzise Tags; der Text selbst ist das stärkere Signal." },
+  // 2026 sind Hashtags **ein** Signal unter vielen, nicht mehr der Motor der
+  // Discovery — die Empfehlung ist von „so viele wie möglich“ auf drei bis fünf
+  // präzise gefallen. Millionenfach benutzte Tags (#pokemon) bringen nichts
+  // mehr; Nischen-Tags mit 10k–100k Beiträgen bringen etwas. Was zählt, sind
+  // Keywords im Caption-Text: Instagram ist eine Suchmaschine geworden.
+  instagram: { min: 3, max: 5, note: "Drei bis fünf Nischen-Tags. Millionen-Tags bringen nichts — Keywords gehören in den Text." },
+  tiktok: { min: 3, max: 5, note: "Wenige, präzise Tags; der Text selbst ist das stärkere Signal." },
   youtube: { min: 3, max: 5, note: "Tags in die Beschreibung, nicht in den Titel." },
   pinterest: { min: 0, max: 0, note: "Keine Hashtags — Pinterest sucht über Titel und Beschreibung." },
   facebook: { min: 0, max: 2, note: "Höchstens zwei, sonst wirkt es wie Spam." },

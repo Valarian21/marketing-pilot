@@ -208,6 +208,41 @@ ${dataFoot(w, footer)}</div></div>`;
 }
 
 /**
+ * Übersichtskachel: die ganze Rangliste auf einem Bild.
+ *
+ * Sie ist der Grund, aus dem jemand den Beitrag **speichert** — und Speichern
+ * ist neben Teilen das stärkste Signal, das der Feed kennt. Wer nur zwei Slides
+ * wischt, hat trotzdem alles gesehen; wer weiterwischt, bekommt die Einzelkarten.
+ * Deshalb steht sie als Slide 2, direkt nach der Deckseite.
+ */
+export function rankingOverviewHtml(
+  kit: BrandKit,
+  a: { title: string; sub: string; cards: { rank: number; price: string; imageDataUrl: string | null }[] },
+  w: number, h: number, brand: string, footer: string,
+): string {
+  // Spalten nach Kartenzahl: 8 Karten sind 4×2, 15 sind 5×3. Mehr als fünf
+  // Spalten machen die Karten kleiner als einen Daumennagel.
+  const spalten = a.cards.length <= 4 ? a.cards.length : a.cards.length <= 8 ? 4 : 5;
+  const zellen = a.cards.map((c) => `<figure class="ozelle">
+<span class="okarte">${c.imageDataUrl ? `<img src="${c.imageDataUrl}">` : ""}<b>${c.rank}</b></span>
+<figcaption>${esc(c.price)}</figcaption></figure>`).join("");
+  const body = `<div class="slide" style="background:var(--b-ground)"><div class="dwrap">
+<div class="dhead"><span class="dbrand">${esc(brand)}</span></div>
+<div><h1 style="font-size:${Math.round(w * 0.062)}px">${esc(a.title)}</h1>${a.sub ? `<div class="dtotal" style="margin-top:.4em">${esc(a.sub)}</div>` : ""}</div>
+<div class="oraster" style="grid-template-columns:repeat(${spalten},1fr)">${zellen}</div>
+${dataFoot(w, footer)}</div></div>`;
+  return base(kit, w, h, body, `${dataCss(w)}
+.oraster{flex:1;min-height:0;display:grid;gap:${Math.round(w * 0.028)}px ${Math.round(w * 0.022)}px;align-content:center}
+.ozelle{margin:0;display:flex;flex-direction:column;align-items:center;gap:${Math.round(w * 0.012)}px;min-height:0}
+.okarte{position:relative;display:block;flex:1;min-height:0;display:flex;align-items:center;justify-content:center}
+.okarte img{max-width:100%;max-height:100%;object-fit:contain;border-radius:${Math.round(w * 0.008)}px}
+.stil-kontur .okarte img{border:${Math.round(w * 0.005)}px solid var(--b-contour)}
+.okarte b{position:absolute;top:${Math.round(w * -0.012)}px;left:${Math.round(w * -0.012)}px;width:${Math.round(w * 0.055)}px;height:${Math.round(w * 0.055)}px;border-radius:50%;
+  background:var(--b-contour);color:var(--b-accent2);font-family:var(--f-body);font-weight:800;font-size:${Math.round(w * 0.028)}px;display:flex;align-items:center;justify-content:center}
+.ozelle figcaption{font-family:var(--f-body);font-weight:800;font-size:${Math.round(w * 0.03)}px;font-variant-numeric:tabular-nums;flex:0 0 auto}`);
+}
+
+/**
  * Story (1080 × 1920): der Hinweis auf den Beitrag, der heute im Feed steht.
  *
  * Zwei Dinge unterscheiden sie von einer Slide. Erstens ist unten und oben je

@@ -136,11 +136,25 @@ export class BinderplanProvider implements ProductDataProvider {
 
   // --- Sets und Ären ---------------------------------------------------------
 
+  /**
+   * Setnamen, die in der Quelle anders heißen als in der Szene.
+   *
+   * TCGdex führt das erste Set als „Grundset"; auf Deutsch hieß und heißt es in
+   * der Sammlerszene **Basis-Set**. Der Name steht auf jeder Slide, deshalb wird
+   * er hier beim Lesen berichtigt statt in Binderplans Datenbank — die gehört
+   * dem Produkt, und wir lesen sie ausschließlich.
+   */
+  private static readonly NAME_KORREKTUR: Record<string, string> = {
+    base1: "Basis-Set",
+  };
+
   private setRow(r: Record<string, unknown>): ProductSet {
     const serieId = String(r.serie_id ?? "");
     const releaseDate = String(r.release_date ?? "");
     return {
-      id: String(r.id), name: String(r.name ?? r.name_en ?? ""), nameEn: String(r.name_en ?? r.name ?? ""),
+      id: String(r.id),
+      name: BinderplanProvider.NAME_KORREKTUR[String(r.id)] ?? String(r.name ?? r.name_en ?? ""),
+      nameEn: String(r.name_en ?? r.name ?? ""),
       serieId, serieName: String(r.serie_name ?? ""), releaseDate, total: Number(r.total ?? 0),
       region: r.region === "jp" ? "jp" : "intl", eraId: eraForSet(serieId, releaseDate),
     };
@@ -399,7 +413,7 @@ export class BinderplanProvider implements ProductDataProvider {
       const names = this.cardName(x.r);
       return {
         rank: i + 1, id: x.r.id, name: names.de, nameEn: names.en,
-        setId: x.r.set_id, setName: x.r.set_name || x.r.set_name_en || x.r.set_id,
+        setId: x.r.set_id, setName: BinderplanProvider.NAME_KORREKTUR[x.r.set_id] ?? (x.r.set_name || x.r.set_name_en || x.r.set_id),
         localId: x.r.local_id ?? "", rarity: x.r.rarity ?? "", illustrator: x.r.illustrator ?? "",
         priceEur: x.e.eur, priceBasisUsed: x.e.used, priceUpdatedAt: x.p.updatedAt,
         region: x.r.region === "jp" ? "jp" : "intl",
@@ -473,7 +487,7 @@ export class BinderplanProvider implements ProductDataProvider {
       const names = this.cardName(r);
       cards.push({
         rank: cards.length + 1, id: r.id, name: names.de, nameEn: names.en,
-        setId: r.set_id, setName: r.set_name || r.set_name_en || r.set_id,
+        setId: r.set_id, setName: BinderplanProvider.NAME_KORREKTUR[r.set_id] ?? (r.set_name || r.set_name_en || r.set_id),
         localId: r.local_id ?? "", rarity: r.rarity ?? "", illustrator: r.illustrator ?? "",
         priceEur: m.last, priceBasisUsed: "normal", priceUpdatedAt: `${m.stand}T00:00:00Z`,
         region: r.region === "jp" ? "jp" : "intl",

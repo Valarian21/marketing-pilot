@@ -26,7 +26,7 @@ import { applyHashtagPolicy, loadHashtags, saveHashtags } from "../../hashtags.j
 import { createProductDataProvider } from "../../data-source.js";
 import { estimateReelLineMs, planSlideshow, reelCardLine } from "../video/slideshow.js";
 import type { PriceMover, ProductDataProvider, RankedCard, ScopeCoverage } from "../../providers/product-data.js";
-import { dataFooterText, dataUrlFor, rankingCoverHtml, rankingCtaHtml, rankingSlideHtml, storyHtml, type RenderJob, type RankingSlide } from "./render.js";
+import { dataFooterText, dataUrlFor, rankingCoverHtml, rankingCtaHtml, rankingOverviewHtml, rankingSlideHtml, storyHtml, type RenderJob, type RankingSlide } from "./render.js";
 import { reviseWithCritic } from "./critic.js";
 // Typ-Import: generate.ts laedt dieses Modul, deshalb darf hier nichts zur Laufzeit zurueckzeigen.
 import type { StudioContext } from "./generate.js";
@@ -211,7 +211,9 @@ export async function generateDataBundle(
    */
   let kappNotiz = "";
   if (format === "data_carousel") {
-    const feste = 1 + (req.cover ? 1 : 0);   // Abschluss-Slide, dazu die Deckseite
+    // Abschluss-Slide, Deckseite und Übersichtskachel belegen Plätze, bevor die
+    // erste Karte drankommt.
+    const feste = 1 + (req.cover ? 1 : 0) + (req.overview && q.kind !== "guess" ? 1 : 0);
     const proKarte = q.kind === "guess" ? 2 : 1;  // im Ratemodus kommt jede Karte zweimal
     // Plattformen, die grundsätzlich nur ein Bild zeigen (Pinterest: ein Pin ist
     // ein Bild), dürfen die Länge des Carousels nicht bestimmen — sie nehmen
@@ -314,6 +316,20 @@ export async function generateDataBundle(
       const cover = path.join(outDir, `${lang}-${size.tag}-00-cover.png`);
       jobs.push({ html: rankingCoverHtml(base.kit, { title: coverTitle, totalLabel, images: coverImages, ...(out.hook ? { hook: out.hook } : {}) }, size.w, size.h, brand, footer), width: size.w, height: size.h, file: cover });
       files.push(cover);
+    }
+    // Slide 2: die ganze Liste auf einem Bild. Im Ratemodus ergibt sie keinen
+    // Sinn — sie verriete die Preise, die erst aufgelöst werden sollen.
+    if (req.overview && q.kind !== "guess") {
+      const uebersicht = path.join(outDir, `${lang}-${size.tag}-00b-uebersicht.png`);
+      jobs.push({
+        html: rankingOverviewHtml(base.kit, {
+          title: lang === "de" ? "Alle auf einen Blick" : "All at a glance",
+          sub: totalLabel,
+          cards: data.loaded.map((x, n) => ({ rank: n + 1, price: fmtEur(x.card.priceEur, lang), imageDataUrl: x.dataUrl })),
+        }, size.w, size.h, brand, footer),
+        width: size.w, height: size.h, file: uebersicht,
+      });
+      files.push(uebersicht);
     }
     slides.forEach((sl, i) => {
       const file = path.join(outDir, `${lang}-${size.tag}-${String(i + 1).padStart(2, "0")}-rang${sl.rank}${sl.hidePrice ? "-frage" : ""}.png`);

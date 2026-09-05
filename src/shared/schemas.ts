@@ -496,6 +496,13 @@ export const ContentRequest = z.object({
    * Textkachel.
    */
   cover: z.boolean().default(true),
+  /**
+   * Übersichtskachel als Slide 2 — die ganze Rangliste auf einem Bild.
+   *
+   * Der Grund, aus dem ein Beitrag gespeichert wird. Im Ratemodus aus: sie
+   * verriete die Preise, die der Beitrag erst auflösen will.
+   */
+  overview: z.boolean().default(false),
   /** Von welcher Serie der Lauf kam (Shot 9) — leer bei Handarbeit. */
   seriesId: z.string().default(""),
   /** Ein Lauf, mehrere Plattform-Stuecke mit gemeinsamen Assets. Leer = nur `platform`. */

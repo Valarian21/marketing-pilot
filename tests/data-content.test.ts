@@ -147,6 +147,31 @@ beforeAll(async () => {
 }, 60_000);
 afterAll(async () => { await built.close(); fs.rmSync(DATA, { recursive: true, force: true }); });
 
+describe("Setnamen aus der Quelle", () => {
+  it("nennt das erste Set „Basis-Set“, nicht „Grundset“", async () => {
+    const { BinderplanProvider } = await import("../src/server/providers/product-data.binderplan.js");
+    // TCGdex führt base1 als „Grundset"; in der Sammlerszene heißt es Basis-Set.
+    // Der Name steht auf jeder Slide, also wird er beim Lesen berichtigt.
+    const korrektur = (BinderplanProvider as unknown as { NAME_KORREKTUR: Record<string, string> }).NAME_KORREKTUR;
+    expect(korrektur["base1"]).toBe("Basis-Set");
+  });
+});
+
+describe("Übersichtskachel", () => {
+  it("legt alle Karten mit Rang und Preis auf ein Bild", async () => {
+    const { rankingOverviewHtml } = await import("../src/server/agents/studio/render.js");
+    const kit = { colors: [], primary: null, ink: null, background: null, accent2: null, contour: null, style: "kontur",
+      logoAssetId: null, logoUrl: null, avatarAssetId: null, fonts: [], extractedAt: null, voiceSamples: [], voiceProfile: null } as never;
+    const karten = Array.from({ length: 8 }, (_, i) => ({ rank: i + 1, price: `${100 - i * 10},00 €`, imageDataUrl: "data:image/png;base64,AA" }));
+    const html = rankingOverviewHtml(kit, { title: "Alle auf einen Blick", sub: "Zusammen 520,00 €", cards: karten }, 1080, 1350, "Binderplan", "Fußzeile");
+    // Jede Karte steht mit Rang und Preis drauf — das ist der Speicher-Grund.
+    for (const k of karten) expect(html).toContain(k.price);
+    expect(html).toContain(">8<");
+    // Acht Karten ergeben vier Spalten; bei fünf wären sie daumennagelgroß.
+    expect(html).toContain("repeat(4,1fr)");
+  });
+});
+
 describe("Reel-Planung", () => {
   it("gibt die Zeit der Textkachel an die Karten weiter, wenn sie wegfaellt", async () => {
     const { planSlideshow } = await import("../src/server/agents/video/slideshow.js");
@@ -166,14 +191,17 @@ describe("Plattform-Politik", () => {
     expect(PLATFORM_LIMITS["youtube"]).toBe(5000);
   });
   it("gibt jeder Plattform ihre eigene Hashtag-Zahl", () => {
-    expect(hashtagPolicy("instagram")).toMatchObject({ min: 6, max: 10 });
+    // Drei bis fünf, seit die Empfehlung 2026 von „so viele wie möglich"
+    // abgerückt ist: Hashtags sind ein Signal unter vielen geworden.
+    expect(hashtagPolicy("instagram")).toMatchObject({ min: 3, max: 5 });
     expect(hashtagPolicy("linkedin").max).toBe(2);
     expect(hashtagPolicy("pinterest").max).toBe(0);
     expect(hashtagPolicy("unbekannt").max).toBe(2);
   });
   it("stutzt auf das Maximum und füllt nur bis zum Minimum aus dem Vorrat", () => {
     const pools = { brand: ["marke"], topics: { a: ["thema1", "thema2"] }, byLanguage: { de: ["de1", "de2", "de3", "de4"], en: [] }, suggestedAt: null };
-    expect(applyHashtagPolicy(["#a", "#b", "#c"], pools, "instagram", "de")).toEqual(["#a", "#b", "#c", "#marke", "#de1", "#de2"]);
+    expect(applyHashtagPolicy(["#a", "#b", "#c"], pools, "instagram", "de")).toEqual(["#a", "#b", "#c"]);
+    expect(applyHashtagPolicy(["#a"], pools, "instagram", "de")).toEqual(["#a", "#marke", "#de1"]);
     expect(applyHashtagPolicy(["#a", "#b", "#c", "#d"], pools, "linkedin", "de")).toEqual(["#a", "#b"]);
     expect(applyHashtagPolicy(["#a"], pools, "pinterest", "de")).toEqual([]);
     // doppelte und leere Eingaben fliegen raus
@@ -210,9 +238,11 @@ describe("Daten-Bündel", () => {
     expect(by("tiktok").meta["size"]).toBe("1080x1920");
     expect(by("pinterest").meta["size"]).toBe("1000x1500");
 
-    // Instagram: 3 Vorschlaege, aufgefuellt auf das Minimum von 6.
-    expect((by("instagram").meta["hashtags"] as string[]).length).toBe(6);
-    expect((by("tiktok").meta["hashtags"] as string[]).length).toBe(6);
+    // Instagram und TikTok: drei bis fünf. Drei Vorschläge reichen dem Minimum,
+    // es wird also nichts aus dem Vorrat aufgefüllt.
+    expect((by("instagram").meta["hashtags"] as string[]).length).toBe(3);
+    // TikTok schlägt mehr vor und wird auf das Maximum von fünf gestutzt.
+    expect((by("tiktok").meta["hashtags"] as string[]).length).toBe(5);
     expect(by("pinterest").meta["hashtags"]).toEqual([]);
     expect((by("linkedin").meta["hashtags"] as string[]).length).toBe(2);
     // Die Tags stehen im Text, nicht nur in den Metadaten.
