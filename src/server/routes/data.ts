@@ -22,9 +22,10 @@ const PreviewQuery = z.object({
   kind: z.enum(["top", "movers"]).default("top"),
   set: z.string().optional(),
   era: z.string().optional(),
+  illustrator: z.string().optional(),
   region: z.enum(["intl", "jp"]).default("intl"),
   n: z.coerce.number().int().min(1).max(50).default(15),
-  basis: z.enum(["max", "normal", "holo"]).default("max"),
+  basis: z.enum(["max", "normal", "holo", "avg30"]).default("max"),
   minPrice: z.coerce.number().min(0).optional(),
   days: z.coerce.number().int().refine((v) => v === 7 || v === 30, "days muss 7 oder 30 sein").default(7),
   direction: z.enum(["up", "down"]).default("up"),
@@ -77,9 +78,9 @@ export function dataRoutes(app: FastifyInstance, db: Db, env: Env): void {
         return { kind: "movers" as const, cards: res.cards, scopeLabel: res.scopeLabel, scopeLabelEn: "", totalEur: 0,
           priceStand: res.priceStand, coverage: null, withHistory: res.withHistory, tookMs: Date.now() - started };
       }
-      if (!q.set && !q.era) return reply.code(400).send({ detail: "Bereich fehlt: set oder era angeben." });
+      if (!q.set && !q.era && !q.illustrator) return reply.code(400).send({ detail: "Bereich fehlt: set, era oder illustrator angeben." });
       const res = await provider.topCards({
-        scope: { ...(q.set ? { set: q.set } : {}), ...(q.era ? { era: q.era } : {}), region: q.region },
+        scope: { ...(q.set ? { set: q.set } : {}), ...(q.era ? { era: q.era } : {}), ...(q.illustrator ? { illustrator: q.illustrator } : {}), region: q.region },
         n: q.n, priceBasis: q.basis, ...(q.minPrice !== undefined ? { minPrice: q.minPrice } : {}),
       });
       return { kind: "top" as const, cards: res.cards, scopeLabel: res.scopeLabel, scopeLabelEn: res.scopeLabelEn,
