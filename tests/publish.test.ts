@@ -115,6 +115,34 @@ describe("Was auf welcher Plattform erlaubt ist", () => {
   });
 });
 
+describe("Facebook-Seite", () => {
+  it("hängt mehrere Bilder als ein Beitrag zusammen statt nur das erste zu posten", async () => {
+    const { facebookPoster } = await import("../src/server/publish/posters.js");
+    const rufe: { url: string; body: string }[] = [];
+    let n = 0;
+    const impl = (async (url: string | URL, init?: RequestInit) => {
+      const u = String(url);
+      rufe.push({ url: u, body: String(init?.body ?? "") });
+      n += 1;
+      return new Response(JSON.stringify({ id: u.includes("/feed") ? "post-1" : `foto-${n}` }),
+        { status: 200, headers: { "content-type": "application/json" } });
+    }) as unknown as typeof fetch;
+    const bild = (k: string) => ({ path: `/${k}.png`, url: `https://x/${k}`, mime: "image/png", alt: "", kind: "image" as const });
+    const res = await facebookPoster.post({
+      platform: "facebook", text: "Top 8", title: "Top 8", link: null,
+      creds: { pageId: "1", accessToken: "t" }, fetchImpl: impl,
+      assets: [bild("cover"), bild("a"), bild("cta")],
+    });
+    expect(res.ref).toBe("post-1");
+    // Drei Uploads unveröffentlicht, dann ein Beitrag, der sie zusammenfasst.
+    expect(rufe.filter((r) => r.url.includes("/photos"))).toHaveLength(3);
+    expect(rufe.every((r) => !r.url.includes("/photos") || r.body.includes("published=false"))).toBe(true);
+    const feed = rufe.find((r) => r.url.includes("/feed"))!;
+    expect(feed.body).toContain("attached_media");
+    expect(feed.body).toContain("foto-1");
+  }, 30_000);
+});
+
 describe("Bilder-Limit der Plattform", () => {
   it("kürzt in der Mitte — Deckseite und Auflösung bleiben", async () => {
     const { aufLimit } = await import("../src/server/publish/posters.js");

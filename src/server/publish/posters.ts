@@ -249,6 +249,15 @@ export const instagramPoster: PlatformPoster = {
   },
 };
 
+/**
+ * Die Facebook-Seite. Mehrere Bilder brauchen zwei Schritte.
+ *
+ * `/photos` veröffentlicht **ein** Foto — mehr kennt der Endpunkt nicht. Ein
+ * Beitrag mit allen Slides entsteht anders: jedes Foto zuerst unveröffentlicht
+ * hochladen (`published=false`), dann die IDs über `attached_media` an einen
+ * Beitrag auf `/feed` hängen. Ohne diesen Umweg käme von einem Carousel nur die
+ * Deckseite an.
+ */
 export const facebookPoster: PlatformPoster = {
   platform: "facebook",
   missing: (c) => need(c, ["pageId", "accessToken"]),
@@ -256,7 +265,23 @@ export const facebookPoster: PlatformPoster = {
     const f = i.fetchImpl ?? fetch;
     const page = i.creds["pageId"]!;
     const token = i.creds["accessToken"]!;
-    const pic = i.assets.find((a) => a.kind === "image" && a.url);
+    const bilder = aufLimit(i.assets.filter((a) => a.kind === "image" && a.url), 10, i.log);
+
+    if (bilder.length > 1) {
+      const ids: string[] = [];
+      for (const b of bilder) {
+        const out = await json<{ id: string }>(await call(f, `${GRAPH}/${page}/photos`, {
+          method: "POST", body: new URLSearchParams({ url: b.url, published: "false", access_token: token }),
+        }, "Facebook-Upload"));
+        ids.push(out.id);
+      }
+      const body = new URLSearchParams({ message: i.text.slice(0, 2000), access_token: token });
+      ids.forEach((id, n) => body.set(`attached_media[${n}]`, JSON.stringify({ media_fbid: id })));
+      const out = await json<{ id: string }>(await call(f, `${GRAPH}/${page}/feed`, { method: "POST", body }, "Facebook-Album"));
+      return { ref: out.id, externalUrl: `https://www.facebook.com/${out.id}` };
+    }
+
+    const pic = bilder[0];
     if (pic) {
       const out = await json<{ post_id?: string; id: string }>(await call(f, `${GRAPH}/${page}/photos`, {
         method: "POST", body: new URLSearchParams({ url: pic.url, caption: i.text.slice(0, 2000), access_token: token }),
