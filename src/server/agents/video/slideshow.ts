@@ -438,13 +438,14 @@ export const renderSlideshowJob: JobHandler<VideoContext> = async (ctx, job, pro
 
   // 4. Assets: das Reel ersetzt die Slides am Stück; alle Bündel-Mitglieder zeigen auf dieselbe Datei
   const assetIds = await step("assets", async () => {
+    // Alte Reel-Assets dieses Stücks weg — aber nur die Zeilen, nicht die Datei:
+    // beim Neu-Rendern liegt die frische MP4 unter genau demselben Pfad, und ein
+    // unlink hier löschte sie wieder, kaum dass sie geschrieben war. Das
+    // Vorschaubild wird unten ohnehin neu kopiert.
     for (const a of ctx.db.select().from(t.mpAssets).where(eq(t.mpAssets.contentPieceId, pieceId)).all()) {
       if (a.kind !== "render" && a.kind !== "image") continue;
       const rel = path.relative(ctx.dataDir, video.file);
-      if (a.path === rel || a.path.endsWith("reel-thumb.png")) {
-        try { fs.unlinkSync(path.join(ctx.dataDir, a.path)); } catch { /* weg */ }
-        ctx.db.delete(t.mpAssets).where(eq(t.mpAssets.id, a.id)).run();
-      }
+      if (a.path === rel || a.path.endsWith("reel-thumb.png")) ctx.db.delete(t.mpAssets).where(eq(t.mpAssets.id, a.id)).run();
     }
     const ts = nowIso();
     const addAsset = (kind: s.Asset["kind"], file: string, m: Record<string, unknown>) => {
