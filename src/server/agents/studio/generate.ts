@@ -18,7 +18,7 @@ import { currentVersion } from "../strategy/plan.js";
 import { loadBrandKit, type BrandExtractor } from "./brandkit.js";
 import { voiceBlock } from "./voice.js";
 import { reviseWithCritic } from "./critic.js";
-import { carouselSlideHtml, dataUrlFor, framedScreenshotHtml, pinHtml, playwrightRenderer, rankingCtaHtml, showcaseCoverHtml, showcaseSlideHtml, type RenderJob, type Renderer } from "./render.js";
+import { carouselSlideHtml, dataUrlFor, framedScreenshotHtml, pinHtml, playwrightRenderer, rankingCtaHtml, showcaseCoverHtml, showcaseSlideHtml, type RenderJob, type Renderer, binderCtaHtml, binderExplainerCoverHtml, binderExplainerSlideHtml, type BinderChrome } from "./render.js";
 import { clearBundle, generateDataBundle, generateStoryFor, type DataBase, writeBundlePieces } from "./data-content.js";
 import { generateShowcaseBundle } from "./showcase.js";
 import { buildUtmUrl, deepLinkFor, PLATFORM_LIMITS, platformFromChannel, slugify } from "../../util/utm.js";
@@ -31,6 +31,7 @@ import { pieceCosts, writeAudit } from "../../audit.js";
 import { enqueueJob, hasActiveJob, workerAlive } from "../../jobs.js";
 import { renderOptionsFromMeta, VIDEO_STEPS } from "../video/pipeline.js";
 import { SLIDESHOW_STEPS } from "../video/slideshow.js";
+import { loadSlideSettings } from "../../slide-settings.js";
 import type { HostUser } from "../../../host-adapter.js";
 
 export interface StudioContext extends AgentContext {
@@ -235,8 +236,10 @@ function linkTask(db: Db, taskId: string, pieceId: string): void {
  */
 export interface ExplainerSpec {
   title: string; coverTitle: string; hook: string; ctaLine: string; trustLine: string;
-  /** Je Slide ein Produktbild aus dem Projekt (`meta.produktbild`) plus Text. */
-  slides: { headline: string; sub: string; rang: number }[];
+  /** Deckseite: bis zu drei Aussagen und ein eigenes Bild — sie wird am häufigsten allein gesehen. */
+  coverClaims: string[]; coverAssetId?: string | undefined;
+  /** Je Slide ein Produktbild nach Rang (`meta.produktbild`) oder ein beliebiges Projekt-Asset, plus Text. */
+  slides: { headline: string; sub: string; rang: number; assetId?: string | undefined }[];
   captions: { platform: string; caption: string; hashtags: string[] }[];
   platforms: string[];
 }
@@ -249,13 +252,36 @@ export async function addExplainerPost(ctx: StudioContext, projectId: string, sp
   const brand = base.brief.productName;
 
   const bilder = new Map<number, string>();
-  for (const a of ctx.db.select().from(t.mpAssets).where(eq(t.mpAssets.projectId, projectId)).all()) {
+  const produktBilder: { url: string; label: string }[] = [];
+  const alleAssets = ctx.db.select().from(t.mpAssets).where(eq(t.mpAssets.projectId, projectId)).all();
+  for (const a of alleAssets) {
     const m = parseJson<Record<string, unknown>>(a.meta, {});
     if (m["produktbild"] !== true) continue;
     const url = dataUrlFor(path.join(ctx.dataDir, a.path));
-    if (url) bilder.set(Number(m["rang"] ?? 0), url);
+    if (url) { bilder.set(Number(m["rang"] ?? 0), url); produktBilder.push({ url, label: String(m["label"] ?? "") }); }
   }
   if (!bilder.size) throw err("Keine Produktbilder im Projekt — erst welche mit `produktbild` hinterlegen.", 400);
+  /** Ein beliebiges Projekt-Asset als Bild — Artwork-Seite, Screenshot, Druckbogen. */
+  const assetBild = (id: string | undefined): string | null => {
+    if (!id) return null;
+    const a = alleAssets.find((x) => x.id === id);
+    if (!a) throw err(`Asset ${id} gehört nicht zu diesem Projekt.`, 400);
+    return dataUrlFor(path.join(ctx.dataDir, a.path));
+  };
+  const ratioOf = (id: string | undefined): string | undefined => {
+    const a = id ? alleAssets.find((x) => x.id === id) : undefined;
+    const m = a ? parseJson<Record<string, unknown>>(a.meta, {}) : {};
+    return typeof m["ratio"] === "string" ? m["ratio"] : undefined;
+  };
+
+  // Binderseiten-Stil, wenn das Projekt darauf steht — dieselbe Sprache wie die
+  // Daten-Beiträge, damit das Profil aus einem Guss ist.
+  const slideSettings = loadSlideSettings(ctx.db, projectId);
+  const binder = slideSettings.layout === "binder";
+  const anzeigeDomain = slideSettings.linkDomain || domain;
+  const logoAsset = base.kit.logoAssetId ? alleAssets.find((x) => x.id === base.kit.logoAssetId) : undefined;
+  const chrome = (corner: string): BinderChrome => ({ brand, footer: anzeigeDomain, logoDataUrl: logoAsset ? dataUrlFor(path.join(ctx.dataDir, logoAsset.path)) : null, corner });
+  const gesamt = spec.slides.length + 2;
 
   const leadId = newId();
   insertPlaceholder(ctx.db, projectId, leadId, s.ContentRequest.parse({ format: "carousel", platform: spec.platforms[0] ?? "instagram" }), null);
@@ -264,24 +290,32 @@ export async function addExplainerPost(ctx: StudioContext, projectId: string, sp
   const jobs = [];
   const cover = path.join(outDir, "de-1080x1350-00-cover.png");
   jobs.push({
-    html: showcaseCoverHtml(base.kit, { title: spec.coverTitle, stats: spec.hook, imageDataUrl: bilder.get(0) ?? null }, 1080, 1350, brand, footer),
+    html: binder
+      ? binderExplainerCoverHtml(base.kit, { title: spec.coverTitle, claims: spec.coverClaims, imageDataUrl: assetBild(spec.coverAssetId) ?? bilder.get(0) ?? null, hint: "Link in Bio" }, 1080, 1350, chrome(spec.hook || "Binderplan"))
+      : showcaseCoverHtml(base.kit, { title: spec.coverTitle, stats: spec.hook, imageDataUrl: bilder.get(0) ?? null }, 1080, 1350, brand, footer),
     width: 1080, height: 1350, file: cover,
   });
   dateien.push(cover);
   spec.slides.forEach((sl, i) => {
     const datei = path.join(outDir, `de-1080x1350-${String(i + 1).padStart(2, "0")}-schritt.png`);
+    const bild = assetBild(sl.assetId) ?? bilder.get(sl.rang) ?? null;
+    const ratio = ratioOf(sl.assetId);
     jobs.push({
-      html: showcaseSlideHtml(base.kit, { headline: sl.headline, sub: sl.sub, imageDataUrl: bilder.get(sl.rang) ?? null }, 1080, 1350, brand, footer),
+      html: binder
+        ? binderExplainerSlideHtml(base.kit, { headline: sl.headline, sub: sl.sub, imageDataUrl: bild, ...(ratio ? { ratio } : {}) }, 1080, 1350, chrome(`${i + 2} / ${gesamt}`))
+        : showcaseSlideHtml(base.kit, { headline: sl.headline, sub: sl.sub, imageDataUrl: bild }, 1080, 1350, brand, footer),
       width: 1080, height: 1350, file: datei,
     });
     dateien.push(datei);
   });
   const cta = path.join(outDir, "de-1080x1350-99-cta.png");
   jobs.push({
-    html: rankingCtaHtml(base.kit, {
-      line: spec.ctaLine, linkLabel: "Link in Bio", imageDataUrl: null, trustLine: spec.trustLine,
-      productImages: [...bilder.entries()].sort((a, b) => a[0] - b[0]).map(([, url]) => ({ url, label: "" })),
-    }, 1080, 1350, brand, footer),
+    html: binder
+      ? binderCtaHtml(base.kit, { line: spec.ctaLine, trustLine: spec.trustLine, linkLabel: "Link in Bio", productImages: produktBilder }, 1080, 1350, chrome(`${gesamt} / ${gesamt}`))
+      : rankingCtaHtml(base.kit, {
+        line: spec.ctaLine, linkLabel: "Link in Bio", imageDataUrl: null, trustLine: spec.trustLine,
+        productImages: [...bilder.entries()].sort((a, b) => a[0] - b[0]).map(([, url]) => ({ url, label: "" })),
+      }, 1080, 1350, brand, footer),
     width: 1080, height: 1350, file: cta,
   });
   dateien.push(cta);

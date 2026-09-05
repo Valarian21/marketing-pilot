@@ -910,9 +910,21 @@ export const ExplainerRequest = z.object({
   title: z.string().min(1),
   coverTitle: z.string().min(1),
   hook: z.string().default(""),
+  /**
+   * Deckseite eines angehefteten Beitrags: sie wird am häufigsten allein
+   * gesehen, deshalb trägt sie bis zu drei Aussagen und ein eigenes Bild.
+   */
+  coverClaims: z.array(z.string()).max(3).default([]),
+  coverAssetId: Id.optional(),
   ctaLine: z.string().default(""),
   trustLine: z.string().default(""),
-  slides: z.array(z.object({ headline: z.string(), sub: z.string().default(""), rang: z.number().int().min(0).max(9) })).min(1).max(6),
+  slides: z.array(z.object({
+    headline: z.string(), sub: z.string().default(""),
+    /** Produktbild nach Rang (alt) … */
+    rang: z.number().int().min(0).max(9).default(0),
+    /** … oder ein beliebiges Projekt-Asset (Artwork-Seite, Screenshot, Druckbogen). */
+    assetId: Id.optional(),
+  })).min(1).max(6),
   captions: z.array(z.object({ platform: z.string(), caption: z.string(), hashtags: z.array(z.string()).default([]) })).min(1),
   platforms: z.array(z.string()).min(1),
 });
