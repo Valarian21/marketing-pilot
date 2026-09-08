@@ -208,12 +208,12 @@ Deliverables:
 - "hook": ONE spoken sentence for the first 1.5 seconds of a video, max 90 chars, may quote the number of rank 1.
 - "ctaLine": ONE sentence for the last slide, max 90 chars, says what the reader does next with ${input.brief.productName}.
 - "captions": one entry per platform below. Each caption stands alone, opens with something worth stopping for, and never lists all ${input.cards.length} cards (that is what the slides are for).
-${input.platforms.map((p) => `  - ${p.platform}: max ${p.limit} chars, ${p.policy.max === 0 ? "NO hashtags" : `${p.policy.min || 1}-${p.policy.max} hashtags`}, ${p.linkRule === "bio" ? 'no link in the text - point to "Link in Bio" if a link is needed' : "a link may go into the text"}. ${p.policy.note}`).join("\n")}
+${input.platforms.map((p) => `  - ${p.platform}: target under ${p.limit} chars WITHOUT hashtags (the hard platform limit is higher - do not use it), ${p.policy.max === 0 ? "NO hashtags" : `${p.policy.min || 1}-${p.policy.max} hashtags`}, ${p.linkRule === "bio" ? 'no link in the text - point to "Link in Bio" if a link is needed' : "a link may go into the text"}. ${p.policy.note}`).join("\n")}
 - Hashtags come from these pools where they fit; add specific niche tags when a pool is thin. Lowercase, no duplicates, no generic filler (#love #follow).
 ${pools}
 ${input.kind === "guess" ? `- THIS IS A QUIZ: every card appears twice — first without its price, then revealed. The caption must ask the reader to guess before swiping on, and must NOT give away the prices. Mention at most the range.` : ""}
 - Every caption must contain, once, the disclosure "${de ? "Kein offizielles Pokémon-Produkt." : "Not affiliated with Nintendo or The Pokémon Company."}" — as its own short sentence near the end, before the hashtags.
-${writingRules({ language: input.language, voiceProfile: input.voiceProfile })}
+${writingRules({ language: input.language, voiceProfile: input.voiceProfile, caption: true })}
 Return JSON: {"title","coverTitle","hook","ctaLine","captions":[{"platform","caption","hashtags":["#tag"]}]}` },
     { role: "user", content: `SCOPE: ${input.scopeLabel} (${input.kind === "top" ? "most expensive cards" : input.kind === "movers" ? "biggest price moves" : "price quiz: each card is shown without its price first, the next slide reveals it"})
 TOTAL VALUE OF THE LIST: ${input.totalLabel}
@@ -287,11 +287,11 @@ Deliverables:
 - "hook": ONE spoken sentence for the first seconds of a video, max 90 chars.
 - "ctaLine": ONE sentence for the last slide, max 90 chars — what the reader does next.
 - "captions": one entry per platform below, each standing on its own.
-${input.platforms.map((p) => `  - ${p.platform}: max ${p.limit} chars, ${p.policy.max === 0 ? "NO hashtags" : `${p.policy.min || 1}-${p.policy.max} hashtags`}, ${p.linkRule === "bio" ? 'no link in the text - point to "Link in Bio"' : "a link may go into the text"}. ${p.policy.note}`).join("\n")}
+${input.platforms.map((p) => `  - ${p.platform}: target under ${p.limit} chars WITHOUT hashtags (the hard platform limit is higher - do not use it), ${p.policy.max === 0 ? "NO hashtags" : `${p.policy.min || 1}-${p.policy.max} hashtags`}, ${p.linkRule === "bio" ? 'no link in the text - point to "Link in Bio"' : "a link may go into the text"}. ${p.policy.note}`).join("\n")}
 - Hashtags from these pools where they fit, plus specific niche tags. Lowercase, no duplicates.
 ${pools}
 - Every caption contains, once, the disclosure "${de ? "Kein offizielles Pokémon-Produkt." : "Not affiliated with Nintendo or The Pokémon Company."}" as its own short sentence before the hashtags.
-${writingRules({ language: input.language, voiceProfile: input.voiceProfile })}
+${writingRules({ language: input.language, voiceProfile: input.voiceProfile, caption: true })}
 Return JSON: {"title","coverTitle","hook","ctaLine","captions":[{"platform","caption","hashtags":["#tag"]}]}` },
     { role: "user", content: `BINDER: ${input.binderName}
 PAGES SHOWN: ${input.pages}
@@ -363,11 +363,11 @@ Deliverables:
 - "hook": ONE spoken sentence for the first seconds of a video, max 90 chars.
 - "ctaLine": ONE sentence for the last slide, max 90 chars. Two things are on offer and both are worth naming: make your own art page, or take one another collector already published. Invite, do not describe.
 - "captions": one entry per platform below, each standing on its own.
-${input.platforms.map((p) => `  - ${p.platform}: max ${p.limit} chars, ${p.policy.max === 0 ? "NO hashtags" : `${p.policy.min || 1}-${p.policy.max} hashtags`}, ${p.linkRule === "bio" ? 'no link in the text - point to "Link in Bio"' : "a link may go into the text"}. ${p.policy.note}`).join("\n")}
+${input.platforms.map((p) => `  - ${p.platform}: target under ${p.limit} chars WITHOUT hashtags (the hard platform limit is higher - do not use it), ${p.policy.max === 0 ? "NO hashtags" : `${p.policy.min || 1}-${p.policy.max} hashtags`}, ${p.linkRule === "bio" ? 'no link in the text - point to "Link in Bio"' : "a link may go into the text"}. ${p.policy.note}`).join("\n")}
 - Hashtags from these pools where they fit, plus specific niche tags. Lowercase, no duplicates.
 ${pools}
 - Every caption contains, once, the disclosure "${de ? "Kein offizielles Pokémon-Produkt. Die Seite ist KI-erzeugt." : "Not affiliated with Nintendo or The Pokémon Company. The page is AI-generated."}" as its own short sentence before the hashtags.
-${writingRules({ language: input.language, voiceProfile: input.voiceProfile })}
+${writingRules({ language: input.language, voiceProfile: input.voiceProfile, caption: true })}
 Return JSON: {"title","coverTitle","claims":["..."],"hook","ctaLine","captions":[{"platform","caption","hashtags":["#tag"]}]}` },
     { role: "user", content: `ART PAGE: ${input.titel}
 STYLE PRESET: ${input.stil || "-"}

@@ -29,7 +29,7 @@ import { newId, type Db } from "../../db/index.js";
 import { modelFor } from "../../../../config/models.js";
 import { chatJson, type UsageCollector } from "../runner.js";
 import { artworkPrompt, rahmungsRewritePrompt } from "../prompts/studio.js";
-import { hashtagPolicy, linkRuleFor } from "../../../shared/channels.js";
+import { captionZiel, hashtagPolicy, linkRuleFor } from "../../../shared/channels.js";
 import { PLATFORM_LIMITS } from "../../util/utm.js";
 import { loadHashtags } from "../../hashtags.js";
 import {
@@ -211,7 +211,7 @@ export async function generateArtworkBundle(
     brief: base.brief, ...(base.personas[0] ? { persona: base.personas[0] } : {}), voiceProfile: base.voice, language: lang,
     titel: page.titel, stil: page.stil, bildFaecher: bilder, gesamtFaecher: gesamt,
     karten: echt.map((x) => x.name), stile: [...ARTWORK_STILE],
-    platforms: platforms.map((p) => ({ platform: p, limit: PLATFORM_LIMITS[p] ?? 2000, policy: hashtagPolicy(p), linkRule: linkRuleFor(p) })),
+    platforms: platforms.map((p) => ({ platform: p, limit: captionZiel(p), policy: hashtagPolicy(p), linkRule: linkRuleFor(p) })),
     pools: loadHashtags(ctx.db, base.project.id), topic: req.topic, hint: req.hint,
   }), usage, { maxTokens: 3000, temperature: 0.6 });
 
@@ -360,7 +360,7 @@ export async function generateArtworkBundle(
   const leadCaption = captionOf(leadPlatform) || out.captions[0]?.caption.trim() || coverTitle;
   const rev = await reviseWithCritic(ctx, usage, {
     body: leadCaption, language: lang, voiceProfile: base.voice, format: opts.reel ? "artwork_reel" : "artwork_carousel",
-    platform: leadPlatform, limit: PLATFORM_LIMITS[leadPlatform] ?? 2000, maxRounds: 2,
+    platform: leadPlatform, limit: PLATFORM_LIMITS[leadPlatform] ?? 2000, target: captionZiel(leadPlatform), maxRounds: 2,
   });
 
   /**

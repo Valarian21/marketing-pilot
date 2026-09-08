@@ -14,7 +14,7 @@ import { newId, type Db } from "../../db/index.js";
 import { modelFor } from "../../../../config/models.js";
 import { chatJson, type UsageCollector } from "../runner.js";
 import { showcasePrompt } from "../prompts/studio.js";
-import { hashtagPolicy, linkRuleFor } from "../../../shared/channels.js";
+import { captionZiel, hashtagPolicy, linkRuleFor } from "../../../shared/channels.js";
 import { PLATFORM_LIMITS } from "../../util/utm.js";
 import { loadHashtags } from "../../hashtags.js";
 import { dataFooterText, dataUrlFor, rankingCtaHtml, showcaseCoverHtml, showcaseSlideHtml, type RenderJob } from "./render.js";
@@ -74,7 +74,7 @@ export async function generateShowcaseBundle(
   const out = await chatJson(ctx.llm, modelFor("content"), Out, showcasePrompt({
     brief: base.brief, ...(base.personas[0] ? { persona: base.personas[0] } : {}), voiceProfile: base.voice, language: lang,
     binderName: capture.name, stats: capture.stats, pages: capture.pages.length,
-    platforms: platforms.map((p) => ({ platform: p, limit: PLATFORM_LIMITS[p] ?? 2000, policy: hashtagPolicy(p), linkRule: linkRuleFor(p) })),
+    platforms: platforms.map((p) => ({ platform: p, limit: captionZiel(p), policy: hashtagPolicy(p), linkRule: linkRuleFor(p) })),
     pools: loadHashtags(ctx.db, base.project.id), topic: req.topic, hint: req.hint,
   }), usage, { maxTokens: 3000, temperature: 0.6 });
 
@@ -125,7 +125,7 @@ export async function generateShowcaseBundle(
   // --- Captions --------------------------------------------------------------
   const captionOf = (platform: string) => out.captions.find((c) => c.platform.trim().toLowerCase() === platform)?.caption.trim() ?? "";
   const leadCaption = captionOf(leadPlatform) || out.captions[0]?.caption.trim() || coverTitle;
-  const rev = await reviseWithCritic(ctx, usage, { body: leadCaption, language: lang, voiceProfile: base.voice, format: "showcase_carousel", platform: leadPlatform, limit: PLATFORM_LIMITS[leadPlatform] ?? 2000, maxRounds: 2 });
+  const rev = await reviseWithCritic(ctx, usage, { body: leadCaption, language: lang, voiceProfile: base.voice, format: "showcase_carousel", platform: leadPlatform, limit: PLATFORM_LIMITS[leadPlatform] ?? 2000, target: captionZiel(leadPlatform), maxRounds: 2 });
 
   const notes = [rev.notes];
   if (capture.pages.length < capture.totalPages) notes.push(`${capture.pages.length} von ${capture.totalPages} Binderseiten gezeigt.`);

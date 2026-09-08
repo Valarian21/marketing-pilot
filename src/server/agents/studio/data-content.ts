@@ -20,7 +20,7 @@ import { newId, nowIso, parseJson, toJson, type Db } from "../../db/index.js";
 import { modelFor } from "../../../../config/models.js";
 import { chatJson, withRun, type UsageCollector } from "../runner.js";
 import { dataContentPrompt, hashtagPoolPrompt } from "../prompts/studio.js";
-import { hashtagPolicy, linkRuleFor, mediaLimitFor } from "../../../shared/channels.js";
+import { captionZiel, hashtagPolicy, linkRuleFor, mediaLimitFor } from "../../../shared/channels.js";
 import { PLATFORM_LIMITS } from "../../util/utm.js";
 import { applyHashtagPolicy, loadHashtags, saveHashtags } from "../../hashtags.js";
 import { createProductDataProvider } from "../../data-source.js";
@@ -315,7 +315,7 @@ export async function generateDataBundle(
       ...("changePct" in x.card ? { change: changeLabel(x.card as PriceMover, lang) } : {}),
     })),
     totalLabel: fmtEur(data.totalEur, lang), priceStand: fmtDate(data.priceStand, lang),
-    platforms: platforms.map((p) => ({ platform: p, limit: PLATFORM_LIMITS[p] ?? 2000, policy: hashtagPolicy(p), linkRule: linkRuleFor(p) })),
+    platforms: platforms.map((p) => ({ platform: p, limit: captionZiel(p), policy: hashtagPolicy(p), linkRule: linkRuleFor(p) })),
     pools: loadHashtags(ctx.db, base.project.id), topic: req.topic, hint: req.hint,
   }), usage, { maxTokens: 3000, temperature: 0.6 });
 
@@ -498,7 +498,7 @@ export async function generateDataBundle(
   // KI-Spuren und wuerde an einem menschlichen Text nur herumschleifen.
   const rev = req.manualText
     ? { body: leadCaption, score: null, notes: "Texte von Hand geschrieben — kein Modellaufruf, keine AI-Tell-Prüfung." }
-    : await reviseWithCritic(ctx, usage, { body: leadCaption, language: lang, voiceProfile: base.voice, format, platform: leadPlatform, limit: PLATFORM_LIMITS[leadPlatform] ?? 2000, maxRounds: 2 });
+    : await reviseWithCritic(ctx, usage, { body: leadCaption, language: lang, voiceProfile: base.voice, format, platform: leadPlatform, limit: PLATFORM_LIMITS[leadPlatform] ?? 2000, target: captionZiel(leadPlatform), maxRounds: 2 });
 
   const notes = [rev.notes];
   if (data.skipped.length) notes.push(`Ohne ladbares Bild übersprungen (${data.skipped.length}): ${data.skipped.join(", ")}. Die Rangfolge ist die der veröffentlichten Liste.`);

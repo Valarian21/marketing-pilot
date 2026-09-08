@@ -209,6 +209,32 @@ export const HASHTAG_POLICY: Record<string, HashtagPolicy> = {
 
 export const DEFAULT_HASHTAG_POLICY: HashtagPolicy = { min: 0, max: 2, note: "Höchstens zwei." };
 
+/**
+ * Wie lang eine Bildunterschrift **sein soll** — nicht, wie lang sie sein darf.
+ *
+ * `PLATFORM_LIMITS` sind die harten Grenzen der Plattformen (Instagram 2 200).
+ * Bis zum 08.09.2026 bekam das Modell genau diese Zahl als Ziel und schrieb
+ * 500 bis 1 300 Zeichen — Texte, die in der Instagram-Beschreibung niemand
+ * aufklappt. Was gelesen wird: die erste Zeile vor „mehr", dann zwei, drei
+ * kurze Zeilen. Diese Zahlen gelten **ohne** Hashtags.
+ */
+export const CAPTION_ZIEL: Record<string, number> = {
+  instagram: 280,
+  facebook: 220,
+  tiktok: 140,
+  threads: 280,
+  pinterest: 300,
+  x: 240,
+  bluesky: 250,
+  linkedin: 600,
+  mastodon: 300,
+  telegram: 400,
+};
+export const DEFAULT_CAPTION_ZIEL = 280;
+export const captionZiel = (platform: string): number => CAPTION_ZIEL[platform.trim().toLowerCase()] ?? DEFAULT_CAPTION_ZIEL;
+/** Die erste Zeile ist alles, was ohne Antippen sichtbar ist. */
+export const HOOK_ZEICHEN = 60;
+
 export function hashtagPolicy(platform: string): HashtagPolicy {
   return HASHTAG_POLICY[platform.trim().toLowerCase()] ?? DEFAULT_HASHTAG_POLICY;
 }
