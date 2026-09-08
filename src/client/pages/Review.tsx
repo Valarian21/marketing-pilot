@@ -13,6 +13,12 @@ import { ReviseBox, fmtUsd } from "../components/Revise.js";
 import { useProfiles } from "../components/ChannelLink.js";
 import { STAGES, stageAtLeast } from "../../shared/channels.js";
 
+/**
+ * Kurzes Format-Etikett vor dem Titel in der Schlange. Ohne das war ein Reel
+ * von einem Carousel nicht zu unterscheiden — die Titel sind dieselben.
+ */
+const FORMAT_KURZ: Record<string, string> = { data_reel: "Reel", artwork_reel: "Reel", artwork_carousel: "Kunstseite", data_carousel: "Rangliste", showcase_carousel: "Binder", story: "Story" };
+
 const STATUS: Record<ContentPiece["status"], { label: string; kind: PillKind }> = { draft: { label: "Entwurf", kind: "todo" }, review: { label: "in Freigabe", kind: "review" }, approved: { label: "freigegeben", kind: "done" }, published: { label: "veröffentlicht", kind: "done" }, rejected: { label: "abgelehnt", kind: "kind" } };
 
 export function ReviewPage() {
@@ -149,7 +155,7 @@ export function ReviewPage() {
           <aside>
             <Card>
               <div className="mp-card-head"><h2>Warteschlange</h2><button type="button" className="mp-linkbtn mp-small" onClick={() => setShowAll((v) => !v)}>{showAll ? "nur offene" : "alle anzeigen"}</button></div>
-              <ul className="mp-queue">{(showAll ? pieces : queue).map((p) => <li key={p.id} className={p.id === current.id ? "is-current" : ""}><button type="button" className="mp-linkbtn" onClick={() => go(p)}>{p.title || p.format}</button><Pill kind={STATUS[p.status].kind}>{STATUS[p.status].label}</Pill></li>)}</ul>
+              <ul className="mp-queue">{(showAll ? pieces : queue).map((p) => <li key={p.id} className={p.id === current.id ? "is-current" : ""}><button type="button" className="mp-linkbtn" onClick={() => go(p)}>{FORMAT_KURZ[p.format] && <span className="mp-format-tag">{FORMAT_KURZ[p.format]}</span>}{p.title || p.format}</button><Pill kind={STATUS[p.status].kind}>{STATUS[p.status].label}</Pill></li>)}</ul>
             </Card>
           </aside>
         </div>
@@ -172,6 +178,39 @@ function Preview({ piece, text }: { piece: ContentPiece; text: string }) {
           {plan && <> · {(plan.totalMs / 1000).toFixed(0)} s, {plan.secondsPerCard.toFixed(1)} s je Karte{plan.dropped.length > 0 && ` (${plan.dropped.length} gekappt)`}</>}
           {" · "}{String(piece.meta["footer"] ?? "")}
         </p>
+        <div className="mp-post"><p>{text}</p></div>
+      </div>
+    );
+  }
+  /**
+   * Kunstseiten-Reel: die MP4 aus dem Paket, darunter Seite und echte Karten.
+   * Ohne diesen Zweig fiel das Stück auf die Text-Vorschau zurück — das Reel
+   * stand in der Schlange und war doch unsichtbar.
+   */
+  if (piece.format === "artwork_reel") {
+    const art = (piece.meta["artwork"] ?? {}) as { titel?: string; stil?: string; karten?: { name: string }[]; bildFaecher?: number; gesamtFaecher?: number };
+    const segs = Array.isArray(piece.meta["reelSegments"]) ? (piece.meta["reelSegments"] as { ms: number }[]) : [];
+    const sek = segs.reduce((n, x) => n + x.ms, 0) / 1000;
+    return (
+      <div className="mp-preview">
+        <VideoGallery piece={piece} />
+        <p className="mp-small mp-muted">
+          Kunstseite „{art.titel ?? String(piece.meta["scopeLabel"] ?? "")}“ · Stil {art.stil ?? "–"} · {(art.karten ?? []).map((k) => k.name).filter(Boolean).join(", ") || "–"} echt
+          {sek > 0 && <> · {sek.toFixed(1)} s, {segs.length} Slides</>}
+        </p>
+        <div className="mp-post"><p>{text}</p></div>
+      </div>
+    );
+  }
+  if (piece.format === "artwork_carousel") {
+    const art = (piece.meta["artwork"] ?? {}) as { titel?: string; stil?: string; karten?: { name: string }[] };
+    const karten = (art.karten ?? []).map((k) => k.name);
+    // Reihenfolge wie gerendert: Deckseite, je echte Karte, Auflösung, Schritte, Abschluss.
+    const label = (i: number, n: number) => i === 0 ? "Deckseite" : i === n - 1 ? "Abschluss" : i === n - 2 ? "So entsteht sie" : i === n - 3 ? "Verbunden" : `Echt: ${karten[i - 1] ?? `Karte ${i}`}`;
+    return (
+      <div className="mp-preview">
+        <ShotGallery shots={piece.assets.map((a, i) => ({ id: a, url: `/api/mp/assets/${a}/file`, label: label(i, piece.assets.length) }))} />
+        <p className="mp-small mp-muted">Kunstseite „{art.titel ?? ""}“ · Stil {art.stil ?? "–"} · {String(piece.meta["size"] ?? "")} · {String(piece.meta["footer"] ?? "")}</p>
         <div className="mp-post"><p>{text}</p></div>
       </div>
     );
