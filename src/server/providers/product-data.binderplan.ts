@@ -87,6 +87,20 @@ interface Price {
  */
 export const PRICE_MISMATCH_FACTOR = 5;
 
+/**
+ * Dieselbe Seltenheit, japanischer Name.
+ *
+ * Nur die vier, bei denen die Zuordnung eindeutig ist. „Ultra Rare" bleibt
+ * draußen: das deckt in den Daten sowohl SR als auch alte Vollbild-ex ab, und
+ * ein falsches Kürzel wäre schlimmer als keins.
+ */
+const JP_KUERZEL: Record<string, string> = {
+  "illustration rare": "AR",
+  "special illustration rare": "SAR",
+  "double rare": "RR",
+  "hyper rare": "UR",
+};
+
 export function isImplausible(eur: number | null, usd: number | null): boolean {
   if (!eur || !usd || eur <= 0 || usd <= 0) return false;
   const ratio = usd / eur;
@@ -520,6 +534,21 @@ export class BinderplanProvider implements ProductDataProvider {
    * /root und ist für uns nicht lesbar – deshalb führt der Weg über HTTP.
    */
   /**
+   * Wie viele **verschiedene** Seltenheiten die Sonderkarten eines Sets tragen.
+   *
+   * Eins heißt: die Quelle hat für dieses Set keine echten Werte, sondern ein
+   * Sammel-Etikett. Das gilt regionsunabhängig — „Evolving Skies" (intl) ist
+   * davon genauso betroffen wie „Storm Emeralda" (jp).
+   */
+  private sonderSeltenheiten(setId: string): number {
+    const row = this.sqlite.prepare(`
+      SELECT COUNT(DISTINCT c.rarity) AS n
+      FROM cards c JOIN sets s ON s.id = c.set_id
+      WHERE c.set_id = ? AND s.official > 0 AND c.local_num > s.official`).get(setId) as { n: number } | undefined;
+    return row?.n ?? 0;
+  }
+
+  /**
    * Set, Nummer und Seltenheit einer Karte.
    *
    * Bei japanischen Sets steht der englische Name: `sets.name` ist dort das
@@ -537,14 +566,35 @@ export class BinderplanProvider implements ProductDataProvider {
       } | undefined;
     if (!row) return null;
     const region = row.region === "jp" ? "jp" as const : "intl" as const;
+    const seltenheit = this.seltenheitVon(row.rarity, row.set_id, Number(row.local_id), row.set_official, region);
     const setName = (region === "jp" ? row.set_name_en ?? row.set_name : lang === "en" ? row.set_name_en ?? row.set_name : row.set_name ?? row.set_name_en) ?? "";
     return {
       id: row.id,
       name: (lang === "en" ? row.name_en ?? row.name_de : row.name_de ?? row.name_en) ?? row.id,
       localId: row.local_id ?? "",
       setId: row.set_id ?? "", setName, setTotal: row.set_total ?? 0, setOfficial: row.set_official ?? 0,
-      region, rarity: row.rarity ?? "", illustrator: row.illustrator ?? "",
+      region, ...seltenheit, illustrator: row.illustrator ?? "",
     };
+  }
+
+  /**
+   * Die Seltenheit, wie sie in einen Beitrag darf — plus das japanische Kürzel.
+   *
+   * Leer, sobald der Wert nur ein Sammel-Etikett ist (siehe
+   * `sonderSeltenheiten`). Sonst in einheitlicher Schreibweise; TCGdex mischt
+   * „Illustration rare" und „Ultra Rare" wild durcheinander.
+   */
+  private seltenheitVon(roh: string | null, setId: string | null, localNum: number, official: number | null, region: "intl" | "jp"):
+    { rarity: string; raritySchort?: string } {
+    const wert = (roh ?? "").trim();
+    if (!wert || wert === "None") return { rarity: "" };
+    // Sonderkarte in einem Set ohne echte Werte: lieber nichts sagen.
+    if (setId && official && Number.isFinite(localNum) && localNum > official && this.sonderSeltenheiten(setId) <= 1) {
+      return { rarity: "" };
+    }
+    const schoen = wert.replace(/\b([a-z])/g, (m) => m.toUpperCase());
+    const kurz = region === "jp" ? JP_KUERZEL[wert.toLowerCase()] : undefined;
+    return kurz ? { rarity: schoen, raritySchort: kurz } : { rarity: schoen };
   }
 
   async cardImage(cardId: string, lang: "de" | "en" = "de"): Promise<string | null> {

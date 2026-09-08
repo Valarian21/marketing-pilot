@@ -118,12 +118,10 @@ export function herkunftsZeile(f: CardFacts | null, lang: "de" | "en"): string {
   // Auf gleiche Stellenzahl auffüllen: die Karte druckt „080/076", nicht „080/76".
   const gesamtText = /^\d+$/.test(f.localId) ? String(gesamt).padStart(f.localId.length, "0") : String(gesamt);
   if (f.localId) teile.push(gesamt ? `${f.localId}/${gesamtText}` : f.localId);
-  // Seltenheit nur bei internationalen Karten. TCGdex wirft bei japanischen
-  // Sets alle Sonderkarten in einen Topf — in „Storm Emeralda" tragen alle 37
-  // Karten über der gedruckten Setgröße dasselbe Etikett, obwohl die Karte
-  // selbst „AR" aufdruckt. Eine falsche Seltenheit im Beitrag ist schlimmer
-  // als keine.
-  if (f.rarity && f.region !== "jp") teile.push(f.rarity);
+  // Der Provider liefert die Seltenheit nur, wenn sie wirklich eine ist — das
+  // Sammel-Etikett mancher Sets kommt als Leerstring an. Bei japanischen
+  // Karten steht das Kürzel dahinter, unter dem dort gesucht wird.
+  if (f.rarity) teile.push(f.raritySchort ? `${f.rarity} (${f.raritySchort})` : f.rarity);
   if (f.illustrator) teile.push(`${lang === "de" ? "Illustration" : "Art"}: ${f.illustrator}`);
   return teile.join(" · ");
 }

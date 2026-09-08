@@ -162,7 +162,26 @@ export interface CardFacts {
    * Karte im selben Bild.
    */
   setOfficial: number;
-  region: "intl" | "jp"; rarity: string; illustrator: string;
+  region: "intl" | "jp";
+  /**
+   * Seltenheit — **leer, wenn die Quelle sie nicht wirklich kennt**.
+   *
+   * TCGdex vergibt für die Sonderkarten mancher Sets ein einziges Sammel-
+   * Etikett: in „Storm Emeralda" tragen alle 37 Karten über der gedruckten
+   * Setgröße „Mega Hyper Rare", in „Shiny Treasure ex" alle 170 dasselbe, und
+   * bei „Evolving Skies" alle 34. Ein Wert, den 37 verschiedene Karten teilen,
+   * sagt nichts — und in einem Beitrag widerspricht er der Karte im Bild.
+   */
+  rarity: string;
+  /**
+   * Das japanische Kürzel derselben Seltenheit (AR, SAR, RR, UR).
+   *
+   * Die Seltenheiten sind in beiden Regionen dieselben, sie heißen nur anders:
+   * was international „Illustration Rare" heißt, steht auf der japanischen
+   * Karte als „AR". Sammler japanischer Karten suchen nach dem Kürzel.
+   */
+  raritySchort?: string;
+  illustrator: string;
 }
 
 export interface ProductDataProvider {
