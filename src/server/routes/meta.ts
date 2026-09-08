@@ -12,7 +12,7 @@ export const SettingsStatus = z.object({
   dataDir: z.string(),
   publicBase: z.string(),
   providers: z.object({
-    openrouter: z.boolean(), elevenlabs: z.boolean(), search: z.string(), publish: z.string(), postiz: z.boolean(),
+    openrouter: z.boolean(), llmPaused: z.boolean(), elevenlabs: z.boolean(), search: z.string(), publish: z.string(), postiz: z.boolean(),
   }),
   models: z.object({ strong: z.string(), cheap: z.string(), image: z.string(), geo: z.array(z.string()) }),
   demo: z.object({ testProjectUrl: z.string().nullable(), demoBaseUrl: z.string().nullable() }),
@@ -26,7 +26,7 @@ export function metaRoutes(app: FastifyInstance, env: Env, host: HostAdapter, ve
   r.get("/api/mp/host", { schema: { response: { 200: HostInfo } } }, async (req) => {
     const user = await host.authenticate(req);
     const shell = host.shell();
-    return { mode: shell.mode, user, backLink: shell.backLink, backLabel: shell.backLabel, version };
+    return { mode: shell.mode, user, backLink: shell.backLink, backLabel: shell.backLabel, version, llmPaused: env.MP_LLM_PAUSED };
   });
 
   r.get("/api/mp/settings/status", { schema: { response: { 200: SettingsStatus } } }, async () => ({
@@ -35,6 +35,7 @@ export function metaRoutes(app: FastifyInstance, env: Env, host: HostAdapter, ve
     publicBase: env.MP_PUBLIC_BASE,
     providers: {
       openrouter: Boolean(env.OPENROUTER_API_KEY),
+      llmPaused: env.MP_LLM_PAUSED,
       elevenlabs: Boolean(env.ELEVENLABS_API_KEY && env.ELEVENLABS_VOICE_ID),
       search: env.MP_SEARCH_PROVIDER ?? "duckduckgo-html (Fallback)",
       publish: env.MP_PUBLISH_PROVIDER,

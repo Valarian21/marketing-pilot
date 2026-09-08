@@ -4,7 +4,7 @@ import { Card, Notice, PageHeader, Pill } from "../components/ui.js";
 
 interface Status {
   mode: string; dataDir: string; publicBase: string;
-  providers: { openrouter: boolean; elevenlabs: boolean; search: string; publish: string; postiz: boolean };
+  providers: { openrouter: boolean; llmPaused: boolean; elevenlabs: boolean; search: string; publish: string; postiz: boolean };
   models: { strong: string; cheap: string; image: string; geo: string[] };
   demo: { testProjectUrl: string | null; demoBaseUrl: string | null };
 }
@@ -36,7 +36,7 @@ export function SettingsPage() {
           <Card>
             <h2>Provider</h2>
             <dl className="mp-dl">
-              <dt>OpenRouter</dt><dd>{yes(s.providers.openrouter)}</dd>
+              <dt>OpenRouter</dt><dd>{yes(s.providers.openrouter)}{s.providers.llmPaused && <> · <b>pausiert</b> <span className="mp-muted mp-small">(MP_LLM_PAUSED in der .env — zum Wiedereinschalten entfernen und Dienste neu starten)</span></>}</dd>
               <dt>ElevenLabs</dt><dd>{yes(s.providers.elevenlabs)}</dd>
               <dt>Websuche</dt><dd>{s.providers.search}</dd>
               <dt>Veröffentlichung</dt><dd>{s.providers.publish}{s.providers.publish === "postiz" && <> {yes(s.providers.postiz)}</>}</dd>

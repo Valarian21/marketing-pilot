@@ -65,6 +65,13 @@ const EnvSchema = z.object({
   REDDIT_CLIENT_SECRET: optional,
   REDDIT_USER_AGENT: optional,
   MP_SCHEDULER: bool.default(true),
+  /**
+   * Modellaufrufe über OpenRouter aussetzen — Veröffentlichen, Rendern und
+   * Zahlen-Abruf laufen weiter. Solange Texte aus der Claude-Sitzung kommen,
+   * soll kein Serienlauf oder Neu-Generieren versehentlich Guthaben ziehen.
+   * Ein entfernter Key wäre der falsche Weg: ohne ihn beendet sich der Worker.
+   */
+  MP_LLM_PAUSED: bool.default(false),
   /** Schnappschuss von Binderplans app.db, relativ zum Paket-Wurzelverzeichnis.
    *  Erzeugt vom root-eigenen systemd-Timer `binderplan-snapshot.timer` - /root ist
    *  fuer den `developer`-Prozess nicht durchquerbar, die Live-Datei also unerreichbar. */

@@ -134,6 +134,11 @@ export function Shell() {
         </div>
       </aside>
       <main className="mp-main">
+        {info?.llmPaused && (
+          <div className="mp-pause-banner" role="status">
+            <strong>OpenRouter pausiert.</strong> Texte entstehen zurzeit über die Claude-Sitzung — Serienläufe, „Neu generieren“ und das Bildmodell sind aus. Veröffentlichen, Rendern und Zahlen laufen weiter.
+          </div>
+        )}
         <Outlet />
       </main>
     </div>

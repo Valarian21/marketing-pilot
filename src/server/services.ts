@@ -19,6 +19,14 @@ import { createVoiceProvider } from "./agents/video/voice.js";
 
 export type FullContext = PipelineContext & StudioContext & VideoContext;
 
+/** Die eine Meldung, die jeder pausierte Aufruf bekommt — steht wörtlich im UI. */
+export const LLM_PAUSIERT = "OpenRouter ist pausiert (MP_LLM_PAUSED in der .env). Texte entstehen zurzeit über die Claude-Sitzung; Serienläufe, Neu-Generieren und Bildmodell sind bis zum Wiedereinschalten aus.";
+const pausiert = () => Object.assign(new Error(LLM_PAUSIERT), { statusCode: 503 });
+
+/** Nimmt jeden Aufruf an und lehnt ihn mit derselben klaren Meldung ab. */
+class PausedLlm implements LlmProvider { async chat(): Promise<never> { throw pausiert(); } }
+class PausedImage implements ImageProvider { async generate(): Promise<never> { throw pausiert(); } }
+
 export interface ServiceOverrides {
   llm?: LlmProvider; search?: SearchProvider; crawler?: Crawler; geoEngines?: readonly string[]; geoCount?: number;
   image?: ImageProvider | null; publish?: PublishProvider; renderer?: Renderer; brandExtractor?: BrandExtractor;
@@ -26,9 +34,11 @@ export interface ServiceOverrides {
 }
 
 export function buildContext(env: Env, db: Db, log: (m: string) => void, o: ServiceOverrides = {}): FullContext | null {
-  const llm = o.llm ?? (env.OPENROUTER_API_KEY ? new OpenRouterProvider(env.OPENROUTER_API_KEY, { referer: env.MP_PUBLIC_BASE }) : null);
+  // Pausiert schlägt Key: der Kontext entsteht trotzdem, damit Worker, Poster
+  // und Zahlen-Abruf laufen — nur die Modellaufrufe scheitern, und zwar laut.
+  const llm = o.llm ?? (env.MP_LLM_PAUSED ? new PausedLlm() : env.OPENROUTER_API_KEY ? new OpenRouterProvider(env.OPENROUTER_API_KEY, { referer: env.MP_PUBLIC_BASE }) : null);
   if (!llm) return null;
-  const image = o.image !== undefined ? o.image : (env.OPENROUTER_API_KEY ? new OpenRouterImageProvider(env.OPENROUTER_API_KEY, MODEL_IMAGE) : null);
+  const image = o.image !== undefined ? o.image : env.MP_LLM_PAUSED ? new PausedImage() : (env.OPENROUTER_API_KEY ? new OpenRouterImageProvider(env.OPENROUTER_API_KEY, MODEL_IMAGE) : null);
   return {
     db, env, llm, image, dataDir: env.MP_DATA_DIR, log,
     search: o.search ?? createSearchProvider(env).provider,

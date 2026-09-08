@@ -1217,6 +1217,8 @@ export const HostInfo = z.object({
   user: z.object({ id: z.string(), name: z.string() }).nullable(),
   backLink: z.string().nullable(),
   backLabel: z.string().nullable(),
+  /** Modellaufrufe ausgesetzt — die Oberfläche sagt es auf jeder Seite. */
+  llmPaused: z.boolean().default(false),
   version: z.string(),
 });
 
