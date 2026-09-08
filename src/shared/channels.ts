@@ -220,8 +220,13 @@ export const DEFAULT_HASHTAG_POLICY: HashtagPolicy = { min: 0, max: 2, note: "H�
  */
 export const CAPTION_ZIEL: Record<string, number> = {
   instagram: 280,
-  facebook: 220,
-  tiktok: 140,
+  // Untergrenze der Struktur: Frage an den Leser, Aufruf und der Pflichtsatz
+  // „Kein offizielles Pokémon-Produkt." brauchen zusammen rund 100 Zeichen,
+  // bevor der Haken auch nur ein Wort hat. Mit 140 (TikTok) und 220 (Facebook)
+  // blieben am 08.09. alle 20 Texte nach zwei Kürzungsrunden darüber — nicht
+  // weil das Modell nicht wollte, sondern weil es nicht ging.
+  facebook: 260,
+  tiktok: 180,
   threads: 280,
   pinterest: 300,
   x: 240,
