@@ -22,6 +22,7 @@ import { carouselSlideHtml, dataUrlFor, framedScreenshotHtml, pinHtml, playwrigh
 import { clearBundle, generateDataBundle, generateStoryFor, type DataBase, writeBundlePieces } from "./data-content.js";
 import { musicTracks } from "../video/assemble.js";
 import { generateShowcaseBundle } from "./showcase.js";
+import { generateArtworkBundle } from "./artwork.js";
 import { buildUtmUrl, deepLinkFor, PLATFORM_LIMITS, platformFromChannel, slugify } from "../../util/utm.js";
 import { canonicalChannel, channelLink, linkRuleFor, saneTitle } from "../../../shared/channels.js";
 import { loadProfiles, planChannelNames } from "../../channels.js";
@@ -192,6 +193,7 @@ async function draftFor(ctx: StudioContext, base: Base, req: s.ContentRequest, p
     case "data_carousel":
     case "data_reel":
     case "showcase_carousel":
+    case "artwork_carousel":
       // laeuft nie hier durch - generateContent zweigt vorher nach data-content.ts ab
       throw err("Daten-Formate werden als Bündel erzeugt, nicht als Einzelstück.");
     default:
@@ -381,9 +383,10 @@ async function generateDataPieces(ctx: StudioContext, base: Base, req: s.Content
         screenshotPath: shot ? path.join(ctx.dataDir, shot.path) : null,
       };
       const { result } = await withRun(ctx.db, { task: `studio.${req.format}:${language}`, model: modelFor("content"), projectId: base.project.id, pieceId: leadId }, (usage) =>
-        req.format === "showcase_carousel"
-          ? generateShowcaseBundle(ctx, dataBase, req, usage, shared)
-          : generateDataBundle(ctx, dataBase, req, usage, shared));
+        req.format === "showcase_carousel" ? generateShowcaseBundle(ctx, dataBase, req, usage, shared)
+          : req.format === "artwork_carousel"
+            ? generateArtworkBundle(ctx, dataBase, req, usage, { ...shared, provider: { apiBase: ctx.env.MP_BINDERPLAN_API, log: ctx.log } })
+            : generateDataBundle(ctx, dataBase, req, usage, shared));
       if (req.format === "data_reel") enqueueJob(ctx.db, { projectId: base.project.id, kind: "video.slideshow", payload: { pieceId: leadId }, steps: SLIDESHOW_STEPS });
       writeAudit(ctx.db, { user, action: "content.generate", entityType: "content_piece", entityId: leadId, projectId: base.project.id, content: { format: req.format, language, pieces: result.length, platforms: result.map((p) => p.channel) } });
       if (i === 0) lead = withCosts(ctx.db, [result[0]!])[0]!;
@@ -398,7 +401,7 @@ async function generateDataPieces(ctx: StudioContext, base: Base, req: s.Content
 
 export async function generateContent(ctx: StudioContext, projectId: string, req: s.ContentRequest, user: HostUser): Promise<s.ContentPiece> {
   const base = loadBase(ctx, projectId);
-  if (req.format === "data_carousel" || req.format === "data_reel" || req.format === "showcase_carousel") return generateDataPieces(ctx, base, req, user);
+  if (req.format === "data_carousel" || req.format === "data_reel" || req.format === "showcase_carousel" || req.format === "artwork_carousel") return generateDataPieces(ctx, base, req, user);
   const pieceId = newId();
   insertPlaceholder(ctx.db, projectId, pieceId, req, req.taskId ?? null);
   const model = req.format === "article" ? modelFor("analysis") : modelFor("content");
@@ -431,7 +434,7 @@ export async function regenerateContent(ctx: StudioContext, pieceId: string, hin
   const req: s.ContentRequest = reqParsed.success ? reqParsed.data : s.ContentRequest.parse({ format: existing.format, topic: existing.title, hint: "" });
   const merged = { ...req, hint: [req.hint, hint].filter(Boolean).join(" | ") };
   const base = loadBase(ctx, existing.projectId);
-  if (existing.format === "data_carousel" || existing.format === "data_reel" || existing.format === "showcase_carousel") {
+  if (existing.format === "data_carousel" || existing.format === "data_reel" || existing.format === "showcase_carousel" || existing.format === "artwork_carousel") {
     // Ein Bündel wird immer als Ganzes neu erzeugt, und immer über sein Leit-Stück:
     // die Mitglieder teilen sich die Assets, einzeln wäre das nicht konsistent zu halten.
     const bundleId = String(existing.meta["bundleId"] ?? existing.id);

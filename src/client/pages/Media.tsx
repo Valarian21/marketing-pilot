@@ -17,7 +17,7 @@ interface MediaItem { id: string; projectId: string; projectName: string; title:
  * wollte, fand nichts, obwohl die Hälfte der Mediathek daraus besteht.
  */
 const FORMAT_LABEL: Record<string, string> = {
-  data_reel: "Reel", data_carousel: "Datenrangliste", showcase_carousel: "Binderseiten", story: "Story",
+  data_reel: "Reel", data_carousel: "Datenrangliste", showcase_carousel: "Binderseiten", artwork_carousel: "Kunstseite", story: "Story",
   carousel: "Carousel", video: "Video", image: "Bild", pin: "Pin", text: "Text",
   article: "Artikel", directory_entry: "Verzeichnis", community_reply: "Community-Antwort", ad_creative: "Anzeige",
 };

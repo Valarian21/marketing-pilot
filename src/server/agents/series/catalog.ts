@@ -37,6 +37,13 @@ export const SERIES_CATALOG: s.SeriesCatalogEntry[] = [
     note: "Der Preisverlauf der Quelle ist dünn. Karten mit weniger als 4 Messpunkten oder über 200 % Ausschlag fliegen raus — bleiben zu wenige übrig, fällt der Lauf aus.",
   },
   {
+    kind: "artwork_showcase", name: "Kunstseiten", available: true,
+    description: "Eine Kunstseite aus der Vitrine: neun Fächer, ein Teil echte Karten, der Rest ein erzeugtes Bild — und die Auflösung mitten im Beitrag. Die Kategorie, die kein anderer Binder-Planer hat.",
+    defaults: P({ formats: ["data_carousel"], platforms: ["instagram", "facebook", "threads"], artworkOwnOnly: true, minWeeksBetweenRepeats: 4 }),
+    cadence: C(["mon", "tue", "wed", "thu", "fri", "sat", "sun"], 17),
+    note: "Zeigt standardmäßig nur eigene Seiten — „in der Vitrine veröffentlicht\" ist keine Zustimmung, die Seite eines anderen Kontos auf Instagram zu stellen. Dafür den eigenen Vitrinen-Namen eintragen.",
+  },
+  {
     kind: "custom", name: "Fester Bereich", available: true,
     description: "Immer dasselbe Set oder dieselbe Ära — für einen Kanal, der genau eine Nische bedient. Ohne Rotation.",
     defaults: P({ n: 15, formats: ["data_carousel"], platforms: ["instagram"] }),

@@ -21,6 +21,13 @@ export const ContentFormat = z.enum([
   /** Shot 11: echte Seiten aus einem geteilten Binder — Produkt statt Nachbildung. */
   "showcase_carousel",
   /**
+   * Eine Kunstseite aus der Vitrine: eine 9er-Seite, deren Fächer teils echte
+   * Karten und teils ein durchgehendes Bild sind. Eigenes Format und nicht bloß
+   * ein Showcase, weil Aufbau, Rotation und Rechtefrage andere sind — und weil
+   * es die Kategorie ist, die kein anderes Werkzeug hat.
+   */
+  "artwork_carousel",
+  /**
    * Hochkant 1080×1920, 24 Stunden sichtbar: der Hinweis auf den Beitrag des
    * Tages. Eigenes Stück und nicht bloß ein Anhang, damit Freigabe, Zeitplan
    * und Poster dieselben Wege gehen wie beim Rest.
@@ -482,6 +489,36 @@ export const ShowcaseOptions = z.object({
   withPrices: z.boolean().default(true),
 });
 
+/**
+ * Welche Kunstseite ein `artwork_carousel` zeigt.
+ *
+ * Ohne `artworkId` nimmt der Generator die neueste passende Seite der Vitrine —
+ * die Serie reicht die Auswahl herein, von Hand muss man sie nicht treffen.
+ */
+export const ArtworkContentOptions = z.object({
+  artworkId: z.string().default(""),
+  /** Nur eigene Seiten. Fremde Seiten brauchen eine Zustimmung, die die Vitrine nicht abfragt. */
+  ownOnly: z.boolean().default(true),
+  /** Auf diese Stile beschraenken (leer = alle). */
+  styles: z.array(z.string()).default([]),
+  /**
+   * Der eigene Name in Binderplans Vitrine.
+   *
+   * Ohne Anmeldung meldet die Vitrine `mein: false` fuer jede Seite — dann ist
+   * dieser Name das einzige, woran „eigene Seite" zu erkennen ist.
+   */
+  owner: z.string().default(""),
+  /**
+   * Seiten, die zuletzt schon dran waren.
+   *
+   * Die Rotation der Serie steckt hier: welche Seite es wird, entscheidet sich
+   * erst gegen die Vitrine, deshalb kann `pickScope` den Bereich nicht vorher
+   * festlegen. Es reicht die Sperrliste herein und uebernimmt hinterher die
+   * wirklich gezeigte Seite als Bereich.
+   */
+  exclude: z.array(z.string()).default([]),
+});
+
 /** Sprache eines Stuecks. `both` erzeugt das Bundle doppelt (DE + EN). */
 export const ContentLanguage = z.enum(["de", "en", "both"]);
 
@@ -508,6 +545,8 @@ export const ContentRequest = z.object({
   reel: ReelOptions.optional(),
   /** Nur fuer `showcase_carousel`: welcher geteilte Binder abfotografiert wird. */
   showcase: ShowcaseOptions.optional(),
+  /** Nur fuer `artwork_carousel`: welche Kunstseite der Vitrine gezeigt wird. */
+  artwork: ArtworkContentOptions.optional(),
   /** Zusätzlich zum Beitrag eine Story erzeugen, die auf ihn hinweist. */
   withStory: z.boolean().default(false),
   /**
@@ -653,7 +692,8 @@ export const ProductDataView = z.object({
 // --- Serien (Shot 9) ---------------------------------------------------------
 
 export const SeriesKind = z.enum([
-  "top_set", "top_era", "price_movers", "new_set", "artist_spotlight", "guess_the_price", "binder_showcase", "custom",
+  "top_set", "top_era", "price_movers", "new_set", "artist_spotlight", "guess_the_price", "binder_showcase",
+  "artwork_showcase", "custom",
 ]);
 export const SeriesStatus = z.enum(["active", "paused"]);
 export const Weekday = z.enum(["mon", "tue", "wed", "thu", "fri", "sat", "sun"]);
@@ -696,6 +736,18 @@ export const SeriesParams = z.object({
   illustrator: z.string().default(""),
   /** `binder_showcase`: Share-Links der Vorzeige-Binder, die abwechselnd drankommen. */
   binderUrls: z.array(z.string()).default([]),
+  /**
+   * `artwork_showcase`: nur eigene Kunstseiten zeigen.
+   *
+   * Steht bewusst auf `true`. „In der Vitrine veröffentlicht" heißt sichtbar in
+   * der App — es ist keine Zustimmung, die Seite eines anderen Kontos auf
+   * Instagram zu stellen.
+   */
+  artworkOwnOnly: z.boolean().default(true),
+  /** `artwork_showcase`: auf diese Stile beschränken (leer = alle). */
+  artworkStyles: z.array(z.string()).default([]),
+  /** `artwork_showcase`: der eigene Name in der Vitrine — siehe `ArtworkContentOptions.owner`. */
+  artworkOwner: z.string().default(""),
   maxPages: z.number().int().min(1).max(12).default(5),
   withPrices: z.boolean().default(true),
 });
@@ -1194,6 +1246,7 @@ export type PostSlot = z.infer<typeof PostSlot>;
 export type PublishMode = z.infer<typeof PublishMode>;
 export type PostOrigin = z.infer<typeof PostOrigin>;
 export type ExternPostCreate = z.infer<typeof ExternPostCreate>;
+export type ArtworkContentOptions = z.infer<typeof ArtworkContentOptions>;
 export type PostingMode = z.infer<typeof PostingMode>;
 export type PlatformPosting = z.infer<typeof PlatformPosting>;
 export type ScheduledPost = z.infer<typeof ScheduledPost>;

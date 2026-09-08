@@ -119,10 +119,15 @@ export function pipelineView(db: Db, projectId: string, opts: { days?: number; n
   const ende = new Date(start.getTime() + days * DAY);
 
   const alle = loadProfiles(db, projectId).filter((p) => p.stage !== "off");
-  const profiles = alle.filter((p) => p.slots.length > 0);
-  const withoutSlots = alle.filter((p) => p.slots.length === 0).map((p) => p.platform);
   const scheduled = db.select().from(t.mpScheduledPosts).where(eq(t.mpScheduledPosts.projectId, projectId)).all()
     .filter((x) => x.scheduledAt >= start.toISOString() && x.scheduledAt < ende.toISOString());
+  // Ein Kanal ohne Slots, auf dem trotzdem Termine stehen, bekommt eine Zeile:
+  // die Eintraege haengen sich dann unter dem Slotraster ein. Sonst waere
+  // TikTok unsichtbar, obwohl dort taeglich zwei Reels vorgeplant sind — und
+  // die Slotzeiten dafuer zu raten, waere schlechter als sie wegzulassen.
+  const mitTerminen = new Set(scheduled.filter((x) => x.status !== "cancelled").map((x) => x.platform));
+  const profiles = alle.filter((p) => p.slots.length > 0 || mitTerminen.has(p.platform));
+  const withoutSlots = alle.filter((p) => p.slots.length === 0 && !mitTerminen.has(p.platform)).map((p) => p.platform);
   const pieces = db.select().from(t.mpContentPieces).where(eq(t.mpContentPieces.projectId, projectId)).all();
   const byId = new Map(pieces.map((p) => [p.id, p]));
 

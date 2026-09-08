@@ -142,22 +142,28 @@ function NewSeriesForm({ entry, busy, profiles, projectId, onCreate }: { entry: 
     onCreate({ name, kind: entry.kind, cadence: { days, hour }, params });
   };
   const wantsReel = params.formats.includes("data_reel");
+  // Showcase und Kunstseiten erzeugen genau ein Buendel — Umfang und Formate
+  // haben dort keine Wirkung, also stehen sie auch nicht im Formular.
+  const einBuendel = entry.kind === "binder_showcase" || entry.kind === "artwork_showcase";
+  const kunstseiten = entry.kind === "artwork_showcase";
   return (
     <form className="mp-form" onSubmit={submit}>
       <div className="mp-form mp-form--row">
         <label className="mp-field"><span>Name</span><input value={name} onChange={(e) => setName(e.target.value)} /></label>
         <label className="mp-field mp-field--short"><span>Uhrzeit (Berlin)</span><select value={hour} onChange={(e) => setHour(Number(e.target.value))}>{Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{String(h).padStart(2, "0")}:00</option>)}</select></label>
-        <label className="mp-field mp-field--short"><span>Umfang</span><select value={params.n} onChange={(e) => setParams({ ...params, n: Number(e.target.value) })}>{[5, 10, 15, 20].map((v) => <option key={v} value={v}>Top {v}</option>)}</select></label>
+        {!einBuendel && <label className="mp-field mp-field--short"><span>Umfang</span><select value={params.n} onChange={(e) => setParams({ ...params, n: Number(e.target.value) })}>{[5, 10, 15, 20].map((v) => <option key={v} value={v}>Top {v}</option>)}</select></label>}
       </div>
       <fieldset className="mp-field"><span>Wochentage</span>
         <div className="mp-inline">{DAYS.map((d) => <label key={d.id} className="mp-inline mp-small"><input type="checkbox" checked={days.includes(d.id)} onChange={() => toggleDay(d.id)} /> {d.label}</label>)}</div>
       </fieldset>
-      <fieldset className="mp-field"><span>Formate</span>
-        <div className="mp-inline">
-          <label className="mp-inline mp-small"><input type="checkbox" checked={params.formats.includes("data_carousel")} onChange={() => toggleFormat("data_carousel")} /> Carousel</label>
-          <label className="mp-inline mp-small"><input type="checkbox" checked={params.formats.includes("data_reel")} onChange={() => toggleFormat("data_reel")} /> Reel</label>
-        </div>
-      </fieldset>
+      {!einBuendel && (
+        <fieldset className="mp-field"><span>Formate</span>
+          <div className="mp-inline">
+            <label className="mp-inline mp-small"><input type="checkbox" checked={params.formats.includes("data_carousel")} onChange={() => toggleFormat("data_carousel")} /> Carousel</label>
+            <label className="mp-inline mp-small"><input type="checkbox" checked={params.formats.includes("data_reel")} onChange={() => toggleFormat("data_reel")} /> Reel</label>
+          </div>
+        </fieldset>
+      )}
       <fieldset className="mp-field"><span>Plattformen</span>
         <div className="mp-inline">{PLATFORMS.map((p) => {
           const st = stageOf(p);
@@ -171,6 +177,19 @@ function NewSeriesForm({ entry, busy, profiles, projectId, onCreate }: { entry: 
           <label className="mp-field mp-field--short"><span>Ton</span><select value={params.voiceover ? "voice" : "mute"} onChange={(e) => setParams({ ...params, voiceover: e.target.value === "voice" })}><option value="mute">stumm</option><option value="voice">Voiceover</option></select></label>
         </div>
       )}
+      {kunstseiten && (
+        <>
+          <div className="mp-form mp-form--row">
+            <label className="mp-field mp-field--short"><span>Dein Name in der Vitrine</span><input value={params.artworkOwner} onChange={(e) => setParams({ ...params, artworkOwner: e.target.value })} placeholder="z. B. Valarian" /></label>
+            <label className="mp-field mp-field--short"><span>Welche Seiten</span>
+              <select value={params.artworkOwnOnly ? "eigene" : "alle"} onChange={(e) => setParams({ ...params, artworkOwnOnly: e.target.value === "eigene" })}>
+                <option value="eigene">nur eigene</option><option value="alle">alle veröffentlichten</option>
+              </select></label>
+          </div>
+          {!params.artworkOwnOnly && <Notice kind="warn">Fremde Kunstseiten gehören ihren Erstellern. „In der Vitrine veröffentlicht“ heißt sichtbar in der App — es ist keine Zustimmung, die Seite auf Instagram zu stellen. Vor dem Freigeben nachfragen.</Notice>}
+          {params.artworkOwnOnly && !params.artworkOwner.trim() && <Notice kind="info">Ohne Namen findet die Serie keine eigene Seite: die Vitrine wird ohne Anmeldung gelesen und meldet für jede Seite „nicht meine“.</Notice>}
+        </>
+      )}
       {entry.kind === "custom" && (
         <div className="mp-form mp-form--row">
           <label className="mp-field mp-field--short"><span>Set-ID</span><input value={params.set} onChange={(e) => setParams({ ...params, set: e.target.value, era: "" })} placeholder="swsh12" /></label>
@@ -180,7 +199,7 @@ function NewSeriesForm({ entry, busy, profiles, projectId, onCreate }: { entry: 
       {entry.kind !== "price_movers" && entry.kind !== "custom" && (
         <label className="mp-field mp-field--short"><span>Sperrfrist je Bereich</span><select value={params.minWeeksBetweenRepeats} onChange={(e) => setParams({ ...params, minWeeksBetweenRepeats: Number(e.target.value) })}>{[0, 12, 26, 52, 104].map((v) => <option key={v} value={v}>{v === 0 ? "keine" : `${v} Wochen`}</option>)}</select></label>
       )}
-      <div className="mp-form-actions"><Button type="submit" variant="primary" disabled={busy !== null || days.length === 0 || params.platforms.length === 0 || params.formats.length === 0}>{busy === "create" ? "legt an …" : "Serie anlegen"}</Button></div>
+      <div className="mp-form-actions"><Button type="submit" variant="primary" disabled={busy !== null || days.length === 0 || params.platforms.length === 0 || params.formats.length === 0 || (kunstseiten && params.artworkOwnOnly && !params.artworkOwner.trim())}>{busy === "create" ? "legt an …" : "Serie anlegen"}</Button></div>
     </form>
   );
 }

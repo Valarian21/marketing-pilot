@@ -10,7 +10,7 @@ import { STAGES } from "../../shared/channels.js";
 
 const TABS = [{ id: "erstellen", label: "Erstellen" }, { id: "brand", label: "Brand-Kit & Stimme" }, { id: "hashtags", label: "Hashtags" }, { id: "verzeichnisse", label: "Verzeichnisse" }, { id: "geo", label: "GEO-Artikel" }] as const;
 type Tab = (typeof TABS)[number]["id"];
-const FORMAT_LABEL: Record<string, string> = { text: "Text-Post", carousel: "Carousel", pin: "Pinterest-Pin", image: "Bild (KI)", ad_creative: "Ad-Hintergrund (KI)", article: "GEO-Artikel", directory_entry: "Directory-Eintrag", video: "Video", community_reply: "Community-Antwort", data_carousel: "Daten-Carousel", story: "Story (24 h)" };
+const FORMAT_LABEL: Record<string, string> = { text: "Text-Post", carousel: "Carousel", pin: "Pinterest-Pin", image: "Bild (KI)", ad_creative: "Ad-Hintergrund (KI)", article: "GEO-Artikel", directory_entry: "Directory-Eintrag", video: "Video", community_reply: "Community-Antwort", data_carousel: "Daten-Carousel", data_reel: "Daten-Reel", showcase_carousel: "Binderseiten", artwork_carousel: "Kunstseite", story: "Story (24 h)" };
 /** Plattformen, die ein Daten-Bündel bedienen kann - Reihenfolge = Vorschlag im Formular. */
 const BUNDLE_PLATFORMS = ["instagram", "tiktok", "pinterest", "facebook", "bluesky", "x"] as const;
 const STATUS: Record<ContentPiece["status"], { label: string; kind: PillKind }> = { draft: { label: "Entwurf", kind: "todo" }, review: { label: "in Freigabe", kind: "review" }, approved: { label: "freigegeben", kind: "done" }, published: { label: "veröffentlicht", kind: "done" }, rejected: { label: "abgelehnt", kind: "kind" } };
@@ -78,6 +78,8 @@ function CreateTab({ id, view, busy, run }: { id: string; view: StudioView; busy
   const [language, setLanguage] = useState("de");
   const [bundle, setBundle] = useState<string[]>(["instagram", "tiktok", "pinterest", "facebook"]);
   const [reel, setReel] = useState<{ voiceover: boolean; music: "none" | "bed"; secondsPerCard: number }>({ voiceover: false, music: "bed", secondsPerCard: 1.8 });
+  // Kunstseiten: welche Seite der Vitrine, und wessen Seiten überhaupt.
+  const [artwork, setArtwork] = useState({ artworkId: "", ownOnly: true, owner: "" });
 
   useEffect(() => { void (async () => { try { setData(await api<ProductDataView>(`/projects/${id}/data`)); } catch { setData(null); } })(); }, [id]);
   useEffect(() => {
@@ -88,8 +90,16 @@ function CreateTab({ id, view, busy, run }: { id: string; view: StudioView; busy
 
   const hasData = Boolean(data?.status.available);
   const isData = format === "data_carousel" || format === "data_reel";
+  const isArtwork = format === "artwork_carousel";
   const submit = (e: FormEvent) => {
     e.preventDefault();
+    if (isArtwork) {
+      void run("create", () => api(`/projects/${id}/content`, { method: "POST", json: {
+        format, topic, hint, language, bundlePlatforms: bundle, platform: bundle[0] ?? "instagram",
+        artwork: { ...artwork, styles: [] },
+      } }));
+      return;
+    }
     if (isData) {
       const [art, wert] = scope.split(":");
       void run("create", () => api(`/projects/${id}/content`, { method: "POST", json: {
@@ -114,15 +124,36 @@ function CreateTab({ id, view, busy, run }: { id: string; view: StudioView; busy
                 <option value="text">Text-Post</option><option value="carousel">Carousel (PNG 1080²/1080×1350)</option>
                 {hasData && <option value="data_carousel">Daten-Carousel (Rangliste)</option>}
                 {hasData && <option value="data_reel">Daten-Reel (Video 1080×1920)</option>}
+                {hasData && <option value="artwork_carousel">Kunstseite (Vitrine)</option>}
                 <option value="pin">Pinterest-Pin (1000×1500)</option><option value="image">Bild / Thumbnail (KI)</option><option value="ad_creative">Ad-Hintergrund (KI)</option>
               </select></label>
             {format === "text" && <label className="mp-field mp-field--short"><span>Plattform</span><select value={platform} onChange={(e) => setPlatform(e.target.value)}>{["linkedin", "x", "threads", "bluesky", "facebook", "instagram"].map(opt)}</select></label>}
             {format === "carousel" && <><label className="mp-field mp-field--short"><span>Plattform</span><select value={platform} onChange={(e) => setPlatform(e.target.value)}>{["instagram", "linkedin"].map(opt)}</select></label>
               <label className="mp-field mp-field--short"><span>Layout</span><select value={template} onChange={(e) => setTemplate(e.target.value)}>{["clean", "bold", "screenshot", "list", "story"].map((t) => <option key={t} value={t}>{t}</option>)}</select></label></>}
-            {!isData && format !== "pin" && stageOf(platform) === "off" && <Notice kind="info">{platform} ist auf der <Link to={`/projects/${id}/channels`}>Kanäle-Seite</Link> ausgeschaltet. Erstellen geht trotzdem — nur Serien lassen den Kanal aus.</Notice>}
-            {!isData && <label className="mp-field"><span>Thema / Blickwinkel</span><input value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="z. B. „Sonntagabend-Vorbereitung in 10 Minuten“" /></label>}
+            {!isData && !isArtwork && format !== "pin" && stageOf(platform) === "off" && <Notice kind="info">{platform} ist auf der <Link to={`/projects/${id}/channels`}>Kanäle-Seite</Link> ausgeschaltet. Erstellen geht trotzdem — nur Serien lassen den Kanal aus.</Notice>}
+            {!isData && !isArtwork && <label className="mp-field"><span>Thema / Blickwinkel</span><input value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="z. B. „Sonntagabend-Vorbereitung in 10 Minuten“" /></label>}
           </div>
 
+          {isArtwork && (
+            <div className="mp-form mp-form--row">
+              <label className="mp-field mp-field--short"><span>Dein Name in der Vitrine</span><input value={artwork.owner} onChange={(e) => setArtwork({ ...artwork, owner: e.target.value })} placeholder="z. B. Valarian" /></label>
+              <label className="mp-field mp-field--short"><span>Welche Seiten</span>
+                <select value={artwork.ownOnly ? "eigene" : "alle"} onChange={(e) => setArtwork({ ...artwork, ownOnly: e.target.value === "eigene" })}>
+                  <option value="eigene">nur eigene</option><option value="alle">alle veröffentlichten</option>
+                </select></label>
+              <label className="mp-field mp-field--short"><span>Bestimmte Seite (optional)</span><input value={artwork.artworkId} onChange={(e) => setArtwork({ ...artwork, artworkId: e.target.value })} placeholder="leer = neueste passende" /></label>
+              <label className="mp-field mp-field--short"><span>Sprache</span><select value={language} onChange={(e) => setLanguage(e.target.value)}><option value="de">Deutsch</option><option value="en">Englisch</option><option value="both">beide (zwei Bündel)</option></select></label>
+            </div>
+          )}
+          {isArtwork && !artwork.ownOnly && <Notice kind="warn">Fremde Kunstseiten gehören ihren Erstellern. „In der Vitrine veröffentlicht“ ist keine Zustimmung, die Seite auf Instagram zu stellen — vor dem Freigeben nachfragen.</Notice>}
+          {isArtwork && (
+            <fieldset className="mp-field">
+              <span>Plattformen im Bündel <span className="mp-muted mp-small">gleiche Slides, eigene Caption, eigene Hashtags</span></span>
+              <div className="mp-inline">{BUNDLE_PLATFORMS.map((p) => (
+                <label key={p} className={`mp-inline mp-small${stageOf(p) === "off" ? " mp-muted" : ""}`} title={STAGES[stageOf(p)].summary}><input type="checkbox" checked={bundle.includes(p)} onChange={() => toggle(p)} /> {p} <span className="mp-muted">· {STAGES[stageOf(p)].label}</span></label>
+              ))}</div>
+            </fieldset>
+          )}
           {isData && data && (
             <>
               <div className="mp-form mp-form--row">
@@ -169,7 +200,7 @@ function CreateTab({ id, view, busy, run }: { id: string; view: StudioView; busy
           <div className="mp-form mp-form--row">
             {isData && <label className="mp-field"><span>Thema / Blickwinkel (optional)</span><input value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="z. B. „für Wiedereinsteiger“" /></label>}
             <label className="mp-field"><span>Hinweis (optional)</span><input value={hint} onChange={(e) => setHint(e.target.value)} placeholder="Ton, Zahlen, was rein soll, was nicht" /></label>
-            <div className="mp-form-actions"><Button type="submit" variant="primary" disabled={busy !== null || !view.hasBrief || (isData && (!scope || bundle.length === 0))}>{busy === "create" ? "Agent arbeitet …" : isData ? "Bündel erzeugen" : "Entwurf erzeugen"}</Button></div>
+            <div className="mp-form-actions"><Button type="submit" variant="primary" disabled={busy !== null || !view.hasBrief || (isData && (!scope || bundle.length === 0)) || (isArtwork && (bundle.length === 0 || (artwork.ownOnly && !artwork.owner.trim())))}>{busy === "create" ? "Agent arbeitet …" : isData || isArtwork ? "Bündel erzeugen" : "Entwurf erzeugen"}</Button></div>
           </div>
           <p className="mp-small mp-muted">
             {isData

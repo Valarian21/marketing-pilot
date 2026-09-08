@@ -306,3 +306,75 @@ PERSONA
 ${personaBlock(input.persona)}` },
   ];
 }
+
+/**
+ * Kunstseiten-Beitrag.
+ *
+ * Der Unterschied zum Showcase steckt in der ersten Regel: das Modell hat das
+ * Bild nicht gesehen und darf es deshalb nicht beschreiben. Was es weiß, sind
+ * der Titel, der Stil, die echten Karten und wie viele Fächer das Bild trägt —
+ * daraus muss der Text kommen, sonst erfindet es Bildinhalte.
+ */
+export function artworkPrompt(input: {
+  brief: Brief;
+  persona?: Persona;
+  voiceProfile: string | null;
+  language: Exclude<ContentLanguage, "both">;
+  titel: string;
+  stil: string;
+  bildFaecher: number;
+  gesamtFaecher: number;
+  karten: string[];
+  stile: string[];
+  platforms: { platform: string; limit: number; policy: HashtagPolicy; linkRule: "bio" | "link" }[];
+  pools: HashtagPools;
+  topic: string;
+  hint: string;
+}): LlmMessage[] {
+  const de = input.language === "de";
+  const pools = [
+    input.pools.brand.length ? `brand: ${input.pools.brand.join(" ")}` : "",
+    ...Object.entries(input.pools.topics).map(([k, v]) => `${k}: ${v.join(" ")}`),
+    input.pools.byLanguage[input.language].length ? `${input.language}: ${input.pools.byLanguage[input.language].join(" ")}` : "",
+  ].filter(Boolean).join("\n") || "(no pools filled in yet - invent fitting, specific niche tags)";
+  return [
+    { role: "system", content: `[task:artwork]
+You write around ONE "art page" made with "${input.brief.productName}": a ${input.gesamtFaecher}-pocket binder page where ${input.bildFaecher} pockets are one continuous generated image and the remaining ${input.gesamtFaecher - input.bildFaecher} hold REAL cards. Style preset: "${input.stil}".
+
+THE ONE IDEA: a collector's page is unfinished because cards are missing or expensive. Here the gap became the picture, and the page looks intentional instead of half empty.
+
+WHAT YOU MAY SAY:
+- The real cards by name (listed below) - they are the searchable words a collector types.
+- The mechanic: a sentence of description, one style out of ${input.stile.length}, printed as PDF, into the same sleeve.
+- NEVER describe what the image shows. You have not seen it. The title is the only thing you may repeat.
+- Never invent numbers (prices, user counts, ratings, downloads). If a number would help, leave it out.
+- First person works - this is the author's own page.
+
+Deliverables:
+- "title": short internal label, max 60 chars.
+- "coverTitle": headline for the cover slide, max 60 chars. It must NOT name the product; it states the puzzle ("${input.bildFaecher} of these ${input.gesamtFaecher} pockets were never a card").
+- "claims": 2-3 short lines for the cover, max 46 chars each.
+- "hook": ONE spoken sentence for the first seconds of a video, max 90 chars.
+- "ctaLine": ONE sentence for the last slide, max 90 chars - what the reader does next.
+- "captions": one entry per platform below, each standing on its own.
+${input.platforms.map((p) => `  - ${p.platform}: max ${p.limit} chars, ${p.policy.max === 0 ? "NO hashtags" : `${p.policy.min || 1}-${p.policy.max} hashtags`}, ${p.linkRule === "bio" ? 'no link in the text - point to "Link in Bio"' : "a link may go into the text"}. ${p.policy.note}`).join("\n")}
+- Hashtags from these pools where they fit, plus specific niche tags. Lowercase, no duplicates.
+${pools}
+- Every caption contains, once, the disclosure "${de ? "Kein offizielles Pokémon-Produkt. Die Seite ist KI-erzeugt." : "Not affiliated with Nintendo or The Pokémon Company. The page is AI-generated."}" as its own short sentence before the hashtags.
+${writingRules({ language: input.language, voiceProfile: input.voiceProfile })}
+Return JSON: {"title","coverTitle","claims":["..."],"hook","ctaLine","captions":[{"platform","caption","hashtags":["#tag"]}]}` },
+    { role: "user", content: `ART PAGE: ${input.titel}
+STYLE PRESET: ${input.stil || "-"}
+POCKETS: ${input.gesamtFaecher} total, ${input.bildFaecher} image, ${input.gesamtFaecher - input.bildFaecher} real cards
+REAL CARDS ON THE PAGE: ${input.karten.filter(Boolean).join(", ") || "(unnamed)"}
+AVAILABLE STYLES: ${input.stile.join(", ")}
+TOPIC: ${input.topic || "-"}
+HINT: ${input.hint || "-"}
+
+BRIEF
+${JSON.stringify(input.brief)}
+
+PERSONA
+${personaBlock(input.persona)}` },
+  ];
+}

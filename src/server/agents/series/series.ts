@@ -107,6 +107,8 @@ export interface Scope {
   key: string; label: string; query: s.DataQuery;
   /** Nur beim Binder-Showcase: der Share-Link, der abfotografiert wird. */
   showcaseUrl?: string;
+  /** Nur bei den Kunstseiten: Seiten, die noch in der Sperrfrist stehen. */
+  artworkExclude?: string[];
 }
 
 /**
@@ -150,6 +152,19 @@ export function pickScope(provider: ProductDataProvider, series: s.ContentSeries
         kind: "movers", region: params.region, n: params.n, days: params.days, direction: params.direction,
         minBaseEur: params.minBaseEur, minPoints: params.minHistoryPoints, maxChangePct: params.maxChangePct, countdown: params.countdown,
       }),
+    };
+  }
+
+  if (kind === "artwork_showcase") {
+    // Der Bereich ist eine Kunstseite, kein Datenausschnitt — und welche es
+    // wird, entscheidet sich erst gegen die Vitrine. Hier entsteht nur die
+    // Sperrliste; den wirklich gezeigten Bereich uebernimmt `runSeries`
+    // hinterher aus dem erzeugten Stueck.
+    return {
+      key: `artwork-${new Date(now).toISOString().slice(0, 10)}`,
+      label: params.artworkStyles.length ? `Kunstseite (${params.artworkStyles.join(", ")})` : "Kunstseite",
+      query: s.DataQuery.parse({}),
+      artworkExclude: coverage.used.filter((u) => blocked(u.key)).map((u) => u.key),
     };
   }
 
@@ -249,22 +264,27 @@ export async function runSeries(
 
   const pieces: string[] = [];
   const autoNotes: string[] = [];
-  // Der Showcase erzeugt genau ein Buendel, egal welche Formate eingestellt sind.
-  const formats = series.kind === "binder_showcase" ? ["data_carousel" as const] : series.params.formats;
+  let letztesLead: s.ContentPiece | null = null;
+  // Showcase und Kunstseite erzeugen genau ein Buendel, egal welche Formate
+  // eingestellt sind: eine echte Seite laesst sich nicht als Reel abkuerzen.
+  const einBuendel = series.kind === "binder_showcase" || series.kind === "artwork_showcase";
+  const formats = einBuendel ? ["data_carousel" as const] : series.params.formats;
   for (const format of formats) {
     const showcase = series.kind === "binder_showcase";
+    const artwork = series.kind === "artwork_showcase";
     const req = s.ContentRequest.parse({
-      // Der Showcase kennt nur ein Format: echte Seiten lassen sich nicht als Reel abkuerzen.
-      format: showcase ? "showcase_carousel" : format,
+      format: showcase ? "showcase_carousel" : artwork ? "artwork_carousel" : format,
       topic: "", hint: "", seriesId: series.id,
       platform: platforms[0] ?? "instagram",
       bundlePlatforms: platforms,
       language: series.params.language,
       dataQuery: scope.query,
       ...(showcase ? { showcase: { url: scope.showcaseUrl ?? "", maxPages: series.params.maxPages, withPrices: series.params.withPrices } } : {}),
-      ...(!showcase && format === "data_reel" ? { reel: { voiceover: series.params.voiceover, music: series.params.music, secondsPerCard: series.params.secondsPerCard } } : {}),
+      ...(artwork ? { artwork: { artworkId: "", ownOnly: series.params.artworkOwnOnly, styles: series.params.artworkStyles, owner: series.params.artworkOwner, exclude: scope.artworkExclude ?? [] } } : {}),
+      ...(!einBuendel && format === "data_reel" ? { reel: { voiceover: series.params.voiceover, music: series.params.music, secondsPerCard: series.params.secondsPerCard } } : {}),
     });
     const lead = await generateContent(ctx, series.projectId, req, user);
+    letztesLead = lead;
     pieces.push(lead.id);
     if (!opts.preview) {
       // Reels sind hier noch Entwuerfe - fuer sie greift die Automatik erst, wenn
@@ -274,6 +294,13 @@ export async function runSeries(
       if (auto.scheduled === 0) createPublishTask(ctx.db, series, lead, now);
       autoNotes.push(...auto.notes);
     }
+  }
+
+  // Bei den Kunstseiten steht der Bereich erst hinterher fest: gezeigt wurde,
+  // was der Generator in der Vitrine gefunden hat.
+  if (series.kind === "artwork_showcase" && letztesLead) {
+    const gezeigt = (letztesLead.meta["artwork"] ?? null) as { id?: string; titel?: string } | null;
+    if (gezeigt?.id) { scope.key = gezeigt.id; scope.label = gezeigt.titel || gezeigt.id; }
   }
 
   if (!opts.preview) {

@@ -441,7 +441,6 @@ ${binderFoot(c)}</div>`;
 
 /** Rang-Kachel: ein Fach mit Etikett „Platz 5", darunter Name, Nummer, Illustrator, Preis. */
 export function binderRankHtml(kit: BrandKit, s: BinderRankSlide, w: number, h: number, c: BinderChrome, labels: { platz: string; nr: string; illu: string }): string {
-  const u = (x: number) => Math.round(w * x);
   const hoch = h / w > 1.5;
   const body = `<div class="slide">${binderTop(c)}
 <div class="mid" style="align-items:center"><div style="width:${hoch ? 62 : 50}%"><span class="tab">${esc(labels.platz)} ${s.rank}</span><div class="page" style="grid-template-columns:1fr;border-top-left-radius:0"><div class="pk">${s.imageDataUrl ? `<img src="${s.imageDataUrl}">` : ""}</div></div></div></div>
@@ -525,6 +524,120 @@ ${binderFoot(c)}</div>`;
 .buehne{flex:1;min-height:0;display:flex;flex-direction:column;justify-content:flex-end;position:relative}
 .buehne .page{position:absolute;top:0;left:0;right:0}
 .feld{position:relative;z-index:2;background:linear-gradient(rgba(255,255,255,0),rgba(255,255,255,.96) ${u(0.05)}px,#fff);padding:${u(0.06)}px 0 0}`);
+}
+
+// --- Kunstseiten -------------------------------------------------------------
+
+/**
+ * Die Bühne einer ganzen Kunstseite.
+ *
+ * Bemessen wird nach **Höhe**, nicht nach Breite: eine 1472×2032-Seite auf
+ * 64 % Slide-Breite ist höher als der Platz zwischen Kopf- und Fußzeile, und
+ * das Bild schob sich über beide. Deshalb füllt der Rahmen die verbleibende
+ * Höhe und leitet seine Breite aus dem Seitenverhältnis ab.
+ */
+const seitenBuehne = (imageDataUrl: string | null, ratio: string, overlay: string): string =>
+  `<div class="buehne"><div class="page rahmen" style="aspect-ratio:${ratio}"><div class="pk" style="aspect-ratio:${ratio}">${imageDataUrl ? `<img src="${imageDataUrl}">` : ""}${overlay}</div></div></div>`;
+
+const buehneCss = (w: number): string => {
+  const u = (x: number) => Math.round(w * x);
+  return `
+.buehne{flex:1;min-height:0;display:flex;align-items:center;justify-content:center}
+.rahmen{height:100%;max-width:70%;display:block;padding:${u(0.014)}px;box-sizing:border-box}
+.rahmen .pk{height:100%;width:auto;margin:0 auto}
+.pk::after{display:none}
+.pk img{object-fit:contain}`;
+};
+
+
+/**
+ * Ein einzelnes Fach einer Kunstseite, herausvergrößert.
+ *
+ * Beschnitten wird rein in CSS: das Bild steht `spalten × 100 %` breit und wird
+ * um die Position des Fachs verschoben. Kein Bildwerkzeug, keine Abhängigkeit —
+ * und weil derselbe Rahmen wie bei den Karten-Fächern drumherum steht, sieht
+ * ein Ausschnitt des Bildes genauso aus wie eine echte Karte im Fach. Das ist
+ * der Punkt des Formats.
+ */
+export function artworkFachHtml(
+  kit: BrandKit,
+  a: { headline: string; sub: string; imageDataUrl: string | null; spalten: number; zeilen: number; slot: number; marke: string },
+  w: number, h: number, c: BinderChrome,
+): string {
+  const u = (x: number) => Math.round(w * x);
+  const hoch = h / w > 1.5;
+  const spalte = a.slot % a.spalten, zeile = Math.floor(a.slot / a.spalten);
+  // Bei einer Spalte/Zeile waere die Verschiebung 0/0 — Division vermeiden.
+  const posX = a.spalten > 1 ? (spalte / (a.spalten - 1)) * 100 : 50;
+  const posY = a.zeilen > 1 ? (zeile / (a.zeilen - 1)) * 100 : 50;
+  const bild = a.imageDataUrl
+    ? `<div class="ausschnitt" style="background-image:url('${a.imageDataUrl}');background-size:${a.spalten * 100}% ${a.zeilen * 100}%;background-position:${posX}% ${posY}%"></div>`
+    : "";
+  const body = `<div class="slide">${binderTop(c)}
+<div class="mid" style="align-items:center"><div style="width:${hoch ? 64 : 50}%">
+${a.marke ? `<span class="tab">${esc(a.marke)}</span>` : ""}
+<div class="page" style="grid-template-columns:1fr;border-top-left-radius:${a.marke ? 0 : u(0.028)}px"><div class="pk">${bild}</div></div></div></div>
+<div><div class="disp" style="font-size:${u(a.headline.length > 26 ? 0.058 : 0.068)}px">${esc(a.headline)}</div>
+${a.sub ? `<div class="sub" style="margin-top:${u(0.012)}px">${esc(a.sub)}</div>` : ""}</div>
+${binderFoot(c)}</div>`;
+  return base(kit, w, h, body, binderCss(w, h) + `
+.ausschnitt{position:absolute;inset:0;background-repeat:no-repeat}`);
+}
+
+/**
+ * Deckseite eines Kunstseiten-Beitrags.
+ *
+ * Eigener Baustein und nicht der Erklär-Deckel: dort liegt der Text auf einem
+ * weißen Feld **über** dem Bild und verdeckt die untere Fächerreihe. Bei einer
+ * Seite, deren ganze Frage „welche drei von neun?" lautet, ist genau das der
+ * eine Fehler, den man nicht machen darf. Hier steht das Bild vollständig, der
+ * Text darunter.
+ */
+export function artworkCoverHtml(
+  kit: BrandKit,
+  a: { title: string; claims: string[]; imageDataUrl: string | null; hint: string; ratio: string },
+  w: number, h: number, c: BinderChrome,
+): string {
+  const u = (x: number) => Math.round(w * x);
+  const claims = a.claims.slice(0, 3).map((x) => `<li>${binderArrow(u(0.042))}<span>${esc(x)}</span></li>`).join("");
+  const body = `<div class="slide">${binderTop(c)}
+${seitenBuehne(a.imageDataUrl, a.ratio, "")}
+<div><div class="disp" style="font-size:${u(a.title.length > 34 ? 0.056 : 0.066)}px">${esc(a.title)}</div>
+${claims ? `<ul class="claims">${claims}</ul>` : ""}
+<div class="hint" style="font-size:${u(0.04)}px;margin-top:${u(0.016)}px">${esc(a.hint)}${binderArrow(u(0.07), -45)}</div></div>
+${binderFoot(c)}</div>`;
+  return base(kit, w, h, body, binderCss(w, h) + buehneCss(w) + `
+.claims{list-style:none;margin:${u(0.018)}px 0 0;padding:0;display:flex;flex-direction:column;gap:${u(0.01)}px}
+.claims li{display:flex;align-items:center;gap:${u(0.016)}px;font-family:var(--f-body);font-weight:700;font-size:${u(0.028)}px;line-height:1.2}`);
+}
+
+/**
+ * Die ganze Kunstseite mit aufgelöstem Raster: welches Fach ist Bild, welches
+ * eine echte Karte.
+ *
+ * Das Bild bleibt vollständig sichtbar — markiert wird nur mit einem Rahmen und
+ * einem Etikett, nie mit einer Fläche darüber. Wer die Auflösung sieht, soll
+ * die Seite dabei immer noch sehen.
+ */
+export function artworkRasterHtml(
+  kit: BrandKit,
+  a: { headline: string; sub: string; imageDataUrl: string | null; spalten: number; zeilen: number; echt: number[]; etikett: string; ratio: string },
+  w: number, h: number, c: BinderChrome,
+): string {
+  const u = (x: number) => Math.round(w * x);
+  const felder = Array.from({ length: a.spalten * a.zeilen }, (_, i) =>
+    a.echt.includes(i) ? `<div class="feld echt"><span>${esc(a.etikett)}</span></div>` : `<div class="feld"></div>`).join("");
+  const raster = `<div class="raster" style="grid-template-columns:repeat(${a.spalten},1fr);grid-template-rows:repeat(${a.zeilen},1fr)">${felder}</div>`;
+  const body = `<div class="slide">${binderTop(c)}
+${seitenBuehne(a.imageDataUrl, a.ratio, raster)}
+<div><div class="disp" style="font-size:${u(a.headline.length > 26 ? 0.058 : 0.068)}px">${esc(a.headline)}</div>
+${a.sub ? `<div class="sub" style="margin-top:${u(0.012)}px">${esc(a.sub)}</div>` : ""}</div>
+${binderFoot(c)}</div>`;
+  return base(kit, w, h, body, binderCss(w, h) + buehneCss(w) + `
+.raster{position:absolute;inset:0;display:grid;z-index:2}
+.feld{position:relative}
+.feld.echt{outline:${u(0.006)}px solid var(--b-accent2);outline-offset:-${u(0.006)}px;border-radius:${u(0.006)}px}
+.feld.echt span{position:absolute;left:${u(0.008)}px;bottom:${u(0.008)}px;background:var(--b-accent2);color:var(--b-contour);font-family:var(--f-body);font-weight:800;font-size:${u(0.019)}px;line-height:1;padding:${u(0.005)}px ${u(0.008)}px;border-radius:${u(0.005)}px}`);
 }
 
 export function dataUrlFor(file: string): string | null {
