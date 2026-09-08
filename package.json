@@ -23,7 +23,8 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx src/server/db/migrate.ts",
     "start:worker": "node dist/server/src/server/worker.js",
-    "dev:worker": "tsx watch src/server/worker.ts"
+    "dev:worker": "tsx watch src/server/worker.ts",
+    "fonts:fetch": "tsx scripts/fetch-fonts.ts"
   },
   "dependencies": {
     "@fastify/cookie": "^11.0.2",

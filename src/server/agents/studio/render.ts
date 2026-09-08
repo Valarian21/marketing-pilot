@@ -6,13 +6,14 @@ import fs from "node:fs";
 import path from "node:path";
 import type { BrandKit, CarouselTemplate } from "../../../shared/schemas.js";
 import { markPng } from "../../util/png.js";
+import { fontHead } from "./fonts.js";
 
 export interface Slide { kind: "text" | "screenshot"; headline: string; body: string; imageDataUrl?: string; index: number; total: number }
+
 export interface RenderJob { html: string; width: number; height: number; file: string; transparent?: boolean }
 export type Renderer = (jobs: RenderJob[]) => Promise<void>;
 
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-const FONT_LINK = `<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gabarito:wght@600;700&family=Nunito+Sans:wght@400;600&family=DM+Mono:wght@500&family=Bungee&family=Archivo:wght@500;600;800&display=swap">`;
 
 /** Im Stil `kontur` traegt eine andere Schrift und eine zweite Signalfarbe. */
 export const istKontur = (kit: BrandKit): boolean => kit.style === "kontur";
@@ -54,7 +55,7 @@ const KONTUR_CSS = `
 .stil-kontur .dtotal{color:var(--b-accent2);font-weight:800}
 `;
 
-const base = (kit: BrandKit, w: number, h: number, body: string, extraCss = "") => `<!doctype html><html><head><meta charset="utf-8">${FONT_LINK}<style>
+const base = (kit: BrandKit, w: number, h: number, body: string, extraCss = "") => `<!doctype html><html><head><meta charset="utf-8">${fontHead()}<style>
 :root{${themeVars(kit)}} *{box-sizing:border-box;margin:0} html,body{width:${w}px;height:${h}px;overflow:hidden}
 body{font-family:var(--f-body);color:var(--b-ink);background:var(--b-bg);-webkit-font-smoothing:antialiased}
 .slide{width:${w}px;height:${h}px;padding:${Math.round(w * 0.08)}px;display:flex;flex-direction:column;justify-content:space-between;position:relative}
@@ -315,6 +316,24 @@ export function framedScreenshotHtml(kit: BrandKit, imageDataUrl: string, w: num
   return base(kit, w, h, `<div style="width:${w}px;height:${h}px;background:linear-gradient(160deg,var(--b-soft),var(--b-bg));display:flex;align-items:center;justify-content:center;padding:${Math.round(w * 0.04)}px"><div style="width:100%;height:100%;border-radius:${Math.round(w * 0.012)}px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.2);background:#fff"><img src="${imageDataUrl}" style="width:100%;height:100%;object-fit:cover;object-position:top"></div></div>`);
 }
 
+/**
+ * Wie lange auf die Web-Schriften gewartet wird.
+ *
+ * `waitUntil: "load"` wartete auf **jede** Unterressource, und die einzige, die
+ * nicht im HTML steckt, sind die Schriften von Google. Ist `fonts.gstatic.com`
+ * nicht erreichbar — am 08.09.2026 live passiert, googleapis und gstatic beide
+ * tot, während der Rest des Netzes lief — hing damit jede einzelne Slide 30 s
+ * in der Zeitschranke und wurde danach still mit Systemschrift gerendert. Ein
+ * Bündel mit 24 Slides stand zwölf Minuten und sah am Ende falsch aus, ohne
+ * dass irgendwo etwas davon stand.
+ *
+ * Jetzt: auf das Dokument warten (alles andere sind Data-URIs und damit sofort
+ * da), auf die Schriften höchstens so lange, wie ein erreichbarer Host braucht.
+ * Danach wird gerendert — mit den richtigen Schriften, wenn sie da sind, und
+ * sonst wenigstens ohne Wartezeit.
+ */
+const FONT_WARTEN_MS = 6000;
+
 export const playwrightRenderer: Renderer = async (jobs) => {
   if (!jobs.length) return;
   const { chromium } = await import("playwright");
@@ -322,8 +341,11 @@ export const playwrightRenderer: Renderer = async (jobs) => {
   try {
     for (const job of jobs) {
       const page = await browser.newPage({ viewport: { width: job.width, height: job.height }, deviceScaleFactor: 1 });
-      await page.setContent(job.html, { waitUntil: "load" });
-      await page.evaluate(() => (document as Document & { fonts: { ready: Promise<unknown> } }).fonts.ready).catch(() => undefined);
+      await page.setContent(job.html, { waitUntil: "domcontentloaded" });
+      await Promise.race([
+        page.evaluate(() => (document as Document & { fonts: { ready: Promise<unknown> } }).fonts.ready),
+        page.waitForTimeout(FONT_WARTEN_MS),
+      ]).catch(() => undefined);
       await page.waitForTimeout(250);
       fs.mkdirSync(path.dirname(job.file), { recursive: true });
       await page.screenshot({ path: job.file, type: "png", clip: { x: 0, y: 0, width: job.width, height: job.height }, omitBackground: Boolean(job.transparent) });
@@ -536,17 +558,24 @@ ${binderFoot(c)}</div>`;
  * das Bild schob sich über beide. Deshalb füllt der Rahmen die verbleibende
  * Höhe und leitet seine Breite aus dem Seitenverhältnis ab.
  */
-const seitenBuehne = (imageDataUrl: string | null, ratio: string, overlay: string): string =>
-  `<div class="buehne"><div class="page rahmen" style="aspect-ratio:${ratio}"><div class="pk" style="aspect-ratio:${ratio}">${imageDataUrl ? `<img src="${imageDataUrl}">` : ""}${overlay}</div></div></div>`;
+const seitenBuehne = (imageDataUrl: string | null, _ratio: string, overlay: string): string =>
+  `<div class="buehne"><div class="page rahmen"><div class="bild">${imageDataUrl ? `<img src="${imageDataUrl}">` : ""}${overlay}</div></div></div>`;
 
-const buehneCss = (w: number): string => {
+const buehneCss = (w: number, h: number): string => {
   const u = (x: number) => Math.round(w * x);
+  // Im Hochformat ist Höhe da und Breite knapp — dort darf die Seite fast bis
+  // an den Rand, sonst steht sie klein in der Mitte und die Slide wirkt leer.
+  const breite = h / w > 1.5 ? 88 : 72;
+  // Der Rahmen wird vom Bild aufgespannt, nicht umgekehrt: das Bild bekommt
+  // beide Schranken (`max-width` und `max-height`) und behaelt sein
+  // Seitenverhaeltnis, der Rahmen schrumpft darauf zusammen. Mit
+  // `aspect-ratio` am Rahmen lief das Bild seitlich heraus, sobald die
+  // Breitenschranke griff — die Hoehe blieb dann bei 100 %.
   return `
 .buehne{flex:1;min-height:0;display:flex;align-items:center;justify-content:center}
-.rahmen{height:100%;max-width:70%;display:block;padding:${u(0.014)}px;box-sizing:border-box}
-.rahmen .pk{height:100%;width:auto;margin:0 auto}
-.pk::after{display:none}
-.pk img{object-fit:contain}`;
+.rahmen{max-height:100%;max-width:${breite}%;display:flex;padding:${u(0.014)}px;box-sizing:border-box}
+.bild{position:relative;display:flex;max-width:100%;max-height:100%;border-radius:${u(0.011)}px;overflow:hidden}
+.bild img{display:block;max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain}`;
 };
 
 
@@ -606,9 +635,33 @@ ${seitenBuehne(a.imageDataUrl, a.ratio, "")}
 ${claims ? `<ul class="claims">${claims}</ul>` : ""}
 <div class="hint" style="font-size:${u(0.04)}px;margin-top:${u(0.016)}px">${esc(a.hint)}${binderArrow(u(0.07), -45)}</div></div>
 ${binderFoot(c)}</div>`;
-  return base(kit, w, h, body, binderCss(w, h) + buehneCss(w) + `
+  return base(kit, w, h, body, binderCss(w, h) + buehneCss(w, h) + `
 .claims{list-style:none;margin:${u(0.018)}px 0 0;padding:0;display:flex;flex-direction:column;gap:${u(0.01)}px}
 .claims li{display:flex;align-items:center;gap:${u(0.016)}px;font-family:var(--f-body);font-weight:700;font-size:${u(0.028)}px;line-height:1.2}`);
+}
+
+/**
+ * Abschluss eines Kunstseiten-Beitrags.
+ *
+ * `binderCtaHtml` taugt hier nicht: es ist für **drei kleine** Produktbilder im
+ * Format 860×1160 gebaut. Eine einzelne 1472×2032-Seite füllt dort die ganze
+ * Breite, wird dadurch höher als die Slide und schiebt Satz und Link unten
+ * heraus — der Beitrag endete ohne Handlungsaufforderung. Deshalb dieselbe
+ * höhenbegrenzte Bühne wie auf der Deckseite, und der Text darunter.
+ */
+export function artworkCtaHtml(
+  kit: BrandKit,
+  a: { line: string; linkLabel: string; imageDataUrl: string | null; ratio: string },
+  w: number, h: number, c: BinderChrome,
+): string {
+  const u = (x: number) => Math.round(w * x);
+  const hoch = h / w > 1.5;
+  const body = `<div class="slide">${binderTop(c)}
+${seitenBuehne(a.imageDataUrl, a.ratio, "")}
+<div><div class="disp" style="font-size:${u(hoch ? 0.068 : a.line.length > 46 ? 0.056 : 0.064)}px">${esc(a.line)}</div>
+<div class="hint" style="font-size:${u(0.042)}px;margin-top:${u(0.018)}px">${esc(a.linkLabel)}${binderArrow(u(0.075), -45)}</div></div>
+${binderFoot(c)}</div>`;
+  return base(kit, w, h, body, binderCss(w, h) + buehneCss(w, h));
 }
 
 /**
@@ -633,7 +686,7 @@ ${seitenBuehne(a.imageDataUrl, a.ratio, raster)}
 <div><div class="disp" style="font-size:${u(a.headline.length > 26 ? 0.058 : 0.068)}px">${esc(a.headline)}</div>
 ${a.sub ? `<div class="sub" style="margin-top:${u(0.012)}px">${esc(a.sub)}</div>` : ""}</div>
 ${binderFoot(c)}</div>`;
-  return base(kit, w, h, body, binderCss(w, h) + buehneCss(w) + `
+  return base(kit, w, h, body, binderCss(w, h) + buehneCss(w, h) + `
 .raster{position:absolute;inset:0;display:grid;z-index:2}
 .feld{position:relative}
 .feld.echt{outline:${u(0.006)}px solid var(--b-accent2);outline-offset:-${u(0.006)}px;border-radius:${u(0.006)}px}

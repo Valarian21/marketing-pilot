@@ -33,7 +33,7 @@ import { hashtagPolicy, linkRuleFor } from "../../../shared/channels.js";
 import { PLATFORM_LIMITS } from "../../util/utm.js";
 import { loadHashtags } from "../../hashtags.js";
 import {
-  artworkCoverHtml, artworkFachHtml, artworkRasterHtml, binderCtaHtml, binderExplainerSlideHtml,
+  artworkCoverHtml, artworkCtaHtml, artworkFachHtml, artworkRasterHtml, binderExplainerSlideHtml,
   dataUrlFor, type BinderChrome, type RenderJob,
 } from "./render.js";
 import { reviseWithCritic } from "./critic.js";
@@ -226,8 +226,7 @@ export async function generateArtworkBundle(
       const file = datei(`99-cta-${rule}`);
       const linkLabel = rule === "bio" ? (lang === "de" ? "Link in Bio" : "Link in bio") : domain;
       jobs.push({
-        html: binderCtaHtml(base.kit, { line: ctaLine, trustLine: "", linkLabel, productImages: [{ url: bild, label: page.titel }] },
-          size.w, size.h, chrome(brand)),
+        html: artworkCtaHtml(base.kit, { line: ctaLine, linkLabel, imageDataUrl: bild, ratio }, size.w, size.h, chrome(L.seite)),
         width: size.w, height: size.h, file,
       });
       ctaFiles.set(`${size.tag}:${rule}`, file);
