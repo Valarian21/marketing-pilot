@@ -558,24 +558,28 @@ ${binderFoot(c)}</div>`;
  * das Bild schob sich über beide. Deshalb füllt der Rahmen die verbleibende
  * Höhe und leitet seine Breite aus dem Seitenverhältnis ab.
  */
-const seitenBuehne = (imageDataUrl: string | null, _ratio: string, overlay: string): string =>
-  `<div class="buehne"><div class="page rahmen"><div class="bild">${imageDataUrl ? `<img src="${imageDataUrl}">` : ""}${overlay}</div></div></div>`;
+const seitenBuehne = (imageDataUrl: string | null, ratio: string, overlay: string): string =>
+  `<div class="buehne"><div class="page rahmen"><div class="bild" style="--r:${ratio}">${imageDataUrl ? `<img src="${imageDataUrl}">` : ""}${overlay}</div></div></div>`;
 
 const buehneCss = (w: number, h: number): string => {
   const u = (x: number) => Math.round(w * x);
   // Im Hochformat ist Höhe da und Breite knapp — dort darf die Seite fast bis
   // an den Rand, sonst steht sie klein in der Mitte und die Slide wirkt leer.
   const breite = h / w > 1.5 ? 88 : 72;
-  // Der Rahmen wird vom Bild aufgespannt, nicht umgekehrt: das Bild bekommt
-  // beide Schranken (`max-width` und `max-height`) und behaelt sein
-  // Seitenverhaeltnis, der Rahmen schrumpft darauf zusammen. Mit
-  // `aspect-ratio` am Rahmen lief das Bild seitlich heraus, sobald die
-  // Breitenschranke griff — die Hoehe blieb dann bei 100 %.
+  const pad = u(0.014);
+  // Die Größe des Bildkastens wird **gerechnet**, nicht dem Layout überlassen:
+  // so hoch wie die Bühne erlaubt, aber nie breiter als `breite` % — beides
+  // in Container-Einheiten der Bühne, das Seitenverhältnis (--r) kommt von der
+  // Kunstseite. Der Rahmen legt sich mit `fit-content` exakt darum.
+  //
+  // Vorher hing die Breite an `max-width` und die Höhe an `max-height`; sobald
+  // die Höhe griff, wurde das Bild schmaler, der Rahmen blieb aber auf voller
+  // Breite stehen — rechts blieb ein schwarzes Drittel leer (Kyogre-Deckseite).
   return `
-.buehne{flex:1;min-height:0;display:flex;align-items:center;justify-content:center}
-.rahmen{max-height:100%;max-width:${breite}%;display:flex;padding:${u(0.014)}px;box-sizing:border-box}
-.bild{position:relative;display:flex;max-width:100%;max-height:100%;border-radius:${u(0.011)}px;overflow:hidden}
-.bild img{display:block;max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain}`;
+.buehne{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;container-type:size}
+.rahmen{width:fit-content;padding:${pad}px;box-sizing:border-box;display:block}
+.bild{position:relative;width:min(calc(${breite}cqw - ${2 * pad}px), calc((100cqh - ${2 * pad}px) * var(--r)));aspect-ratio:var(--r);border-radius:${u(0.011)}px;overflow:hidden}
+.bild img{display:block;width:100%;height:100%;object-fit:cover}`;
 };
 
 
