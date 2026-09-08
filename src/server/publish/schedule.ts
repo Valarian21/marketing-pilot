@@ -82,6 +82,17 @@ export function schedulePiece(db: Db, projectId: string, input: ScheduleInput): 
     if (!posterFor(platform)) throw err(`Für ${platform} gibt es bewusst keinen automatischen Weg — der Beitrag bleibt Handarbeit.`);
     const missing = posterFor(platform)!.missing(credentialsFor(db, projectId, platform));
     if (missing.length) throw err(`${platform}: Zugangsdaten fehlen (${missing.join(", ")}).`);
+    // Schon eingeplant? Dann keinen zweiten Eintrag: „Freigeben & einplanen"
+    // löst erst die Freigabe (die selbst einplant) und dann diesen Aufruf aus —
+    // am 08.09. standen so 13 Threads-Beiträge doppelt in der Schlange. Ein
+    // ausdrücklicher Termin verschiebt den vorhandenen Eintrag.
+    const offen = db.select().from(t.mpScheduledPosts)
+      .where(and(eq(t.mpScheduledPosts.pieceId, piece.id), eq(t.mpScheduledPosts.platform, platform), eq(t.mpScheduledPosts.status, "queued"))).get();
+    if (offen) {
+      if (input.at) db.update(t.mpScheduledPosts).set({ scheduledAt: new Date(input.at).toISOString() }).where(eq(t.mpScheduledPosts.id, offen.id)).run();
+      out.push(scheduledOf(db, db.select().from(t.mpScheduledPosts).where(eq(t.mpScheduledPosts.id, offen.id)).get() as Row));
+      continue;
+    }
     const at = input.at ? new Date(input.at) : nextFreeSlot(db, projectId, platform, now);
     const row = {
       id: newId(), projectId, pieceId: piece.id, platform, scheduledAt: at.toISOString(),

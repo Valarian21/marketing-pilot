@@ -8,6 +8,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { eq } from "drizzle-orm";
 import { loadEnv } from "../src/server/env.js";
 import { buildApp } from "../src/server/app.js";
 import { assetToken, ASSET_TTL_MS, readAssetToken } from "../src/server/publish/asset-tokens.js";
@@ -346,6 +347,21 @@ describe("Slots und Zeitplan", () => {
     expect(nextFreeSlot(built.db, pid, "bluesky", now).toISOString()).toBe("2026-09-02T07:00:00.000Z");
   });
 
+  it("plant dasselbe Stück je Kanal nur einmal ein und verschiebt bei ausdrücklichem Termin", async () => {
+    const schema = await import("../src/server/db/schema.js");
+    saveCredentials(built.db, pid, { bluesky: { identifier: "a", appPassword: "b" } });
+    const erst = schedulePiece(built.db, pid, { pieceId, platforms: ["bluesky"], origin: "auto" });
+    const zweit = schedulePiece(built.db, pid, { pieceId, platforms: ["bluesky"], origin: "auto" });
+    expect(zweit[0]!.id).toBe(erst[0]!.id);
+    const offen = built.db.select().from(schema.mpScheduledPosts).all().filter((r) => r.pieceId === pieceId && r.platform === "bluesky" && r.status === "queued");
+    expect(offen).toHaveLength(1);
+    const verschoben = schedulePiece(built.db, pid, { pieceId, platforms: ["bluesky"], origin: "auto", at: "2026-10-01T10:00:00.000Z" });
+    expect(verschoben[0]!.id).toBe(erst[0]!.id);
+    expect(verschoben[0]!.scheduledAt).toBe("2026-10-01T10:00:00.000Z");
+    // aufräumen, damit der Slot-Test darunter frei planen kann
+    built.db.delete(schema.mpScheduledPosts).where(eq(schema.mpScheduledPosts.id, erst[0]!.id)).run();
+  });
+
   it("verweigert das Einplanen dort, wo bewusst nicht gepostet wird", () => {
     expect(() => schedulePiece(built.db, pid, { pieceId, platforms: ["reddit"] })).toThrowError(/bewusst keinen automatischen Weg/);
     expect(() => schedulePiece(built.db, pid, { pieceId, platforms: ["x"] })).toThrowError(/bewusst keinen automatischen Weg/);
@@ -384,11 +400,15 @@ describe("Slots und Zeitplan", () => {
    * Datei teilen sich eine Datenbank, und ein Eintrag aus einem frueheren Fall
    * belegte hier sonst genau den Slot, dessen Freibleiben geprueft wird.
    */
-  it("plant je Kanal einen Eintrag und belegt einen Slot nur einmal", () => {
+  it("plant je Kanal einen Eintrag und belegt einen Slot nur einmal", async () => {
+    const schema = await import("../src/server/db/schema.js");
     const now = new Date("2026-10-01T08:00:00Z");   // Donnerstag
     const a = schedulePiece(built.db, pid, { pieceId, platforms: ["bluesky"], now });
     expect(a[0]!.scheduledAt).toBe("2026-10-07T07:00:00.000Z");
-    const b = schedulePiece(built.db, pid, { pieceId, platforms: ["bluesky"], now });
+    // Ein zweites Stück, denn dasselbe Stück wird je Kanal nur einmal eingeplant.
+    const quelle = built.db.select().from(schema.mpContentPieces).all().find((x) => x.id === pieceId)!;
+    built.db.insert(schema.mpContentPieces).values({ ...quelle, id: "zweites-stueck" }).run();
+    const b = schedulePiece(built.db, pid, { pieceId: "zweites-stueck", platforms: ["bluesky"], now });
     // derselbe Slot ist belegt - der naechste Mittwoch
     expect(b[0]!.scheduledAt).toBe("2026-10-14T07:00:00.000Z");
     expect(duePosts(built.db, now).filter((d) => d.scheduledAt >= "2026-10-01")).toEqual([]);
