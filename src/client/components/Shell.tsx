@@ -22,6 +22,7 @@ const NAV: { group: string; to: string; label: string; icon: IconName; end?: boo
   { group: "Content Pilot", to: "/review", label: "Freigaben", icon: "review" },
   { group: "Content Pilot", to: "/pipeline", label: "Pipeline", icon: "timeline" },
   { group: "Content Pilot", to: "/media", label: "Medien", icon: "media" },
+  { group: "Content Pilot", to: "/music", label: "Musik", icon: "media" },
   { group: "Betrieb", to: "/activity", label: "Aktivität", icon: "activity" },
   { group: "Betrieb", to: "/storage", label: "Speicher", icon: "storage" },
   { group: "Betrieb", to: "/settings", label: "Einstellungen", icon: "settings" },

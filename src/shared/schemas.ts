@@ -1153,6 +1153,24 @@ export const Job = z.object({
   payload: Json, steps: z.array(JobStep), result: Json, error: z.string().nullable(),
   createdAt: Iso, startedAt: Iso.nullable(), finishedAt: Iso.nullable(),
 });
+/** Ein Track des Musikbetts samt Herkunftsnachweis aus der gleichnamigen .txt. */
+export const MusicLizenz = z.enum(["Pixabay Content License", "CC0", "Public Domain"]);
+export const MusicTrack = z.object({
+  file: z.string(), name: z.string(), bytes: z.number().int(), seconds: z.number().int().nullable(),
+  /** Dateien mit führendem Unterstrich liegen im Ordner, landen aber unter keinem Reel. */
+  aktiv: z.boolean(),
+  quelle: z.string().nullable(), titel: z.string().nullable(), urheber: z.string().nullable(), lizenz: z.string().nullable(), geladen: z.string().nullable(),
+});
+export const MusicView = z.object({ tracks: z.array(MusicTrack), dir: z.string() });
+export const MusicUploadQuery = z.object({
+  name: z.string().min(1).max(200), titel: z.string().trim().min(1).max(120),
+  urheber: z.string().max(120).default(""), quelle: z.string().max(500).default(""), lizenz: MusicLizenz,
+});
+export const MusicUploadResult = z.object({ track: MusicTrack, warnings: z.array(z.string()) });
+export type MusicTrack = z.infer<typeof MusicTrack>;
+export type MusicView = z.infer<typeof MusicView>;
+export type MusicUploadResult = z.infer<typeof MusicUploadResult>;
+
 export const VideoView = z.object({
   pieces: z.array(ContentPiece),
   jobs: z.array(Job),

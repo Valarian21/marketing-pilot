@@ -1,5 +1,9 @@
 # Musikbett für die Reels
 
+**Seit 08.09.2026 gibt es dafür eine Oberfläche:** Marketing Pilot → **Musik** (Hochladen mit
+Titel, Urheber, Quelle und Lizenz; Pausieren; Löschen). Der Ordner bleibt die Wahrheit — die
+Seite schreibt genau die Dateien, die hier beschrieben sind.
+
 Die Video-Fabrik wählt aus diesem Ordner **zufällig einen Track**, mischt ihn geduckt unter das
 Reel (Sidechain gegen die Stimme, Gesamt-Loudness −14 LUFS) und blendet die letzten 2,5 s aus.
 Ohne Datei rendert sie stumm und schreibt eine Warnung ans Stück.

@@ -15,6 +15,7 @@ import { SeriesPage } from "./pages/Series.js";
 import { ChannelsPage } from "./pages/Channels.js";
 import { PublishPage } from "./pages/Publish.js";
 import { VideoPage } from "./pages/Video.js";
+import { MusicPage } from "./pages/Music.js";
 import { StrategyPage } from "./pages/Strategy.js";
 import { TasksPage } from "./pages/Tasks.js";
 import { TimelinePage } from "./pages/Timeline.js";
@@ -63,6 +64,7 @@ function Gate() {
           <Route path="activity" element={<ActivityPage />} />
           <Route path="storage" element={<StoragePage />} />
           <Route path="media" element={<MediaPage />} />
+          <Route path="music" element={<MusicPage />} />
           <Route path="settings" element={<SettingsPage />} />
           <Route path="*" element={<Notice kind="info">Seite nicht gefunden.</Notice>} />
         </Route>
