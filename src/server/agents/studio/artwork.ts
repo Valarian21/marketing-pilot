@@ -36,7 +36,7 @@ import {
   artworkCoverHtml, artworkKarteHtml, artworkRasterHtml, artworkSchritteHtml, artworkWerbungHtml,
   dataUrlFor, type BinderChrome, type RenderJob,
 } from "./render.js";
-import { reviseWithCritic } from "./critic.js";
+import { enforceLength, reviseWithCritic } from "./critic.js";
 import { sizeForPlatform, writeBundlePieces, type DataBase } from "./data-content.js";
 import {
   bildFaecher, downloadArtworkImage, echteFaecher, listArtworkPages,
@@ -385,11 +385,22 @@ export async function generateArtworkBundle(
     return { text: jetzt, rest: rahmungsVerstoesse(jetzt) };
   };
 
+  // Die Texte der weiteren Kanäle laufen nicht durch den Kritiker — aber ihre
+  // Länge muss stimmen. Über dem Ziel wird gekürzt, sonst bleibt der Text.
+  const kurzJe = new Map<string, string>();
+  for (const platform of platforms.filter((p) => p !== leadPlatform)) {
+    const roh = captionOf(platform);
+    if (!roh) continue;
+    const ziel = captionZiel(platform);
+    kurzJe.set(platform, roh.length > ziel
+      ? (await enforceLength(ctx, usage, { body: roh, target: ziel, limit: PLATFORM_LIMITS[platform] ?? 2000, language: lang, voiceProfile: base.voice })).body
+      : roh);
+  }
   const leadSauber = await saeubern(rev.body, leadPlatform);
   const sauberJe = new Map<string, string>([[leadPlatform, leadSauber.text]]);
   const offen = [...leadSauber.rest];
   for (const platform of platforms.filter((p) => p !== leadPlatform)) {
-    const roh = captionOf(platform);
+    const roh = kurzJe.get(platform) ?? captionOf(platform);
     if (!roh) continue;
     const r = await saeubern(roh, platform);
     sauberJe.set(platform, r.text);

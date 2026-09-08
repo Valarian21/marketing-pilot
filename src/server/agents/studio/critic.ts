@@ -17,6 +17,31 @@ const Verdict = z.object({ score: z.number().min(0).max(10), issues: z.array(Cri
 const Rewritten = z.object({ body: z.string().min(1) });
 
 export interface CriticResult { body: string; score: number; rounds: number; notes: string }
+
+/** Der Auftrag an den Umschreiber, wenn ein Text zu lang ist — nennt die Zielzahl. */
+export const kuerzungsAuftrag = (laenge: number, ziel: number): string =>
+  `Der Text hat ${laenge} Zeichen, erlaubt sind höchstens ${ziel}. Kürze auf unter ${ziel} Zeichen: erste Zeile bleibt der Haken (max. 60 Zeichen), danach höchstens drei kurze Zeilen, eine Frage an den Leser, ein Aufruf. Der Hinweis „Kein offizielles Pokémon-Produkt" bleibt als eigene kurze Zeile. Erklärungen streichen, Spannung behalten.`;
+
+/**
+ * Einen Text auf die Ziellänge bringen — ohne Kritiker, nur Länge.
+ *
+ * Für die Bildunterschriften der **weiteren** Kanäle eines Bündels: die laufen
+ * nicht durch `reviseWithCritic`, weil der Kritiker teuer ist und der
+ * Leit-Text schon geprüft wurde. Aber die Länge muss trotzdem stimmen — der
+ * Facebook-Text kam mit 557 Zeichen bei einem Ziel von 220, der TikTok-Text
+ * mit 365 bei 140. Bis zu zwei Runden; ein Umschreiben, das nicht kürzer wird,
+ * wird verworfen.
+ */
+export async function enforceLength(ctx: AgentContext, usage: UsageCollector, input: { body: string; target: number; limit?: number; language: string; voiceProfile: string | null }): Promise<{ body: string; rounds: number; ok: boolean }> {
+  let body = input.body;
+  let rounds = 0;
+  while (body.length > input.target && rounds < 2) {
+    rounds++;
+    const rw = await chatJson(ctx.llm, modelFor("content"), Rewritten, rewritePrompt({ text: body, suggestions: [kuerzungsAuftrag(body.length, input.target)], language: input.language, voiceProfile: input.voiceProfile, limit: input.target }), usage, { maxTokens: 3000, temperature: 0.4 });
+    if (rw.body.length < body.length && (!input.limit || rw.body.length <= input.limit)) body = rw.body;
+  }
+  return { body, rounds, ok: body.length <= input.target };
+}
 export const CRITIC_THRESHOLD = 7;
 
 /**
@@ -32,7 +57,7 @@ export async function reviseWithCritic(ctx: AgentContext, usage: UsageCollector,
   let rounds = 0;
   const log: string[] = [];
   const zuLang = (t: string) => Boolean(input.target && t.length > input.target);
-  const kuerzung = (t: string) => `Der Text hat ${t.length} Zeichen, erlaubt sind höchstens ${input.target}. Kürze auf unter ${input.target} Zeichen: erste Zeile bleibt der Haken (max. 60 Zeichen), danach höchstens drei kurze Zeilen, eine Frage an den Leser, ein Aufruf. Erklärungen streichen, Spannung behalten.`;
+  const kuerzung = (t: string) => kuerzungsAuftrag(t.length, input.target ?? t.length);
   const kritik = () => chatJson(ctx.llm, cheap, Verdict, criticPrompt({ text: body, language: input.language, voiceProfile: input.voiceProfile, format: input.format, ...(input.platform ? { platform: input.platform } : {}) }), usage, { maxTokens: 1200 });
   let verdict = await kritik();
   log.push(`Runde 0: ${verdict.score}/10${zuLang(body) ? ` – ${body.length} Zeichen, Ziel ${input.target}` : ""}${verdict.issues.length ? " – " + verdict.issues.slice(0, 3).join(" | ") : ""}`);

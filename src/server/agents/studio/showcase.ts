@@ -18,7 +18,7 @@ import { captionZiel, hashtagPolicy, linkRuleFor } from "../../../shared/channel
 import { PLATFORM_LIMITS } from "../../util/utm.js";
 import { loadHashtags } from "../../hashtags.js";
 import { dataFooterText, dataUrlFor, rankingCtaHtml, showcaseCoverHtml, showcaseSlideHtml, type RenderJob } from "./render.js";
-import { reviseWithCritic } from "./critic.js";
+import { enforceLength, reviseWithCritic } from "./critic.js";
 import { sizeForPlatform, writeBundlePieces, type DataBase } from "./data-content.js";
 import { playwrightBinderShooter, shareIdOf, type BinderShooter } from "../series/binder.js";
 import type { StudioContext } from "./generate.js";
@@ -127,6 +127,17 @@ export async function generateShowcaseBundle(
   const leadCaption = captionOf(leadPlatform) || out.captions[0]?.caption.trim() || coverTitle;
   const rev = await reviseWithCritic(ctx, usage, { body: leadCaption, language: lang, voiceProfile: base.voice, format: "showcase_carousel", platform: leadPlatform, limit: PLATFORM_LIMITS[leadPlatform] ?? 2000, target: captionZiel(leadPlatform), maxRounds: 2 });
 
+  // Die Texte der weiteren Kanäle laufen nicht durch den Kritiker — aber ihre
+  // Länge muss stimmen. Über dem Ziel wird gekürzt, sonst bleibt der Text.
+  const kurzJe = new Map<string, string>();
+  for (const platform of platforms.filter((p) => p !== leadPlatform)) {
+    const roh = captionOf(platform);
+    if (!roh) continue;
+    const ziel = captionZiel(platform);
+    kurzJe.set(platform, roh.length > ziel
+      ? (await enforceLength(ctx, usage, { body: roh, target: ziel, limit: PLATFORM_LIMITS[platform] ?? 2000, language: lang, voiceProfile: base.voice })).body
+      : roh);
+  }
   const notes = [rev.notes];
   if (capture.pages.length < capture.totalPages) notes.push(`${capture.pages.length} von ${capture.totalPages} Binderseiten gezeigt.`);
 
@@ -135,7 +146,7 @@ export async function generateShowcaseBundle(
     taskId: req.taskId ?? null,
     title: out.title || coverTitle,
     score: rev.score, notes: notes.filter(Boolean).join("\n"),
-    captionFor: (platform, isLead) => (isLead ? rev.body : captionOf(platform) || rev.body),
+    captionFor: (platform, isLead) => (isLead ? rev.body : kurzJe.get(platform) || rev.body),
     hashtagsFor: (platform) => out.captions.find((c) => c.platform.trim().toLowerCase() === platform)?.hashtags ?? [],
     assetsFor: (platform) => {
       const size = sizeForPlatform(platform);

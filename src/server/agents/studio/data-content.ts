@@ -28,7 +28,7 @@ import { estimateReelLineMs, planSlideshow, reelCardLine } from "../video/slides
 import type { PriceMover, ProductDataProvider, RankedCard, ScopeCoverage } from "../../providers/product-data.js";
 import { binderCoverHtml, binderCtaHtml, binderPageHtml, binderRankHtml, binderTeaserHtml, dataFooterText, dataUrlFor, rankingCoverHtml, rankingCtaHtml, rankingOverviewHtml, rankingSlideHtml, storyHtml, type BinderChrome, type RenderJob, type RankingSlide } from "./render.js";
 import { loadSlideSettings } from "../../slide-settings.js";
-import { reviseWithCritic } from "./critic.js";
+import { enforceLength, reviseWithCritic } from "./critic.js";
 // Typ-Import: generate.ts laedt dieses Modul, deshalb darf hier nichts zur Laufzeit zurueckzeigen.
 import type { StudioContext } from "./generate.js";
 
@@ -500,6 +500,20 @@ export async function generateDataBundle(
     ? { body: leadCaption, score: null, notes: "Texte von Hand geschrieben — kein Modellaufruf, keine AI-Tell-Prüfung." }
     : await reviseWithCritic(ctx, usage, { body: leadCaption, language: lang, voiceProfile: base.voice, format, platform: leadPlatform, limit: PLATFORM_LIMITS[leadPlatform] ?? 2000, target: captionZiel(leadPlatform), maxRounds: 2 });
 
+  // Die Texte der weiteren Kanäle laufen nicht durch den Kritiker — aber ihre
+  // Länge muss stimmen. Über dem Ziel wird gekürzt, sonst bleibt der Text.
+  const kurzJe = new Map<string, string>();
+  if (!req.manualText) {
+    for (const platform of platforms.filter((p) => p !== leadPlatform)) {
+      const roh = captionOf(platform);
+      if (!roh) continue;
+      const ziel = captionZiel(platform);
+      kurzJe.set(platform, roh.length > ziel
+        ? (await enforceLength(ctx, usage, { body: roh, target: ziel, limit: PLATFORM_LIMITS[platform] ?? 2000, language: lang, voiceProfile: base.voice })).body
+        : roh);
+    }
+  }
+
   const notes = [rev.notes];
   if (data.skipped.length) notes.push(`Ohne ladbares Bild übersprungen (${data.skipped.length}): ${data.skipped.join(", ")}. Die Rangfolge ist die der veröffentlichten Liste.`);
   if (data.coverage && data.coverage.skipped > 0) notes.push(`${data.coverage.skipped} Karten im Bereich wurden nicht nachbepreist (Deckel je Abfrage).`);
@@ -554,7 +568,7 @@ export async function generateDataBundle(
     taskId: req.taskId ?? null,
     title: out.title || coverTitle,
     score: rev.score, notes: notes.filter(Boolean).join("\n"),
-    captionFor: (platform, isLead) => (isLead ? rev.body : captionOf(platform) || rev.body),
+    captionFor: (platform, isLead) => (isLead ? rev.body : kurzJe.get(platform) || captionOf(platform) || rev.body),
     hashtagsFor: (platform) => out.captions.find((c) => c.platform.trim().toLowerCase() === platform)?.hashtags ?? [],
     assetsFor: (platform) => {
       const size = sizeForPlatform(platform, format);
