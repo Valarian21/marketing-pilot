@@ -358,10 +358,10 @@ WHAT YOU MAY SAY:
 
 Deliverables:
 - "title": short internal label, max 60 chars.
-- "coverTitle": headline for the cover slide, max 60 chars. It must NOT name the product. It says that the artwork continues past the card's edge.
+- "coverTitle": headline for the cover slide, max 60 chars. Its job is CURIOSITY, not explanation - the reader should want to look closer at the image. Short, spoken, ideally a question about where the card ends and the painting begins. It must NOT name the product and must NOT summarise the mechanic (the later slides do that).
 - "claims": 2-3 short lines for the cover, max 46 chars each. One of them says that it works with one card as well as with many.
 - "hook": ONE spoken sentence for the first seconds of a video, max 90 chars.
-- "ctaLine": ONE sentence for the last slide, max 90 chars - what the reader does next.
+- "ctaLine": ONE sentence for the last slide, max 90 chars. Two things are on offer and both are worth naming: make your own art page, or take one another collector already published. Invite, do not describe.
 - "captions": one entry per platform below, each standing on its own.
 ${input.platforms.map((p) => `  - ${p.platform}: max ${p.limit} chars, ${p.policy.max === 0 ? "NO hashtags" : `${p.policy.min || 1}-${p.policy.max} hashtags`}, ${p.linkRule === "bio" ? 'no link in the text - point to "Link in Bio"' : "a link may go into the text"}. ${p.policy.note}`).join("\n")}
 - Hashtags from these pools where they fit, plus specific niche tags. Lowercase, no duplicates.

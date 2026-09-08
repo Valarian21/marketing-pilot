@@ -33,7 +33,7 @@ import { hashtagPolicy, linkRuleFor } from "../../../shared/channels.js";
 import { PLATFORM_LIMITS } from "../../util/utm.js";
 import { loadHashtags } from "../../hashtags.js";
 import {
-  artworkCoverHtml, artworkCtaHtml, artworkKarteHtml, artworkRasterHtml, artworkSchritteHtml,
+  artworkCoverHtml, artworkKarteHtml, artworkRasterHtml, artworkSchritteHtml, artworkWerbungHtml,
   dataUrlFor, type BinderChrome, type RenderJob,
 } from "./render.js";
 import { reviseWithCritic } from "./critic.js";
@@ -118,7 +118,12 @@ export function herkunftsZeile(f: CardFacts | null, lang: "de" | "en"): string {
   // Auf gleiche Stellenzahl auffüllen: die Karte druckt „080/076", nicht „080/76".
   const gesamtText = /^\d+$/.test(f.localId) ? String(gesamt).padStart(f.localId.length, "0") : String(gesamt);
   if (f.localId) teile.push(gesamt ? `${f.localId}/${gesamtText}` : f.localId);
-  if (f.rarity) teile.push(f.rarity);
+  // Seltenheit nur bei internationalen Karten. TCGdex wirft bei japanischen
+  // Sets alle Sonderkarten in einen Topf — in „Storm Emeralda" tragen alle 37
+  // Karten über der gedruckten Setgröße dasselbe Etikett, obwohl die Karte
+  // selbst „AR" aufdruckt. Eine falsche Seltenheit im Beitrag ist schlimmer
+  // als keine.
+  if (f.rarity && f.region !== "jp") teile.push(f.rarity);
   if (f.illustrator) teile.push(`${lang === "de" ? "Illustration" : "Art"}: ${f.illustrator}`);
   return teile.join(" · ");
 }
@@ -180,8 +185,8 @@ export async function generateArtworkBundle(
   // Die Rückfallwerte tragen dieselbe Aussage wie der Prompt: das Bild setzt die
   // Kunst der Karten fort. Nichts davon spricht von Lücken oder Platzhaltern.
   const coverTitle = (out.coverTitle
-    || (lang === "de" ? "Die Karte hört am Rand auf. Das Bild nicht." : "The card ends at its border. The picture does not.")).slice(0, 80);
-  const ctaLine = (out.ctaLine || (lang === "de" ? `So wird aus deinen Karten eine Seite.` : `Turn your cards into one page.`)).slice(0, 120);
+    || (lang === "de" ? "Wo hört die Karte auf?" : "Where does the card end?")).slice(0, 80);
+  const ctaLine = (out.ctaLine || (lang === "de" ? "Mach deine eigene Kunstseite." : "Make your own art page.")).slice(0, 120);
   const claims = (out.claims.length ? out.claims : lang === "de"
     ? ["Ob eine Karte oder neun", "Das Motiv läuft über alle Fächer", "Wertet den ganzen Binder auf"]
     : ["One card or nine", "The scene runs across every pocket", "Lifts the whole binder"]
@@ -196,6 +201,23 @@ export async function generateArtworkBundle(
     const datei = id ? await opts.daten?.cardImage(id, lang) ?? null : null;
     return { ...x, id, fakten, dataUrl: datei ? dataUrlFor(datei) : null };
   }));
+
+  /**
+   * Drei weitere Seiten für den Abschluss.
+   *
+   * Eigene zuerst — der Beitrag wirbt für das Werkzeug, nicht für fremde
+   * Arbeit —, danach was die Vitrine sonst hergibt. Ohne weitere Seiten fällt
+   * der Fächer auf die gezeigte Seite allein zurück.
+   */
+  const eigen = (p: ArtworkPage) => p.mein || (cfg.owner.trim() && p.besitzer.trim().toLowerCase() === cfg.owner.trim().toLowerCase());
+  const weitere = [...pages.filter((p) => p.id !== page.id)]
+    .sort((a, b) => (Number(eigen(b)) - Number(eigen(a))) || b.veroeffentlichtAt.localeCompare(a.veroeffentlichtAt))
+    .slice(0, 3);
+  const faecherBilder = (await Promise.all(weitere.map(async (p) => {
+    try { return dataUrlFor(await downloadArtworkImage(p.id, path.join(outDir, "quelle"), opts.provider)); }
+    catch { return null; }
+  }))).filter((x): x is string => Boolean(x));
+  if (!faecherBilder.length) faecherBilder.push(bild);
 
   // --- rendern ---------------------------------------------------------------
   const logoAsset = base.kit.logoAssetId ? ctx.db.select().from(t.mpAssets).where(eq(t.mpAssets.id, base.kit.logoAssetId)).get() : undefined;
@@ -255,8 +277,10 @@ export async function generateArtworkBundle(
       html: artworkSchritteHtml(base.kit, {
         title: lang === "de" ? "So entsteht sie" : "How it is made",
         schritte: lang === "de"
-          ? ["Karten im Binder anordnen", `Stil wählen — ${ARTWORK_STILE.length} stehen bereit`, "Extras beschreiben, wenn du magst", "Bild wird erzeugt, PDF drucken"]
-          : ["Arrange the cards in the binder", `Pick a style — ${ARTWORK_STILE.length} to choose from`, "Describe extras if you like", "The image is generated, print the PDF"],
+          // Keine Stilzahl: „12 stehen bereit" sagt jemandem, der das Werkzeug
+          // nicht kennt, nichts — er hält es womöglich für zwölf fertige Bilder.
+          ? ["Karten im Binder anordnen", "Stil wählen", "Extras beschreiben, wenn du magst", "Bild wird erzeugt, PDF drucken"]
+          : ["Arrange the cards in the binder", "Pick a style", "Describe extras if you like", "The image is generated, print the PDF"],
         // Kein Hinweis unten: Schritt 4 sagt schon, was passiert, und die Ecke
         // wiederholte bis hierher die Überschrift.
         imageDataUrl: bild, ratio, hint: "",
@@ -269,7 +293,11 @@ export async function generateArtworkBundle(
       const file = datei(`99-cta-${rule}`);
       const linkLabel = rule === "bio" ? (lang === "de" ? "Link in Bio" : "Link in bio") : domain;
       jobs.push({
-        html: artworkCtaHtml(base.kit, { line: ctaLine, linkLabel, imageDataUrl: bild, ratio }, size.w, size.h, chrome(L.seite)),
+        html: artworkWerbungHtml(base.kit, {
+          line: ctaLine,
+          sub: lang === "de" ? "Eigene erzeugen oder die besten aus der Vitrine übernehmen." : "Make your own, or take the best ones from the showcase.",
+          linkLabel, seiten: faecherBilder,
+        }, size.w, size.h, chrome(L.seite)),
         width: size.w, height: size.h, file,
       });
       ctaFiles.set(`${size.tag}:${rule}`, file);

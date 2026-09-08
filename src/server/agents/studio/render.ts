@@ -695,6 +695,47 @@ ${binderFoot(c)}</div>`;
 }
 
 /**
+ * Der Abschluss als Werbung: mehrere Kunstseiten aufgefächert.
+ *
+ * Eine einzelne Seite noch einmal zu zeigen — dieselbe, die der Leser gerade
+ * sechs Slides lang gesehen hat — sagt ihm nichts Neues und fordert nichts.
+ * Drei verschiedene Seiten nebeneinander zeigen dagegen in einem Bild, dass es
+ * hier eine Sammlung gibt: eigene erzeugen oder fremde übernehmen.
+ *
+ * Gefächert statt nebeneinander, weil drei hohe Seiten in einer Reihe jede für
+ * sich zu klein würden; überlappend bleibt die mittlere groß genug, um erkannt
+ * zu werden.
+ */
+export function artworkWerbungHtml(
+  kit: BrandKit,
+  a: { line: string; sub: string; linkLabel: string; seiten: string[] },
+  w: number, h: number, c: BinderChrome,
+): string {
+  const u = (x: number) => Math.round(w * x);
+  const hoch = h / w > 1.5;
+  const bilder = a.seiten.slice(0, 3);
+  // Die mittlere liegt oben und gerade, die äußeren gekippt dahinter.
+  const winkel = bilder.length === 3 ? [-9, 0, 9] : bilder.length === 2 ? [-6, 6] : [0];
+  const versatz = bilder.length === 3 ? [-38, 0, 38] : bilder.length === 2 ? [-24, 24] : [0];
+  const tiefe = bilder.length === 3 ? [1, 3, 2] : [1, 2];
+  const faecher = bilder.map((src, i) =>
+    `<div class="fblatt" style="transform:translateX(${versatz[i]}%) rotate(${winkel[i]}deg);z-index:${tiefe[i]}"><img src="${src}"></div>`).join("");
+  const body = `<div class="slide">${binderTop(c)}
+<div class="faecher">${faecher}</div>
+<div><div class="disp" style="font-size:${u(hoch ? 0.066 : a.line.length > 40 ? 0.056 : 0.062)}px">${esc(a.line)}</div>
+${a.sub ? `<div class="sub" style="margin-top:${u(0.012)}px">${esc(a.sub)}</div>` : ""}
+<div class="hint" style="font-size:${u(0.042)}px;margin-top:${u(0.016)}px">${esc(a.linkLabel)}${binderArrow(u(0.075), -45)}</div></div>
+${binderFoot(c)}</div>`;
+  return base(kit, w, h, body, binderCss(w, h) + `
+.faecher{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;position:relative}
+/* Nach Breite bemessen, nicht nach Höhe: eine 1472×2032-Seite auf volle
+   Bühnenhöhe ist breiter als die Slide, und der Fächer schob die äußeren
+   Blätter dann fast vollständig aus dem Bild. */
+.fblatt{position:absolute;width:${hoch ? 50 : 40}%;max-height:100%;background:var(--b-contour);border-radius:${u(0.024)}px;padding:${u(0.012)}px;box-shadow:0 ${u(0.02)}px ${u(0.05)}px rgba(0,0,0,.35)}
+.fblatt img{width:100%;height:auto;display:block;border-radius:${u(0.011)}px}`);
+}
+
+/**
  * Abschluss eines Kunstseiten-Beitrags.
  *
  * `binderCtaHtml` taugt hier nicht: es ist für **drei kleine** Produktbilder im
