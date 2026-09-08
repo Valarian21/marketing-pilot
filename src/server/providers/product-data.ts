@@ -143,6 +143,28 @@ export interface ProductDataStatus {
   imageCacheBytes: number;
 }
 
+/**
+ * Die Eckdaten einer einzelnen Karte.
+ *
+ * Für Beiträge, die eine Karte einzeln zeigen: Sammler suchen nach Set und
+ * Nummer, nicht nach dem Namen allein — „Groudon" gibt es zwanzigmal.
+ */
+export interface CardFacts {
+  id: string; name: string; localId: string;
+  setId: string; setName: string;
+  /** Alle Karten des Sets, Geheimkarten eingerechnet. */
+  setTotal: number;
+  /**
+   * Die Zahl, die **auf der Karte steht** („080/076").
+   *
+   * Nicht dasselbe wie `setTotal`: Geheimkarten liegen über der gedruckten
+   * Gesamtzahl. Eine Bildunterschrift, die „080/113" sagt, widerspricht der
+   * Karte im selben Bild.
+   */
+  setOfficial: number;
+  region: "intl" | "jp"; rarity: string; illustrator: string;
+}
+
 export interface ProductDataProvider {
   readonly name: string;
   listSets(region?: "intl" | "jp"): ProductSet[];
@@ -155,6 +177,8 @@ export interface ProductDataProvider {
   priceMovers(q: PriceMoversQuery): Promise<PriceMoversResult>;
   /** Lokaler Dateipfad eines Kartenbildes – der Renderer braucht Dateien, keine URLs. */
   cardImage(cardId: string, lang?: "de" | "en"): Promise<string | null>;
+  /** Set, Nummer, Seltenheit einer Karte – oder `null`, wenn die Quelle sie nicht kennt. */
+  cardFacts(cardId: string, lang?: "de" | "en"): CardFacts | null;
   status(): Promise<ProductDataStatus>;
   close(): void;
 }

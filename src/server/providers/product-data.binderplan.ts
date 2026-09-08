@@ -27,7 +27,7 @@ import { nowIso, type Db } from "../db/index.js";
 import { ERAS, eraForSet, eraSetFilter, findEra, POCKET_SERIES } from "./binderplan-eras.js";
 import type {
   PriceBasis, PriceMover, PriceMoversQuery, PriceMoversResult, ProductDataProvider,
-  ProductDataStatus, ProductEra, ProductSet, RankedCard, TopCardsQuery, TopCardsResult,
+  CardFacts, ProductDataStatus, ProductEra, ProductSet, RankedCard, TopCardsQuery, TopCardsResult,
 } from "./product-data.js";
 
 /** Preisquellen von TCGdex, in der Reihenfolge, die Binderplan selbst nutzt. */
@@ -519,6 +519,34 @@ export class BinderplanProvider implements ProductDataProvider {
    * TCGdex-Asset-URL aus der Karte. Binderplans eigener Dateicache liegt unter
    * /root und ist für uns nicht lesbar – deshalb führt der Weg über HTTP.
    */
+  /**
+   * Set, Nummer und Seltenheit einer Karte.
+   *
+   * Bei japanischen Sets steht der englische Name: `sets.name` ist dort das
+   * japanische Original, und „ストームエメラルダ" hilft in einer deutschen
+   * Bildunterschrift niemandem weiter.
+   */
+  cardFacts(cardId: string, lang: "de" | "en" = "de"): CardFacts | null {
+    const row = this.sqlite.prepare(`
+      SELECT c.id, c.name_de, c.name_en, c.local_id, c.rarity, c.illustrator, c.set_id, c.region,
+             s.name AS set_name, s.name_en AS set_name_en, s.total AS set_total, s.official AS set_official
+      FROM cards c LEFT JOIN sets s ON s.id = c.set_id WHERE c.id = ?`).get(cardId) as {
+        id: string; name_de: string | null; name_en: string | null; local_id: string | null;
+        rarity: string | null; illustrator: string | null; set_id: string | null; region: string | null;
+        set_name: string | null; set_name_en: string | null; set_total: number | null; set_official: number | null;
+      } | undefined;
+    if (!row) return null;
+    const region = row.region === "jp" ? "jp" as const : "intl" as const;
+    const setName = (region === "jp" ? row.set_name_en ?? row.set_name : lang === "en" ? row.set_name_en ?? row.set_name : row.set_name ?? row.set_name_en) ?? "";
+    return {
+      id: row.id,
+      name: (lang === "en" ? row.name_en ?? row.name_de : row.name_de ?? row.name_en) ?? row.id,
+      localId: row.local_id ?? "",
+      setId: row.set_id ?? "", setName, setTotal: row.set_total ?? 0, setOfficial: row.set_official ?? 0,
+      region, rarity: row.rarity ?? "", illustrator: row.illustrator ?? "",
+    };
+  }
+
   async cardImage(cardId: string, lang: "de" | "en" = "de"): Promise<string | null> {
     const safe = cardId.replace(/[^A-Za-z0-9._-]/g, "_");
     // Die Endung folgt dem, was tatsaechlich ankommt: TCGdex liefert webp,

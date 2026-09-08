@@ -33,7 +33,7 @@ import { hashtagPolicy, linkRuleFor } from "../../../shared/channels.js";
 import { PLATFORM_LIMITS } from "../../util/utm.js";
 import { loadHashtags } from "../../hashtags.js";
 import {
-  artworkCoverHtml, artworkCtaHtml, artworkFachHtml, artworkRasterHtml, binderExplainerSlideHtml,
+  artworkCoverHtml, artworkCtaHtml, artworkKarteHtml, artworkRasterHtml, artworkSchritteHtml,
   dataUrlFor, type BinderChrome, type RenderJob,
 } from "./render.js";
 import { reviseWithCritic } from "./critic.js";
@@ -42,6 +42,7 @@ import {
   bildFaecher, downloadArtworkImage, echteFaecher, listArtworkPages,
   type ArtworkOptions as ProviderOptions, type ArtworkPage,
 } from "../../providers/artwork.binderplan.js";
+import type { CardFacts, ProductDataProvider } from "../../providers/product-data.js";
 import type { StudioContext } from "./generate.js";
 
 const err = (msg: string, statusCode = 400) => Object.assign(new Error(msg), { statusCode });
@@ -100,6 +101,28 @@ export function pickArtwork(
   return sortiert.find((p) => !gesperrt.has(p.id)) ?? sortiert[0]!;
 }
 
+/**
+ * Die Herkunftszeile einer Karte: Set, Nummer, Seltenheit.
+ *
+ * Das ist die Angabe, nach der Sammler suchen — „Groudon" allein gibt es
+ * zwanzigmal. Japanische Sets bekommen ihr Kürzel dazu, weil derselbe Name in
+ * beiden Regionen vorkommt.
+ */
+export function herkunftsZeile(f: CardFacts | null, lang: "de" | "en"): string {
+  if (!f) return "";
+  const teile: string[] = [];
+  if (f.setName) teile.push(f.region === "jp" ? `${f.setName} (JP)` : f.setName);
+  // Die gedruckte Gesamtzahl, nicht die tatsächliche: auf der Karte steht
+  // „080/076", und die Bildunterschrift darf ihr nicht widersprechen.
+  const gesamt = f.setOfficial || f.setTotal;
+  // Auf gleiche Stellenzahl auffüllen: die Karte druckt „080/076", nicht „080/76".
+  const gesamtText = /^\d+$/.test(f.localId) ? String(gesamt).padStart(f.localId.length, "0") : String(gesamt);
+  if (f.localId) teile.push(gesamt ? `${f.localId}/${gesamtText}` : f.localId);
+  if (f.rarity) teile.push(f.rarity);
+  if (f.illustrator) teile.push(`${lang === "de" ? "Illustration" : "Art"}: ${f.illustrator}`);
+  return teile.join(" · ");
+}
+
 export interface ArtworkBundleOpts {
   leadPieceId?: string;
   language: "de" | "en";
@@ -107,6 +130,11 @@ export interface ArtworkBundleOpts {
   renderer: (jobs: RenderJob[]) => Promise<void>;
   /** Binderplans HTTP-Dienst und ein einspeisbares `fetch`, damit Tests ohne Netz laufen. */
   provider: ProviderOptions;
+  /**
+   * Die Produktdatenquelle — für Kartenscans und Set-Angaben der echten Fächer.
+   * Fehlt sie, laufen die Karten-Slides ohne Bild und ohne Herkunft weiter.
+   */
+  daten?: ProductDataProvider | null;
 }
 
 export async function generateArtworkBundle(
@@ -149,21 +177,31 @@ export async function generateArtworkBundle(
     pools: loadHashtags(ctx.db, base.project.id), topic: req.topic, hint: req.hint,
   }), usage, { maxTokens: 3000, temperature: 0.6 });
 
+  // Die Rückfallwerte tragen dieselbe Aussage wie der Prompt: das Bild setzt die
+  // Kunst der Karten fort. Nichts davon spricht von Lücken oder Platzhaltern.
   const coverTitle = (out.coverTitle
-    || (lang === "de" ? `${bilder} von ${gesamt} Fächern gab es nie als Karte` : `${bilder} of ${gesamt} pockets were never a card`)).slice(0, 80);
-  const ctaLine = (out.ctaLine || (lang === "de" ? `Plane deine Seiten mit ${brand}.` : `Plan your pages with ${brand}.`)).slice(0, 120);
-  const claims = (out.claims.length ? out.claims : [
-    lang === "de" ? `${echt.length} echte Karten, ${bilder} Fächer Bild` : `${echt.length} real cards, ${bilder} image pockets`,
-    lang === "de" ? `Stil „${page.stil}"` : `Style "${page.stil}"`,
-  ]).slice(0, 3).map((x) => x.slice(0, 46));
+    || (lang === "de" ? "Die Karte hört am Rand auf. Das Bild nicht." : "The card ends at its border. The picture does not.")).slice(0, 80);
+  const ctaLine = (out.ctaLine || (lang === "de" ? `So wird aus deinen Karten eine Seite.` : `Turn your cards into one page.`)).slice(0, 120);
+  const claims = (out.claims.length ? out.claims : lang === "de"
+    ? ["Ob eine Karte oder neun", "Das Motiv läuft über alle Fächer", "Wertet den ganzen Binder auf"]
+    : ["One card or nine", "The scene runs across every pocket", "Lifts the whole binder"]
+  ).slice(0, 3).map((x) => x.slice(0, 46));
+
+  // --- Kartenscans der echten Fächer -----------------------------------------
+  // Höchstens drei: mehr macht das Bündel lang, ohne mehr zu zeigen.
+  const beweise = echt.slice(0, 3);
+  const karten = await Promise.all(beweise.map(async (x) => {
+    const id = page.faecher[x.slot]?.kartenId ?? "";
+    const fakten = id ? opts.daten?.cardFacts(id, lang) ?? null : null;
+    const datei = id ? await opts.daten?.cardImage(id, lang) ?? null : null;
+    return { ...x, id, fakten, dataUrl: datei ? dataUrlFor(datei) : null };
+  }));
 
   // --- rendern ---------------------------------------------------------------
   const logoAsset = base.kit.logoAssetId ? ctx.db.select().from(t.mpAssets).where(eq(t.mpAssets.id, base.kit.logoAssetId)).get() : undefined;
   const logoDataUrl = logoAsset ? dataUrlFor(path.join(ctx.dataDir, logoAsset.path)) : null;
   const chrome = (corner: string): BinderChrome => ({ brand, footer, logoDataUrl, corner });
 
-  // Höchstens drei Beweis-Fächer: mehr macht das Carousel lang, ohne mehr zu zeigen.
-  const beweise = echt.slice(0, 3);
   const sizes = [...new Map(platforms.map((p) => [sizeForPlatform(p).tag, sizeForPlatform(p)])).values()];
   const linkRules = [...new Set(platforms.map(linkRuleFor))];
   const jobs: RenderJob[] = [];
@@ -178,20 +216,21 @@ export async function generateArtworkBundle(
     jobs.push({
       html: artworkCoverHtml(base.kit, {
         title: coverTitle, claims, imageDataUrl: bild, ratio,
-        hint: lang === "de" ? `Welche ${echt.length}?` : `Which ${echt.length}?`,
+        hint: lang === "de" ? "Sieh selbst" : "See for yourself",
       }, size.w, size.h, chrome(page.titel)),
       width: size.w, height: size.h, file: cover,
     });
     files.push(cover);
 
-    beweise.forEach((x, i) => {
-      const file = datei(`${String(i + 1).padStart(2, "0")}-fach${x.slot + 1}`);
+    karten.forEach((x, i) => {
+      const file = datei(`${String(i + 1).padStart(2, "0")}-karte${x.slot + 1}`);
+      const herkunft = herkunftsZeile(x.fakten, lang)
+        || (lang === "de" ? `Fach ${x.slot + 1} von ${gesamt}` : `Pocket ${x.slot + 1} of ${gesamt}`);
       jobs.push({
-        html: artworkFachHtml(base.kit, {
-          headline: x.name || (lang === "de" ? `Fach ${x.slot + 1}` : `Pocket ${x.slot + 1}`),
-          sub: lang === "de" ? `Fach ${x.slot + 1} von ${gesamt} — eine echte Karte` : `Pocket ${x.slot + 1} of ${gesamt} — a real card`,
-          imageDataUrl: bild, spalten: page.spalten, zeilen: page.zeilen, slot: x.slot, marke: L.echt,
-        }, size.w, size.h, chrome(`${i + 1} / ${beweise.length}`)),
+        html: artworkKarteHtml(base.kit, {
+          name: x.fakten?.name || x.name || (lang === "de" ? `Fach ${x.slot + 1}` : `Pocket ${x.slot + 1}`),
+          herkunft, imageDataUrl: x.dataUrl, marke: L.echt,
+        }, size.w, size.h, chrome(`${i + 1} / ${karten.length}`)),
         width: size.w, height: size.h, file,
       });
       files.push(file);
@@ -200,8 +239,10 @@ export async function generateArtworkBundle(
     const reveal = datei(`${String(beweise.length + 1).padStart(2, "0")}-aufloesung`);
     jobs.push({
       html: artworkRasterHtml(base.kit, {
-        headline: lang === "de" ? `${echt.length} echt, ${bilder} gemalt` : `${echt.length} real, ${bilder} painted`,
-        sub: lang === "de" ? "Ein Bild, das um die vorhandenen Karten herum gebaut wurde." : "One image, built around the cards that were already there.",
+        headline: lang === "de" ? `${echt.length} echte Karten, ein Motiv` : `${echt.length} real cards, one scene`,
+        sub: lang === "de"
+          ? `Das Bild führt ihre Kunst über die anderen ${bilder} Fächer weiter.`
+          : `The picture carries their artwork on across the other ${bilder} pockets.`,
         imageDataUrl: bild, spalten: page.spalten, zeilen: page.zeilen,
         echt: echt.map((x) => x.slot), etikett: L.nurEcht, ratio,
       }, size.w, size.h, chrome(L.aufloesung)),
@@ -209,15 +250,17 @@ export async function generateArtworkBundle(
     });
     files.push(reveal);
 
-    const wie = datei(`${String(beweise.length + 2).padStart(2, "0")}-entstehung`);
+    const wie = datei(`${String(karten.length + 2).padStart(2, "0")}-entstehung`);
     jobs.push({
-      html: binderExplainerSlideHtml(base.kit, {
-        headline: lang === "de" ? `Ein Satz, ein Stil, eine Seite` : `One sentence, one style, one page`,
-        sub: lang === "de"
-          ? `${L.stil}: „${page.stil}" — einer von ${ARTWORK_STILE.length}. Bis zu drei Pokémon je Seite. ${L.drucken}.`
-          : `${L.stil}: "${page.stil}" — one of ${ARTWORK_STILE.length}. Up to three Pokémon per page. ${L.drucken}.`,
-        imageDataUrl: bild, ratio,
-      }, size.w, size.h, chrome(L.so)),
+      html: artworkSchritteHtml(base.kit, {
+        title: lang === "de" ? "So entsteht sie" : "How it is made",
+        schritte: lang === "de"
+          ? ["Karten im Binder anordnen", `Stil wählen — ${ARTWORK_STILE.length} stehen bereit`, "Extras beschreiben, wenn du magst", "Bild wird erzeugt, PDF drucken"]
+          : ["Arrange the cards in the binder", `Pick a style — ${ARTWORK_STILE.length} to choose from`, "Describe extras if you like", "The image is generated, print the PDF"],
+        // Kein Hinweis unten: Schritt 4 sagt schon, was passiert, und die Ecke
+        // wiederholte bis hierher die Überschrift.
+        imageDataUrl: bild, ratio, hint: "",
+      }, size.w, size.h, chrome(lang === "de" ? "4 Schritte" : "4 steps")),
       width: size.w, height: size.h, file: wie,
     });
     files.push(wie);
@@ -249,8 +292,9 @@ export async function generateArtworkBundle(
 
   const notes = [rev.notes];
   if (!page.mein) notes.push(`Die Seite steht unter „${page.besitzer}“ in der Vitrine — vor dem Posten prüfen, ob das dein Konto ist.`);
-  if (beweise.length < echt.length) notes.push(`${beweise.length} von ${echt.length} echten Fächern gezeigt.`);
-  if (echt.some((x) => !x.name)) notes.push("Zu mindestens einer echten Karte kennt die Vitrine keinen Namen — die Slide zeigt dann die Fachnummer.");
+  if (karten.length < echt.length) notes.push(`${karten.length} von ${echt.length} echten Karten gezeigt.`);
+  const ohneScan = karten.filter((x) => !x.dataUrl).map((x) => x.fakten?.name || x.name || `Fach ${x.slot + 1}`);
+  if (ohneScan.length) notes.push(`Kein Kartenscan für ${ohneScan.join(", ")} — die Slide bleibt ohne Bild.`);
 
   return writeBundlePieces({
     db: ctx.db as Db, projectId: base.project.id, leadId, format: "artwork_carousel", language: lang, platforms,

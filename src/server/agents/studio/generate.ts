@@ -23,6 +23,7 @@ import { clearBundle, generateDataBundle, generateStoryFor, type DataBase, write
 import { musicTracks } from "../video/assemble.js";
 import { generateShowcaseBundle } from "./showcase.js";
 import { generateArtworkBundle } from "./artwork.js";
+import { createProductDataProvider } from "../../data-source.js";
 import { buildUtmUrl, deepLinkFor, PLATFORM_LIMITS, platformFromChannel, slugify } from "../../util/utm.js";
 import { canonicalChannel, channelLink, linkRuleFor, saneTitle } from "../../../shared/channels.js";
 import { loadProfiles, planChannelNames } from "../../channels.js";
@@ -382,11 +383,18 @@ async function generateDataPieces(ctx: StudioContext, base: Base, req: s.Content
         renderer,
         screenshotPath: shot ? path.join(ctx.dataDir, shot.path) : null,
       };
-      const { result } = await withRun(ctx.db, { task: `studio.${req.format}:${language}`, model: modelFor("content"), projectId: base.project.id, pieceId: leadId }, (usage) =>
-        req.format === "showcase_carousel" ? generateShowcaseBundle(ctx, dataBase, req, usage, shared)
-          : req.format === "artwork_carousel"
-            ? generateArtworkBundle(ctx, dataBase, req, usage, { ...shared, provider: { apiBase: ctx.env.MP_BINDERPLAN_API, log: ctx.log } })
-            : generateDataBundle(ctx, dataBase, req, usage, shared));
+      // Die Kunstseite braucht zusätzlich die Produktdaten — für die Kartenscans
+      // und die Set-Angaben der echten Fächer. Die Verbindung gehört wieder zu,
+      // auch wenn der Lauf scheitert.
+      const daten = req.format === "artwork_carousel" ? createProductDataProvider(ctx.db, ctx.env, base.project.id, { log: ctx.log }) : null;
+      let result: s.ContentPiece[];
+      try {
+        ({ result } = await withRun(ctx.db, { task: `studio.${req.format}:${language}`, model: modelFor("content"), projectId: base.project.id, pieceId: leadId }, (usage) =>
+          req.format === "showcase_carousel" ? generateShowcaseBundle(ctx, dataBase, req, usage, shared)
+            : req.format === "artwork_carousel"
+              ? generateArtworkBundle(ctx, dataBase, req, usage, { ...shared, provider: { apiBase: ctx.env.MP_BINDERPLAN_API, log: ctx.log }, daten })
+              : generateDataBundle(ctx, dataBase, req, usage, shared)));
+      } finally { daten?.close(); }
       if (req.format === "data_reel") enqueueJob(ctx.db, { projectId: base.project.id, kind: "video.slideshow", payload: { pieceId: leadId }, steps: SLIDESHOW_STEPS });
       writeAudit(ctx.db, { user, action: "content.generate", entityType: "content_piece", entityId: leadId, projectId: base.project.id, content: { format: req.format, language, pieces: result.length, platforms: result.map((p) => p.channel) } });
       if (i === 0) lead = withCosts(ctx.db, [result[0]!])[0]!;

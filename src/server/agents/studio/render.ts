@@ -641,6 +641,60 @@ ${binderFoot(c)}</div>`;
 }
 
 /**
+ * Eine der echten Karten der Seite — der Scan, nicht der Ausschnitt.
+ *
+ * Bis hierher zeigten diese Slides einen Zuschnitt aus dem Seitenbild. Das war
+ * technisch hübsch (es beweist, dass die Karte wirklich dort sitzt), aber als
+ * Beitrag falsch: man sah einen Screenshot statt einer Karte, samt der Kanten
+ * des Fachs. Jetzt steht der Kartenscan sauber im Fach, und darunter steht,
+ * aus welchem Set er kommt — das ist die Angabe, nach der Sammler suchen.
+ */
+export function artworkKarteHtml(
+  kit: BrandKit,
+  a: { name: string; herkunft: string; imageDataUrl: string | null; marke: string },
+  w: number, h: number, c: BinderChrome,
+): string {
+  const u = (x: number) => Math.round(w * x);
+  const hoch = h / w > 1.5;
+  const body = `<div class="slide">${binderTop(c)}
+<div class="mid" style="align-items:center"><div style="width:${hoch ? 66 : 52}%">
+${a.marke ? `<span class="tab">${esc(a.marke)}</span>` : ""}
+<div class="page" style="grid-template-columns:1fr;border-top-left-radius:${a.marke ? 0 : u(0.028)}px"><div class="pk">${a.imageDataUrl ? `<img src="${a.imageDataUrl}">` : ""}</div></div></div></div>
+<div><div class="disp" style="font-size:${u(a.name.length > 22 ? 0.062 : 0.072)}px">${esc(a.name)}</div>
+${a.herkunft ? `<div class="sub" style="margin-top:${u(0.012)}px">${esc(a.herkunft)}</div>` : ""}</div>
+${binderFoot(c)}</div>`;
+  return base(kit, w, h, body, binderCss(w, h));
+}
+
+/**
+ * Wie eine Kunstseite entsteht — drei Schritte, nicht ein Satz.
+ *
+ * Der bisherige Erklär-Slide sagte nur „ein Satz, ein Stil, eine Seite". Das
+ * beschreibt das Ergebnis, nicht den Weg, und wer den Weg nicht kennt, hält es
+ * für einen Filter. Drei nummerierte Schritte sind der kürzeste ehrliche
+ * Bauplan: anordnen, Stil wählen, Extras beschreiben.
+ */
+export function artworkSchritteHtml(
+  kit: BrandKit,
+  a: { title: string; schritte: string[]; imageDataUrl: string | null; ratio: string; hint: string },
+  w: number, h: number, c: BinderChrome,
+): string {
+  const u = (x: number) => Math.round(w * x);
+  const liste = a.schritte.slice(0, 4).map((x, i) =>
+    `<li><span class="ziffer">${i + 1}</span><span>${esc(x)}</span></li>`).join("");
+  const body = `<div class="slide">${binderTop(c)}
+${seitenBuehne(a.imageDataUrl, a.ratio, "")}
+<div><div class="disp" style="font-size:${u(a.title.length > 30 ? 0.054 : 0.062)}px">${esc(a.title)}</div>
+<ol class="schritte">${liste}</ol>
+${a.hint ? `<div class="hint" style="font-size:${u(0.038)}px;margin-top:${u(0.014)}px">${esc(a.hint)}${binderArrow(u(0.07), -45)}</div>` : ""}</div>
+${binderFoot(c)}</div>`;
+  return base(kit, w, h, body, binderCss(w, h) + buehneCss(w, h) + `
+.schritte{list-style:none;margin:${u(0.02)}px 0 0;padding:0;display:flex;flex-direction:column;gap:${u(0.014)}px;counter-reset:none}
+.schritte li{display:flex;align-items:center;gap:${u(0.018)}px;font-family:var(--f-body);font-weight:700;font-size:${u(0.03)}px;line-height:1.2}
+.ziffer{flex:0 0 auto;width:${u(0.052)}px;height:${u(0.052)}px;border-radius:50%;background:var(--b-accent2);color:var(--b-contour);font-family:var(--f-display);font-weight:700;font-size:${u(0.03)}px;display:grid;place-items:center;line-height:1}`);
+}
+
+/**
  * Abschluss eines Kunstseiten-Beitrags.
  *
  * `binderCtaHtml` taugt hier nicht: es ist für **drei kleine** Produktbilder im

@@ -339,21 +339,27 @@ export function artworkPrompt(input: {
   ].filter(Boolean).join("\n") || "(no pools filled in yet - invent fitting, specific niche tags)";
   return [
     { role: "system", content: `[task:artwork]
-You write around ONE "art page" made with "${input.brief.productName}": a ${input.gesamtFaecher}-pocket binder page where ${input.bildFaecher} pockets are one continuous generated image and the remaining ${input.gesamtFaecher - input.bildFaecher} hold REAL cards. Style preset: "${input.stil}".
+You write around ONE "art page" made with "${input.brief.productName}": a ${input.gesamtFaecher}-pocket binder page where ${input.gesamtFaecher - input.bildFaecher} pockets hold REAL cards and the other ${input.bildFaecher} are one continuous generated image painted around them. Style preset: "${input.stil}".
 
-THE ONE IDEA: a collector's page is unfinished because cards are missing or expensive. Here the gap became the picture, and the page looks intentional instead of half empty.
+THE ONE IDEA - get this right or the whole post is wrong: a card's artwork stops at its border. Here it does not. The page CARRIES THE ARTWORK ON around the real cards, so one card - or nine - become a single picture. This is NOT a stand-in for missing cards and NOT a placeholder. Nobody is waiting for anything. It is a deliberate upgrade: the collector chose to extend the art, and the binder is worth more to look at because of it.
+
+FORBIDDEN framings, they invert the product:
+- "gab es nie als Karte" / "never existed as a card" / anything that treats the painted pockets as fake cards.
+- "Lücke", "fehlende Karten", "warten", "halb leer", "gap", "missing", "placeholder", "until the real ones arrive".
+- Any puzzle ("which ones are real?") - the point is the connection, not a quiz.
 
 WHAT YOU MAY SAY:
 - The real cards by name (listed below) - they are the searchable words a collector types.
-- The mechanic: a sentence of description, one style out of ${input.stile.length}, printed as PDF, into the same sleeve.
+- That it works with a single card just as well as with nine.
+- The mechanic: arrange the cards, pick one of ${input.stile.length} styles, optionally describe extras, the image is generated and printed as PDF into the same sleeve.
 - NEVER describe what the image shows. You have not seen it. The title is the only thing you may repeat.
 - Never invent numbers (prices, user counts, ratings, downloads). If a number would help, leave it out.
 - First person works - this is the author's own page.
 
 Deliverables:
 - "title": short internal label, max 60 chars.
-- "coverTitle": headline for the cover slide, max 60 chars. It must NOT name the product; it states the puzzle ("${input.bildFaecher} of these ${input.gesamtFaecher} pockets were never a card").
-- "claims": 2-3 short lines for the cover, max 46 chars each.
+- "coverTitle": headline for the cover slide, max 60 chars. It must NOT name the product. It says that the artwork continues past the card's edge.
+- "claims": 2-3 short lines for the cover, max 46 chars each. One of them says that it works with one card as well as with many.
 - "hook": ONE spoken sentence for the first seconds of a video, max 90 chars.
 - "ctaLine": ONE sentence for the last slide, max 90 chars - what the reader does next.
 - "captions": one entry per platform below, each standing on its own.
@@ -365,7 +371,7 @@ ${writingRules({ language: input.language, voiceProfile: input.voiceProfile })}
 Return JSON: {"title","coverTitle","claims":["..."],"hook","ctaLine","captions":[{"platform","caption","hashtags":["#tag"]}]}` },
     { role: "user", content: `ART PAGE: ${input.titel}
 STYLE PRESET: ${input.stil || "-"}
-POCKETS: ${input.gesamtFaecher} total, ${input.bildFaecher} image, ${input.gesamtFaecher - input.bildFaecher} real cards
+POCKETS: ${input.gesamtFaecher} total, ${input.gesamtFaecher - input.bildFaecher} real cards, ${input.bildFaecher} painted around them
 REAL CARDS ON THE PAGE: ${input.karten.filter(Boolean).join(", ") || "(unnamed)"}
 AVAILABLE STYLES: ${input.stile.join(", ")}
 TOPIC: ${input.topic || "-"}
