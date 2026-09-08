@@ -267,13 +267,15 @@ export async function runSeries(
   let letztesLead: s.ContentPiece | null = null;
   // Showcase und Kunstseite erzeugen genau ein Buendel, egal welche Formate
   // eingestellt sind: eine echte Seite laesst sich nicht als Reel abkuerzen.
-  const einBuendel = series.kind === "binder_showcase" || series.kind === "artwork_showcase";
+  // Der Binder-Showcase kennt nur ein Format; die Kunstseite kann beides —
+  // dieselben Slides einmal als Carousel und einmal hochkant als Reel.
+  const einBuendel = series.kind === "binder_showcase";
   const formats = einBuendel ? ["data_carousel" as const] : series.params.formats;
   for (const format of formats) {
     const showcase = series.kind === "binder_showcase";
     const artwork = series.kind === "artwork_showcase";
     const req = s.ContentRequest.parse({
-      format: showcase ? "showcase_carousel" : artwork ? "artwork_carousel" : format,
+      format: showcase ? "showcase_carousel" : artwork ? (format === "data_reel" ? "artwork_reel" : "artwork_carousel") : format,
       topic: "", hint: "", seriesId: series.id,
       platform: platforms[0] ?? "instagram",
       bundlePlatforms: platforms,

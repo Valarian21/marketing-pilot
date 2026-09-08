@@ -28,6 +28,12 @@ export const ContentFormat = z.enum([
    */
   "artwork_carousel",
   /**
+   * Dieselbe Kunstseite als vertikales Reel. Eigenes Format und nicht
+   * `data_reel`, weil die Slides anders entstehen und der Zeitplan fest ist —
+   * es gibt keine Karten, deren Standzeit sich rechnen ließe.
+   */
+  "artwork_reel",
+  /**
    * Hochkant 1080×1920, 24 Stunden sichtbar: der Hinweis auf den Beitrag des
    * Tages. Eigenes Stück und nicht bloß ein Anhang, damit Freigabe, Zeitplan
    * und Poster dieselben Wege gehen wie beim Rest.

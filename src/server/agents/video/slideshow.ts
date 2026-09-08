@@ -19,6 +19,7 @@ import * as t from "../../db/schema.js";
 import { newId, nowIso, parseJson, toJson } from "../../db/index.js";
 import type { JobHandler } from "../../jobs.js";
 import { loadBrandKit } from "../studio/brandkit.js";
+import { REEL_FORMATE } from "../studio/data-content.js";
 import { playwrightRenderer, type RenderJob } from "../studio/render.js";
 import { markPng } from "../../util/png.js";
 import { bookRun, finishRun, startRun } from "../../audit.js";
@@ -275,7 +276,7 @@ export const renderSlideshowJob: JobHandler<VideoContext> = async (ctx, job, pro
   const pieceId = String(job.payload["pieceId"] ?? "");
   const piece = ctx.db.select().from(t.mpContentPieces).where(eq(t.mpContentPieces.id, pieceId)).get();
   if (!piece) throw new Error("Stück nicht gefunden.");
-  if (piece.format !== "data_reel") throw new Error("Nur Daten-Reels werden als Slideshow gerendert.");
+  if (!REEL_FORMATE.has(piece.format)) throw new Error("Nur Reels werden als Slideshow gerendert.");
   const meta = parseJson<Record<string, unknown>>(piece.meta, {});
   const project = getProject(ctx.db, piece.projectId);
   if (!project) throw new Error("Projekt nicht gefunden.");

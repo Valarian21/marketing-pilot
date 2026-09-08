@@ -687,6 +687,9 @@ export interface BundleRowsInput {
   meta: Record<string, unknown>;
 }
 
+/** Formate, die erst nach dem Rendern der MP4 fertig sind — bis dahin Entwurf. */
+export const REEL_FORMATE = new Set<string>(["data_reel", "artwork_reel"]);
+
 export function writeBundlePieces(i: BundleRowsInput): s.ContentPiece[] {
   const pools = loadHashtags(i.db, i.projectId);
   const ts = nowIso();
@@ -702,14 +705,14 @@ export function writeBundlePieces(i: BundleRowsInput): s.ContentPiece[] {
       size: i.sizeFor(platform), linkRule: i.ruleFor(platform),
       caption: body, hashtags: tags, limit: PLATFORM_LIMITS[platform] ?? 2000,
       // Reihenfolge der Slides = Reihenfolge im Video: Cover, Inhalt, CTA.
-      ...(i.format === "data_reel" ? { slideAssets: assets } : {}),
+      ...(REEL_FORMATE.has(i.format) ? { slideAssets: assets } : {}),
     };
     const row = {
       id, projectId: i.projectId, taskId: n === 0 ? i.taskId : null,
       channel: platform, format: i.format,
       title: `${n === 0 ? i.title : i.title} · ${platform}`.slice(0, 120),
       // Ein Reel ist erst fertig, wenn der Worker die MP4 gebaut hat - bis dahin Entwurf.
-      body, assets: toJson(assets), status: (i.format === "data_reel" ? "draft" : "review") as s.ContentPiece["status"], humanEdited: false,
+      body, assets: toJson(assets), status: (REEL_FORMATE.has(i.format) ? "draft" : "review") as s.ContentPiece["status"], humanEdited: false,
       publishedAt: null, externalUrl: null, utm: "{}", meta: toJson(meta),
       aiTellScore: n === 0 ? i.score : null, aiTellNotes: n === 0 ? i.notes : "",
       rejectionReason: "", createdAt: ts, updatedAt: ts,

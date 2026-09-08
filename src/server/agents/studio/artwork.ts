@@ -138,7 +138,21 @@ export interface ArtworkBundleOpts {
    * Fehlt sie, laufen die Karten-Slides ohne Bild und ohne Herkunft weiter.
    */
   daten?: ProductDataProvider | null;
+  /**
+   * Als Reel statt als Carousel: nur Hochkant-Slides, festes Zeitraster, und
+   * das Stück bleibt Entwurf, bis der Worker die MP4 gebaut hat.
+   */
+  reel?: boolean;
 }
+
+/**
+ * Standzeit je Slide im Kunstseiten-Reel, in Millisekunden.
+ *
+ * Fest und nicht gerechnet: anders als bei einer Rangliste gibt es hier keine
+ * Karten, deren Zahl die Länge bestimmt. Die Auflösung und die vier Schritte
+ * stehen länger — dort muss man lesen können.
+ */
+const REEL_TAKT: Record<string, number> = { cover: 3000, karte: 2400, aufloesung: 3000, schritte: 3400, cta: 2800 };
 
 export async function generateArtworkBundle(
   ctx: StudioContext, base: DataBase, req: s.ContentRequest, usage: UsageCollector, opts: ArtworkBundleOpts,
@@ -222,15 +236,23 @@ export async function generateArtworkBundle(
   const logoDataUrl = logoAsset ? dataUrlFor(path.join(ctx.dataDir, logoAsset.path)) : null;
   const chrome = (corner: string): BinderChrome => ({ brand, footer, logoDataUrl, corner });
 
-  const sizes = [...new Map(platforms.map((p) => [sizeForPlatform(p).tag, sizeForPlatform(p)])).values()];
-  const linkRules = [...new Set(platforms.map(linkRuleFor))];
+  // Ein Reel ist **eine** Datei für alle Kanäle — es kann nur eine
+  // CTA-Beschriftung tragen, und zwar die des Leit-Kanals.
+  const sizes = opts.reel
+    ? [{ w: 1080, h: 1920, tag: "1080x1920" }]
+    : [...new Map(platforms.map((p) => [sizeForPlatform(p).tag, sizeForPlatform(p)])).values()];
+  const linkRules = opts.reel ? [linkRuleFor(leadPlatform)] : [...new Set(platforms.map(linkRuleFor))];
   const jobs: RenderJob[] = [];
   const bySize = new Map<string, string[]>();
   const ctaFiles = new Map<string, string>();
 
+  /** Schlüssel je Slide, in Reihenfolge — Grundlage des festen Reel-Zeitplans. */
+  const segmente: { key: string; ms: number }[] = [];
   for (const size of sizes) {
     const files: string[] = [];
     const datei = (n: string) => path.join(outDir, `${lang}-${size.tag}-${n}.png`);
+    const takt = (key: string, art: keyof typeof REEL_TAKT) => { if (size === sizes[0]) segmente.push({ key, ms: REEL_TAKT[art]! }); };
+    takt("cover", "cover");
 
     const cover = datei("00-deckseite");
     jobs.push({
@@ -254,6 +276,7 @@ export async function generateArtworkBundle(
         width: size.w, height: size.h, file,
       });
       files.push(file);
+      takt(`k${i + 1}`, "karte");
     });
 
     const reveal = datei(`${String(beweise.length + 1).padStart(2, "0")}-aufloesung`);
@@ -269,6 +292,7 @@ export async function generateArtworkBundle(
       width: size.w, height: size.h, file: reveal,
     });
     files.push(reveal);
+    takt("aufloesung", "aufloesung");
 
     const wie = datei(`${String(karten.length + 2).padStart(2, "0")}-entstehung`);
     jobs.push({
@@ -286,6 +310,7 @@ export async function generateArtworkBundle(
       width: size.w, height: size.h, file: wie,
     });
     files.push(wie);
+    takt("schritte", "schritte");
 
     for (const rule of linkRules) {
       const file = datei(`99-cta-${rule}`);
@@ -300,6 +325,7 @@ export async function generateArtworkBundle(
       });
       ctaFiles.set(`${size.tag}:${rule}`, file);
     }
+    takt("cta", "cta");
     bySize.set(size.tag, files);
   }
   await opts.renderer(jobs);
@@ -312,7 +338,7 @@ export async function generateArtworkBundle(
   const captionOf = (platform: string) => out.captions.find((c) => c.platform.trim().toLowerCase() === platform)?.caption.trim() ?? "";
   const leadCaption = captionOf(leadPlatform) || out.captions[0]?.caption.trim() || coverTitle;
   const rev = await reviseWithCritic(ctx, usage, {
-    body: leadCaption, language: lang, voiceProfile: base.voice, format: "artwork_carousel",
+    body: leadCaption, language: lang, voiceProfile: base.voice, format: opts.reel ? "artwork_reel" : "artwork_carousel",
     platform: leadPlatform, limit: PLATFORM_LIMITS[leadPlatform] ?? 2000, maxRounds: 2,
   });
 
@@ -323,17 +349,18 @@ export async function generateArtworkBundle(
   if (ohneScan.length) notes.push(`Kein Kartenscan für ${ohneScan.join(", ")} — die Slide bleibt ohne Bild.`);
 
   return writeBundlePieces({
-    db: ctx.db as Db, projectId: base.project.id, leadId, format: "artwork_carousel", language: lang, platforms,
+    db: ctx.db as Db, projectId: base.project.id, leadId, format: opts.reel ? "artwork_reel" : "artwork_carousel", language: lang, platforms,
     taskId: req.taskId ?? null,
     title: out.title || `${page.titel} · ${L.seite}`,
     score: rev.score, notes: notes.filter(Boolean).join("\n"),
     captionFor: (platform, isLead) => (isLead ? rev.body : captionOf(platform) || rev.body),
     hashtagsFor: (platform) => out.captions.find((c) => c.platform.trim().toLowerCase() === platform)?.hashtags ?? [],
     assetsFor: (platform) => {
-      const size = sizeForPlatform(platform);
-      return [...(bySize.get(size.tag) ?? []), ctaFiles.get(`${size.tag}:${linkRuleFor(platform)}`) ?? ""].filter(Boolean).map((f) => assetIds.get(f)!).filter(Boolean);
+      const size = opts.reel ? sizes[0]! : sizeForPlatform(platform);
+      const rule = opts.reel ? linkRuleFor(leadPlatform) : linkRuleFor(platform);
+      return [...(bySize.get(size.tag) ?? []), ctaFiles.get(`${size.tag}:${rule}`) ?? ""].filter(Boolean).map((f) => assetIds.get(f)!).filter(Boolean);
     },
-    sizeFor: (platform) => sizeForPlatform(platform).tag,
+    sizeFor: (platform) => (opts.reel ? sizes[0]!.tag : sizeForPlatform(platform).tag),
     ruleFor: (platform) => linkRuleFor(platform),
     meta: {
       hook: out.hook, coverTitle, ctaLine, claims, footer,
@@ -343,6 +370,7 @@ export async function generateArtworkBundle(
         veroeffentlichtAt: page.veroeffentlichtAt,
       },
       scopeLabel: page.titel, request: req,
+      ...(opts.reel ? { reelSegments: segmente, reel: s.ReelOptions.parse(req.reel ?? {}), cards: [] } : {}),
     },
   });
 }

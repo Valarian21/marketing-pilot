@@ -10,7 +10,7 @@ import { STAGES } from "../../shared/channels.js";
 
 const TABS = [{ id: "erstellen", label: "Erstellen" }, { id: "brand", label: "Brand-Kit & Stimme" }, { id: "hashtags", label: "Hashtags" }, { id: "verzeichnisse", label: "Verzeichnisse" }, { id: "geo", label: "GEO-Artikel" }] as const;
 type Tab = (typeof TABS)[number]["id"];
-const FORMAT_LABEL: Record<string, string> = { text: "Text-Post", carousel: "Carousel", pin: "Pinterest-Pin", image: "Bild (KI)", ad_creative: "Ad-Hintergrund (KI)", article: "GEO-Artikel", directory_entry: "Directory-Eintrag", video: "Video", community_reply: "Community-Antwort", data_carousel: "Daten-Carousel", data_reel: "Daten-Reel", showcase_carousel: "Binderseiten", artwork_carousel: "Kunstseite", story: "Story (24 h)" };
+const FORMAT_LABEL: Record<string, string> = { text: "Text-Post", carousel: "Carousel", pin: "Pinterest-Pin", image: "Bild (KI)", ad_creative: "Ad-Hintergrund (KI)", article: "GEO-Artikel", directory_entry: "Directory-Eintrag", video: "Video", community_reply: "Community-Antwort", data_carousel: "Daten-Carousel", data_reel: "Daten-Reel", showcase_carousel: "Binderseiten", artwork_carousel: "Kunstseite", artwork_reel: "Kunstseiten-Reel", story: "Story (24 h)" };
 /** Plattformen, die ein Daten-Bündel bedienen kann - Reihenfolge = Vorschlag im Formular. */
 const BUNDLE_PLATFORMS = ["instagram", "tiktok", "pinterest", "facebook", "bluesky", "x"] as const;
 const STATUS: Record<ContentPiece["status"], { label: string; kind: PillKind }> = { draft: { label: "Entwurf", kind: "todo" }, review: { label: "in Freigabe", kind: "review" }, approved: { label: "freigegeben", kind: "done" }, published: { label: "veröffentlicht", kind: "done" }, rejected: { label: "abgelehnt", kind: "kind" } };
@@ -90,7 +90,7 @@ function CreateTab({ id, view, busy, run }: { id: string; view: StudioView; busy
 
   const hasData = Boolean(data?.status.available);
   const isData = format === "data_carousel" || format === "data_reel";
-  const isArtwork = format === "artwork_carousel";
+  const isArtwork = format === "artwork_carousel" || format === "artwork_reel";
   const submit = (e: FormEvent) => {
     e.preventDefault();
     if (isArtwork) {
@@ -125,6 +125,7 @@ function CreateTab({ id, view, busy, run }: { id: string; view: StudioView; busy
                 {hasData && <option value="data_carousel">Daten-Carousel (Rangliste)</option>}
                 {hasData && <option value="data_reel">Daten-Reel (Video 1080×1920)</option>}
                 {hasData && <option value="artwork_carousel">Kunstseite (Vitrine)</option>}
+                {hasData && <option value="artwork_reel">Kunstseiten-Reel (Video 1080×1920)</option>}
                 <option value="pin">Pinterest-Pin (1000×1500)</option><option value="image">Bild / Thumbnail (KI)</option><option value="ad_creative">Ad-Hintergrund (KI)</option>
               </select></label>
             {format === "text" && <label className="mp-field mp-field--short"><span>Plattform</span><select value={platform} onChange={(e) => setPlatform(e.target.value)}>{["linkedin", "x", "threads", "bluesky", "facebook", "instagram"].map(opt)}</select></label>}

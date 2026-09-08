@@ -17,13 +17,13 @@ interface MediaItem { id: string; projectId: string; projectName: string; title:
  * wollte, fand nichts, obwohl die Hälfte der Mediathek daraus besteht.
  */
 const FORMAT_LABEL: Record<string, string> = {
-  data_reel: "Reel", data_carousel: "Datenrangliste", showcase_carousel: "Binderseiten", artwork_carousel: "Kunstseite", story: "Story",
+  data_reel: "Reel", artwork_reel: "Kunstseiten-Reel", data_carousel: "Datenrangliste", showcase_carousel: "Binderseiten", artwork_carousel: "Kunstseite", story: "Story",
   carousel: "Carousel", video: "Video", image: "Bild", pin: "Pin", text: "Text",
   article: "Artikel", directory_entry: "Verzeichnis", community_reply: "Community-Antwort", ad_creative: "Anzeige",
 };
 
 /** Nur die bewegten Formate — der häufigste Griff und deshalb ein eigener Knopf. */
-const BEWEGT = ["data_reel", "video"];
+const BEWEGT = ["data_reel", "artwork_reel", "video"];
 const STATUS_LABEL: Record<string, string> = { draft: "Entwurf", review: "In Prüfung", approved: "Freigegeben", published: "Veröffentlicht", rejected: "Abgelehnt" };
 const RANGES: { key: string; label: string; ms: number | null }[] = [{ key: "all", label: "Gesamter Zeitraum", ms: null }, { key: "day", label: "Heute", ms: 864e5 }, { key: "week", label: "Letzte 7 Tage", ms: 7 * 864e5 }, { key: "month", label: "Letzte 30 Tage", ms: 30 * 864e5 }];
 
