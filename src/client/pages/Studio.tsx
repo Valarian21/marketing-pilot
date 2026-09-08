@@ -77,7 +77,7 @@ function CreateTab({ id, view, busy, run }: { id: string; view: StudioView; busy
   const [countdown, setCountdown] = useState(true);
   const [language, setLanguage] = useState("de");
   const [bundle, setBundle] = useState<string[]>(["instagram", "tiktok", "pinterest", "facebook"]);
-  const [reel, setReel] = useState<{ voiceover: boolean; music: "none" | "bed"; secondsPerCard: number }>({ voiceover: false, music: "none", secondsPerCard: 1.8 });
+  const [reel, setReel] = useState<{ voiceover: boolean; music: "none" | "bed"; secondsPerCard: number }>({ voiceover: false, music: "bed", secondsPerCard: 1.8 });
 
   useEffect(() => { void (async () => { try { setData(await api<ProductDataView>(`/projects/${id}/data`)); } catch { setData(null); } })(); }, [id]);
   useEffect(() => {
@@ -147,10 +147,14 @@ function CreateTab({ id, view, busy, run }: { id: string; view: StudioView; busy
                     <select value={reel.voiceover ? "voice" : "mute"} onChange={(e) => setReel({ ...reel, voiceover: e.target.value === "voice" })}>
                       <option value="mute">stumm (Sound von der Plattform)</option><option value="voice">Voiceover</option>
                     </select></label>
-                  <label className="mp-field mp-field--short"><span>Musik</span>
+                  <label className="mp-field mp-field--short" title="Über die API lässt sich kein Plattform-Sound anhängen — ohne Bett geht das Reel stumm raus. Auf TikTok stellst du beim Hochladen die Originallautstärke auf 0 und legst einen Trending-Sound darüber."><span>Musik</span>
                     <select value={reel.music} onChange={(e) => setReel({ ...reel, music: e.target.value as "none" | "bed" })}>
-                      <option value="none">keine</option><option value="bed">Musikbett</option>
+                      <option value="bed">Musikbett (nötig beim Posten über die API)</option>
+                      <option value="none">keine — Sound erst auf der Plattform</option>
                     </select></label>
+                  {reel.music === "bed" && view.musicTracks === 0 && (
+                    <p className="mp-small mp-note">Kein Track in <code className="mp-code">marketing-pilot/assets/music/</code> — das Reel würde stumm rendern. 6–8 CC0-Stücke dort ablegen (Vorgaben stehen in der <code className="mp-code">README.md</code> des Ordners).</p>
+                  )}
                 </div>
               )}
               <fieldset className="mp-field">

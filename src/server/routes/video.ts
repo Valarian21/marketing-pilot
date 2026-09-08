@@ -1,5 +1,4 @@
 /** Video factory endpoints: script generation/editing, render jobs (queued for the worker), job status. */
-import fs from "node:fs";
 import path from "node:path";
 import { eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
@@ -11,6 +10,7 @@ import { writeAudit } from "../audit.js";
 import { getProject } from "../repo/projects.js";
 import { cancelJob, enqueueJob, getJob, hasActiveJob, listJobs, workerAlive } from "../jobs.js";
 import { generateVideoScript, updateVideoScript } from "../agents/video/script.js";
+import { musicTracks } from "../agents/video/assemble.js";
 import { getScript, VIDEO_STEPS } from "../agents/video/pipeline.js";
 import { pieceOf, withCosts } from "../agents/studio/generate.js";
 import type { FullContext } from "../services.js";
@@ -24,15 +24,14 @@ export function videoRoutes(app: FastifyInstance, db: Db, getCtx: () => FullCont
     if (!getProject(db, req.params.projectId)) return reply.code(404).send({ detail: "Projekt nicht gefunden." });
     const ctx = getCtx();
     const env = ctx?.env;
-    let musicTracks = 0;
-    try { musicTracks = fs.readdirSync(path.join(ROOT, "assets", "music")).filter((f) => /\.(mp3|wav|m4a|ogg)$/i.test(f)).length; } catch { /* none */ }
+    const tracks = musicTracks(path.join(ROOT, "assets", "music")).length;
     return {
       pieces: withCosts(db, db.select().from(t.mpContentPieces).where(eq(t.mpContentPieces.projectId, req.params.projectId)).all().map(pieceOf).filter((p) => p.format === "video")).sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
       jobs: listJobs(db, req.params.projectId, 10),
       demoConfigured: Boolean(env?.MP_DEMO_BASE_URL),
       voiceConfigured: Boolean(ctx?.voice),
       workerAlive: workerAlive(db),
-      musicTracks,
+      musicTracks: tracks,
     };
   });
 

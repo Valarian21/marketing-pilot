@@ -10,7 +10,16 @@ import fs from "node:fs";
 import path from "node:path";
 import type { PlatformPoster, PostAsset, PostInput, PostOutput } from "./types.js";
 
-const TIMEOUT = 60_000;
+/**
+ * Zeitschranke je Aufruf.
+ *
+ * 60 s waren zu knapp: Meta laedt bei einem Carousel jedes Bild von unserer
+ * Adresse, waehrend der Aufruf offen steht, und bei zehn Slides reicht das
+ * gelegentlich nicht. Live am 07. und 08.09. zweimal als „The operation was
+ * aborted due to timeout" gescheitert — ohne Anbieternamen davor, weil der
+ * Abbruch schon vor der Antwort kommt und `call` gar nicht dazu kommt.
+ */
+const TIMEOUT = 120_000;
 const need = (creds: Record<string, string>, keys: string[]): string[] => keys.filter((k) => !creds[k]?.trim());
 
 async function call(fetchImpl: typeof fetch, url: string, init: RequestInit, who: string): Promise<Response> {
@@ -157,30 +166,48 @@ export function aufLimit(assets: PostAsset[], limit: number, log?: (m: string) =
 /**
  * Auf die Verarbeitung eines Medien-Containers warten.
  *
- * Instagram und Threads laden das Video von unserer Adresse und kodieren es
+ * Instagram und Threads laden das Medium von unserer Adresse und verarbeiten es
  * selbst. Bis das fertig ist, lehnt `media_publish` ab. Ohne dieses Warten
  * scheitert jedes Reel — und zwar zuverlaessig, nicht sporadisch.
+ *
+ * **Bilder brauchen es genauso**, nur seltener und kuerzer. Das ist der Grund
+ * fuer drei Fehlschlaege zwischen dem 06. und 07.09.: Story und Carousel gingen
+ * ohne dieses Warten sofort an `media_publish` und bekamen „Media ID is not
+ * available" (9007 / 2207027) zurueck — ein Fehler, der wie ein Rechteproblem
+ * aussieht und keines ist. Deshalb wartet jetzt jeder Container, Bilder nur mit
+ * kurzem Takt und kurzer Frist.
+ *
+ * `status_code` ist dabei nicht garantiert: liefert die Plattform das Feld
+ * ueberhaupt nicht, ist nichts zu warten und der Container gilt als fertig.
+ * Ohne diese Regel wuerde das Warten Bildbeitraege ausbremsen, die heute laufen.
  */
 async function warteAufFertig(
   f: typeof fetch, basis: string, containerId: string, token: string,
-  log?: (m: string) => void, maxMs = 180_000,
+  log?: (m: string) => void, opts: { maxMs?: number; intervalMs?: number; was?: string } = {},
 ): Promise<void> {
+  const maxMs = opts.maxMs ?? 180_000;
+  const intervalMs = opts.intervalMs ?? 5000;
+  const was = opts.was ?? "Video";
   const bis = Date.now() + maxMs;
   let letzter = "";
   while (Date.now() < bis) {
     const res = await json<{ status_code?: string; status?: string }>(
       await call(f, `${basis}/${containerId}?fields=status_code,status&access_token=${encodeURIComponent(token)}`, {}, "Medien-Status"),
     );
-    letzter = res.status_code ?? "";
+    if (res.status_code === undefined) return;
+    letzter = res.status_code;
     if (letzter === "FINISHED") return;
     if (letzter === "ERROR" || letzter === "EXPIRED") {
-      throw new Error(`Die Plattform konnte das Video nicht verarbeiten (${letzter}${res.status ? `: ${res.status}` : ""}).`);
+      throw new Error(`Die Plattform konnte ${was === "Video" ? "das Video" : "das Bild"} nicht verarbeiten (${letzter}${res.status ? `: ${res.status}` : ""}).`);
     }
-    log?.(`Video wird verarbeitet (${letzter || "IN_PROGRESS"}) …`);
-    await new Promise((r) => setTimeout(r, 5000));
+    log?.(`${was} wird verarbeitet (${letzter || "IN_PROGRESS"}) …`);
+    await new Promise((r) => setTimeout(r, intervalMs));
   }
-  throw new Error(`Die Plattform hat das Video in ${Math.round(maxMs / 1000)} s nicht fertig verarbeitet (zuletzt ${letzter || "unbekannt"}).`);
+  throw new Error(`Die Plattform hat ${was === "Video" ? "das Video" : "das Bild"} in ${Math.round(maxMs / 1000)} s nicht fertig verarbeitet (zuletzt ${letzter || "unbekannt"}).`);
 }
+
+/** Bilder sind meist sofort fertig — kurzer Takt, kurze Frist, damit ein Post nicht minutenlang haengt. */
+const BILD_WARTEN = { maxMs: 45_000, intervalMs: 1500, was: "Bild" } as const;
 
 /**
  * Instagram nimmt keine Dateien entgegen, sondern **öffentliche URLs**. Deshalb
@@ -212,6 +239,7 @@ export const instagramPoster: PlatformPoster = {
       const id = await containerFuer(erste.kind === "video"
         ? { media_type: "STORIES", video_url: erste.url }
         : { media_type: "STORIES", image_url: erste.url });
+      await warteAufFertig(f, GRAPH, id, token, i.log, erste.kind === "video" ? {} : BILD_WARTEN);
       const pub = await json<{ id: string }>(await call(f, `${GRAPH}/${user}/media_publish`, {
         method: "POST", body: new URLSearchParams({ creation_id: id, access_token: token }),
       }, "Instagram-Story"));
@@ -237,10 +265,19 @@ export const instagramPoster: PlatformPoster = {
       await warteAufFertig(f, GRAPH, creationId, token, i.log);
     } else if (media.length === 1) {
       creationId = await container({ image_url: media[0]!.url, caption });
+      await warteAufFertig(f, GRAPH, creationId, token, i.log, BILD_WARTEN);
     } else {
+      // Jedes Kind einzeln abwarten: der Sammel-Container gilt erst als fertig,
+      // wenn alle Kinder es sind, und ein einziges nicht fertiges Kind laesst
+      // `media_publish` mit „Media ID is not available" scheitern.
       const children: string[] = [];
-      for (const a of media) children.push(await container({ image_url: a.url, is_carousel_item: "true" }));
+      for (const a of media) {
+        const kind = await container({ image_url: a.url, is_carousel_item: "true" });
+        await warteAufFertig(f, GRAPH, kind, token, i.log, BILD_WARTEN);
+        children.push(kind);
+      }
       creationId = await container({ media_type: "CAROUSEL", children: children.join(","), caption });
+      await warteAufFertig(f, GRAPH, creationId, token, i.log, BILD_WARTEN);
     }
     const pub = await json<{ id: string }>(await call(f, `${GRAPH}/${user}/media_publish`, {
       method: "POST", body: new URLSearchParams({ creation_id: creationId, access_token: token }),
@@ -346,11 +383,18 @@ export const threadsPoster: PlatformPoster = {
       creationId = await container({ media_type: "VIDEO", video_url: video.url, text });
       await warteAufFertig(f, THREADS, creationId, token, i.log);
     }
-    else if (media.length === 1) creationId = await container({ media_type: "IMAGE", image_url: media[0]!.url, text });
-    else if (media.length > 1) {
+    else if (media.length === 1) {
+      creationId = await container({ media_type: "IMAGE", image_url: media[0]!.url, text });
+      await warteAufFertig(f, THREADS, creationId, token, i.log, BILD_WARTEN);
+    } else if (media.length > 1) {
       const children: string[] = [];
-      for (const a of media) children.push(await container({ media_type: "IMAGE", image_url: a.url, is_carousel_item: "true" }));
+      for (const a of media) {
+        const kind = await container({ media_type: "IMAGE", image_url: a.url, is_carousel_item: "true" });
+        await warteAufFertig(f, THREADS, kind, token, i.log, BILD_WARTEN);
+        children.push(kind);
+      }
       creationId = await container({ media_type: "CAROUSEL", children: children.join(","), text });
+      await warteAufFertig(f, THREADS, creationId, token, i.log, BILD_WARTEN);
     } else creationId = await container({ media_type: "TEXT", text });
 
     const pub = await json<{ id: string }>(await call(f, `${THREADS}/${user}/threads_publish`, {

@@ -355,15 +355,20 @@ describe("Slots und Zeitplan", () => {
     expect(() => schedulePiece(built.db, pid, { pieceId, platforms: ["mastodon"] })).toThrowError(/Zugangsdaten fehlen/);
   });
 
+  /**
+   * Eigenes Zeitfenster, weit weg von den anderen Faellen: die Tests dieser
+   * Datei teilen sich eine Datenbank, und ein Eintrag aus einem frueheren Fall
+   * belegte hier sonst genau den Slot, dessen Freibleiben geprueft wird.
+   */
   it("plant je Kanal einen Eintrag und belegt einen Slot nur einmal", () => {
-    const now = new Date("2026-09-01T08:00:00Z");
+    const now = new Date("2026-10-01T08:00:00Z");   // Donnerstag
     const a = schedulePiece(built.db, pid, { pieceId, platforms: ["bluesky"], now });
-    expect(a[0]!.scheduledAt).toBe("2026-09-02T07:00:00.000Z");
+    expect(a[0]!.scheduledAt).toBe("2026-10-07T07:00:00.000Z");
     const b = schedulePiece(built.db, pid, { pieceId, platforms: ["bluesky"], now });
     // derselbe Slot ist belegt - der naechste Mittwoch
-    expect(b[0]!.scheduledAt).toBe("2026-09-09T07:00:00.000Z");
-    expect(duePosts(built.db, now)).toEqual([]);
-    expect(duePosts(built.db, new Date("2026-09-02T08:00:00Z")).length).toBe(1);
+    expect(b[0]!.scheduledAt).toBe("2026-10-14T07:00:00.000Z");
+    expect(duePosts(built.db, now).filter((d) => d.scheduledAt >= "2026-10-01")).toEqual([]);
+    expect(duePosts(built.db, new Date("2026-10-07T08:00:00Z")).filter((d) => d.scheduledAt >= "2026-10-01").length).toBe(1);
   });
 });
 
@@ -431,6 +436,44 @@ describe("Posten", () => {
     expect(out.ref).toBe("ig-post-1");
   });
 
+  /** Live gescheitert am 06. und 07.09.: ohne dieses Warten antwortet Meta mit „Media ID is not available". */
+  it("wartet auch bei einer Bild-Story, bis der Container fertig ist", async () => {
+    const reihenfolge: string[] = [];
+    let abrufe = 0;
+    const impl = (async (url: string | URL) => {
+      const u = String(url);
+      const body = (x: unknown) => new Response(JSON.stringify(x), { status: 200, headers: { "content-type": "application/json" } });
+      if (u.includes("fields=status_code")) { abrufe += 1; reihenfolge.push("status"); return body({ status_code: abrufe < 2 ? "IN_PROGRESS" : "FINISHED" }); }
+      if (u.includes("/media_publish")) { reihenfolge.push("publish"); return body({ id: "ig-story-1" }); }
+      reihenfolge.push("container");
+      return body({ id: "c1" });
+    }) as unknown as typeof fetch;
+    const out = await instagramPoster.post({
+      platform: "instagram", kind: "story", text: "", link: null, title: "", creds: { igUserId: "1789", accessToken: "tok" }, fetchImpl: impl,
+      assets: [{ path: "x", url: "https://agi-empire.test/go/a/tok", mime: "image/png", alt: "", kind: "image" as const }],
+    });
+    expect(reihenfolge).toEqual(["container", "status", "status", "publish"]);
+    expect(out.ref).toBe("ig-story-1");
+  });
+
+  /** Liefert die Plattform gar kein `status_code`, gibt es nichts zu warten — sonst haengt jeder Bildbeitrag bis zur Frist. */
+  it("veröffentlicht sofort, wenn die Plattform keinen Status meldet", async () => {
+    const reihenfolge: string[] = [];
+    const impl = (async (url: string | URL) => {
+      const u = String(url);
+      const body = (x: unknown) => new Response(JSON.stringify(x), { status: 200, headers: { "content-type": "application/json" } });
+      if (u.includes("fields=status_code")) { reihenfolge.push("status"); return body({ id: "c1" }); }
+      if (u.includes("/media_publish")) { reihenfolge.push("publish"); return body({ id: "ig-post-2" }); }
+      reihenfolge.push("container");
+      return body({ id: "c1" });
+    }) as unknown as typeof fetch;
+    await instagramPoster.post({
+      platform: "instagram", text: "Caption", link: null, title: "", creds: { igUserId: "1789", accessToken: "tok" }, fetchImpl: impl,
+      assets: [{ path: "x", url: "https://agi-empire.test/go/a/tok", mime: "image/png", alt: "", kind: "image" as const }],
+    });
+    expect(reihenfolge).toEqual(["container", "status", "publish"]);
+  });
+
   it("postet auf Threads über Container und Veröffentlichung", async () => {
     const calls: string[] = [];
     const impl = (async (url: string | URL, init: RequestInit = {}) => {
@@ -444,8 +487,11 @@ describe("Posten", () => {
       platform: "threads", text: "Die teuersten Karten.", link: null, title: "", creds: { userId: "9", accessToken: "tok" }, fetchImpl: impl,
       assets: [1, 2].map(() => ({ path: "x", url: "https://agi-empire.test/go/a/t", mime: "image/png", alt: "", kind: "image" as const })),
     });
-    expect(calls.filter((c) => c.includes("/threads|")).length).toBe(3);   // 2 Kinder + Sammel-Container
-    expect(calls[2]).toContain("media_type=CAROUSEL");
+    // Zwischen den Containern stehen jetzt die Status-Abfragen — deshalb wird
+    // die Reihenfolge auf der gefilterten Liste geprueft, nicht auf allen Aufrufen.
+    const container = calls.filter((c) => c.includes("/threads|"));
+    expect(container.length).toBe(3);   // 2 Kinder + Sammel-Container
+    expect(container[2]).toContain("media_type=CAROUSEL");
     expect(out.ref).toBe("th-1");
     expect(out.externalUrl).toContain("threads.net");
   });

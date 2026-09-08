@@ -20,6 +20,7 @@ import { voiceBlock } from "./voice.js";
 import { reviseWithCritic } from "./critic.js";
 import { carouselSlideHtml, dataUrlFor, framedScreenshotHtml, pinHtml, playwrightRenderer, rankingCtaHtml, showcaseCoverHtml, showcaseSlideHtml, type RenderJob, type Renderer, binderCtaHtml, binderExplainerCoverHtml, binderExplainerSlideHtml, type BinderChrome } from "./render.js";
 import { clearBundle, generateDataBundle, generateStoryFor, type DataBase, writeBundlePieces } from "./data-content.js";
+import { musicTracks } from "../video/assemble.js";
 import { generateShowcaseBundle } from "./showcase.js";
 import { buildUtmUrl, deepLinkFor, PLATFORM_LIMITS, platformFromChannel, slugify } from "../../util/utm.js";
 import { canonicalChannel, channelLink, linkRuleFor, saneTitle } from "../../../shared/channels.js";
@@ -498,5 +499,7 @@ export function studioView(ctx: StudioContext, projectId: string): s.StudioView 
     brandKit: loadBrandKit(ctx.db, projectId), hasBrief: s.Brief.safeParse(project.brief).success,
     screenshots: projectScreenshots(ctx.db, projectId).map((a) => ({ id: a.id, contentPieceId: a.contentPieceId, projectId: a.projectId, kind: a.kind as s.Asset["kind"], path: a.path, meta: parseJson<Record<string, unknown>>(a.meta, {}), createdAt: a.createdAt })),
     recent: pieces.slice(0, 30), directories: dirs, competitors: listCompetitors(ctx, projectId).map((c) => c.name),
+    // Der Musikordner liegt neben dem Datenordner, nicht darin — er gehoert zum Code, nicht zum Projekt.
+    musicTracks: musicTracks(path.join(ctx.env?.MP_DATA_DIR ?? "", "..", "assets", "music")).length,
   };
 }

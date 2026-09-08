@@ -439,13 +439,22 @@ export const DataQuery = z.object({
 });
 
 /**
- * Optionen des Daten-Reels (Shot 8). Der Standard ist bewusst **ohne** Musik:
- * auf Instagram und TikTok kommt der Sound lizenzsauber aus der Plattform-
- * Bibliothek (Entscheidung aus Shot 4).
+ * Optionen des Daten-Reels (Shot 8).
+ *
+ * Bis 08.09.2026 war der Standard **ohne** Musik, mit der Begründung aus Shot 4:
+ * der Sound kommt lizenzsauber aus der Plattform-Bibliothek. Das stimmt — aber
+ * nur beim Posten von Hand. **Über die API lässt sich kein Plattform-Sound
+ * anhängen**, und seit der Zeitplan die Reels selbst absetzt, gingen sie
+ * deshalb stumm raus.
+ *
+ * Deshalb jetzt umgekehrt: eine MP4 mit leisem Musikbett (−18 dB, geduckt) ist
+ * der Standard. Sie trägt den API-Weg, und wer sie von Hand auf TikTok lädt,
+ * stellt dort die Originallautstärke auf 0 und legt einen Trending-Sound
+ * darüber — dieselbe Datei bedient beide Wege.
  */
 export const ReelOptions = z.object({
   voiceover: z.boolean().default(false),
-  music: z.enum(["none", "bed"]).default("none"),
+  music: z.enum(["none", "bed"]).default("bed"),
   /**
    * Textkachel als erstes Bild des Videos.
    *
@@ -659,7 +668,8 @@ export const SeriesParams = z.object({
   /** Reel-Optionen, greifen nur wenn `formats` ein `data_reel` enthaelt. */
   secondsPerCard: z.number().min(1.4).max(2.5).default(1.8),
   voiceover: z.boolean().default(false),
-  music: z.enum(["none", "bed"]).default("none"),
+  /** Siehe `ReelOptions`: über die API gibt es keinen Plattform-Sound, also ein eigenes Bett. */
+  music: z.enum(["none", "bed"]).default("bed"),
   /** Rotation: ein Set/eine Aera fruehestens nach so vielen Wochen wieder. */
   minWeeksBetweenRepeats: z.number().int().min(0).max(104).default(26),
   /** `new_set`: nur Sets, die juenger sind als das. */
@@ -976,6 +986,8 @@ export const StudioView = z.object({
   recent: z.array(ContentPiece),
   directories: z.array(DirectoryStatus),
   competitors: z.array(z.string()),
+  /** Nutzbare Tracks in `assets/music/` — 0 heisst: ein Reel mit Musikbett rendert stumm. */
+  musicTracks: z.number().int().default(0),
 });
 
 // --- Video factory (Shot 4) --------------------------------------------------

@@ -218,10 +218,20 @@ export async function assemble(i: AssembleInput, run: FfmpegRunner = runFfmpeg):
   return { file: i.out, durationMs: totalMs };
 }
 
+/**
+ * Ein zufaelliger Track aus dem Musikordner.
+ *
+ * Dateien mit `_` am Anfang bleiben liegen — so kann ein Platzhalter oder ein
+ * aussortierter Track im Ordner stehen bleiben, ohne unter einem Reel zu landen.
+ */
 export function pickMusic(dir: string): string | null {
-  try {
-    const files = fs.readdirSync(dir).filter((f) => /\.(mp3|wav|m4a|ogg)$/i.test(f));
-    if (!files.length) return null;
-    return path.join(dir, files[Math.floor(Math.random() * files.length)]!);
-  } catch { return null; }
+  const files = musicTracks(dir);
+  if (!files.length) return null;
+  return path.join(dir, files[Math.floor(Math.random() * files.length)]!);
+}
+
+/** Die nutzbaren Tracks eines Ordners — dieselbe Regel, die `pickMusic` anwendet. */
+export function musicTracks(dir: string): string[] {
+  try { return fs.readdirSync(dir).filter((f) => /\.(mp3|wav|m4a|ogg)$/i.test(f) && !f.startsWith("_")); }
+  catch { return []; }
 }
