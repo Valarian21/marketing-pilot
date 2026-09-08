@@ -199,7 +199,7 @@ export const HASHTAG_POLICY: Record<string, HashtagPolicy> = {
   facebook: { min: 0, max: 2, note: "Höchstens zwei, sonst wirkt es wie Spam." },
   linkedin: { min: 0, max: 2, note: "Höchstens zwei, nur echte Community-Tags." },
   x: { min: 0, max: 2, note: "Höchstens zwei, nur echte Community-Tags." },
-  threads: { min: 0, max: 2, note: "Höchstens zwei." },
+  threads: { min: 0, max: 1, note: "Genau ein Thema — Threads kennt keine Hashtags, der erste wird zum Topic-Tag." },
   bluesky: { min: 0, max: 2, note: "Höchstens zwei." },
   reddit: { min: 0, max: 0, note: "Keine Hashtags — Reddit kennt sie nicht." },
   website: { min: 0, max: 0, note: "Keine Hashtags." },

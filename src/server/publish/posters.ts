@@ -352,6 +352,13 @@ export const pinterestPoster: PlatformPoster = {
 
 // --- Threads ------------------------------------------------------------------
 
+/** Hashtags aus dem Text lösen: der erste wird Threads-Thema, keiner bleibt im Text. */
+export function threadsTopic(text: string): { text: string; topic: string | null } {
+  const tags = [...text.matchAll(/(^|\s)#([\p{L}\p{N}_]+)/gu)].map((m) => m[2]!);
+  const bereinigt = text.replace(/(^|\s)#[\p{L}\p{N}_]+/gu, "$1").replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+  return { text: bereinigt, topic: tags[0] ?? null };
+}
+
 const THREADS = "https://graph.threads.net/v1.0";
 
 /**
@@ -367,12 +374,18 @@ export const threadsPoster: PlatformPoster = {
     const f = i.fetchImpl ?? fetch;
     const user = i.creds["userId"]!;
     const token = i.creds["accessToken"]!;
-    const text = i.text.length > 500 ? `${i.text.slice(0, 497).replace(/\s+\S*$/, "")}…` : i.text;
+    // Threads kennt keine Hashtags im Text, sondern genau **ein** Thema je
+    // Beitrag (`topic_tag`). Der erste Hashtag wird dazu, alle Hashtags
+    // verschwinden aus dem Text — sonst stünde „#PokemonTCG" als totes Wort da.
+    const { text: ohneTags, topic } = threadsTopic(i.text);
+    const text = ohneTags.length > 500 ? `${ohneTags.slice(0, 497).replace(/\s+\S*$/, "")}…` : ohneTags;
     const media = i.assets.filter((a) => a.url).slice(0, 20);
 
     const container = async (params: Record<string, string>): Promise<string> => {
+      // Das Thema gehört an den Beitrag selbst, nicht an die Kinder eines Carousels.
+      const mitThema = params["is_carousel_item"] || !topic ? params : { ...params, topic_tag: topic };
       const out = await json<{ id: string }>(await call(f, `${THREADS}/${user}/threads`, {
-        method: "POST", body: new URLSearchParams({ ...params, access_token: token }),
+        method: "POST", body: new URLSearchParams({ ...mitThema, access_token: token }),
       }, "Threads"));
       return out.id;
     };

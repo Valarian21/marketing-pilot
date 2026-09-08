@@ -11,7 +11,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { loadEnv } from "../src/server/env.js";
 import { buildApp } from "../src/server/app.js";
 import { assetToken, ASSET_TTL_MS, readAssetToken } from "../src/server/publish/asset-tokens.js";
-import { linkFacets, blueskyPoster, telegramPoster, instagramPoster, threadsPoster } from "../src/server/publish/posters.js";
+import { linkFacets, blueskyPoster, telegramPoster, instagramPoster, threadsPoster, threadsTopic } from "../src/server/publish/posters.js";
 import { platformStatus, posterFor, saveCredentials } from "../src/server/publish/index.js";
 import { duePosts, nextFreeSlot, recordExternPost, runScheduledPost, schedulePiece } from "../src/server/publish/schedule.js";
 import { PLATFORM_POSTING } from "../src/server/publish/types.js";
@@ -681,3 +681,15 @@ describe("Social-Kit", () => {
     expect(PROFILE_TARGETS.every((t) => t.limit > 0 && t.nameLimit > 0)).toBe(true);
   });
 });
+
+describe("Threads-Thema", () => {
+  it("macht aus dem ersten Hashtag das Topic und räumt alle aus dem Text", () => {
+    const r = threadsTopic("Wo hört die Karte auf?\nZwei Karten, ein Bild.\n\n#PokemonTCG #Binder");
+    expect(r.topic).toBe("PokemonTCG");
+    expect(r.text).toBe("Wo hört die Karte auf?\nZwei Karten, ein Bild.");
+  });
+  it("lässt Text ohne Hashtag unverändert", () => {
+    expect(threadsTopic("Nur Text, Nr. 5 von 9.")).toEqual({ text: "Nur Text, Nr. 5 von 9.", topic: null });
+  });
+});
+
