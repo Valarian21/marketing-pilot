@@ -7,7 +7,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { bildFaecher, echteFaecher, listArtworkPages, type ArtworkPage } from "../src/server/providers/artwork.binderplan.js";
-import { pickArtwork } from "../src/server/agents/studio/artwork.js";
+import { pickArtwork, rahmungsVerstoesse } from "../src/server/agents/studio/artwork.js";
 
 /** Antwortet wie `/api/vitrine/artwork` — gekürzt auf die Felder, die zählen. */
 function fakeVitrine(artworks: unknown[]): typeof fetch {
@@ -86,5 +86,32 @@ describe("Welche Kunstseite gezeigt wird", () => {
   it("meldet eine benannte Seite als fehlend, statt still eine andere zu nehmen", () => {
     expect(() => pickArtwork([seite()], { artworkId: "weg", ownOnly: false, styles: [] }, ""))
       .toThrowError(/steht nicht \(mehr\) in der Vitrine/);
+  });
+});
+
+describe("Rahmung des Textes", () => {
+  /**
+   * Der Prompt verbietet diese Wendungen bereits — von zehn Bündeln, die
+   * danach entstanden, trugen neun sie trotzdem. Deshalb wird gemessen.
+   */
+  it("findet die Wendungen, die die Aussage umdrehen", () => {
+    expect(rahmungsVerstoesse("Statt die Seite halb leer zu lassen, füllt das die Lücke."))
+      .toEqual(expect.arrayContaining(["halb leer", "lücke"]));
+    expect(rahmungsVerstoesse("Die Karten waren zu teuer, also kam ein Platzhalter rein."))
+      .toEqual(expect.arrayContaining(["zu teuer", "platzhalter"]));
+    // Auch die Verneinung zählt: wer „kein Platzhalter" schreibt, ruft das Bild auf.
+    expect(rahmungsVerstoesse("Das ist kein Platzhalter.")).toContain("platzhalter");
+  });
+
+  it("lässt die richtige Erzählung durch", () => {
+    expect(rahmungsVerstoesse(
+      "Kyogre und Groudon stehen echt drin. Die sieben Fächer dazwischen führen ihre Kunst weiter.",
+      "Wo hört die Karte auf?",
+    )).toEqual([]);
+  });
+
+  it("prüft Bildtexte mit, nicht nur die Bildunterschrift", () => {
+    // Deckseite und Abschluss stehen im Bild und werden genauso geprüft.
+    expect(rahmungsVerstoesse("Alles gut", "6 dieser 9 Fächer gab es nie als Karte")).toContain("gab es nie");
   });
 });

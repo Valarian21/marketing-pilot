@@ -28,7 +28,7 @@ import { eq } from "drizzle-orm";
 import { newId, type Db } from "../../db/index.js";
 import { modelFor } from "../../../../config/models.js";
 import { chatJson, type UsageCollector } from "../runner.js";
-import { artworkPrompt } from "../prompts/studio.js";
+import { artworkPrompt, rahmungsRewritePrompt } from "../prompts/studio.js";
 import { hashtagPolicy, linkRuleFor } from "../../../shared/channels.js";
 import { PLATFORM_LIMITS } from "../../util/utm.js";
 import { loadHashtags } from "../../hashtags.js";
@@ -51,6 +51,27 @@ const err = (msg: string, statusCode = 400) => Object.assign(new Error(msg), { s
 export const ARTWORK_STILE = [
   "karte", "comic", "foto", "aquarell", "oel", "anime", "retro", "pixel", "neon", "skizze", "minimal", "dunkel",
 ] as const;
+
+/**
+ * Wörter, die die Aussage des Formats umdrehen.
+ *
+ * Die Verbotsliste steht auch im Prompt, aber darauf ist kein Verlass: von zehn
+ * Bündeln, die **nach** der Prompt-Korrektur entstanden, trugen neun trotzdem
+ * „Lücke", „Platzhalter" oder „fehlende Karten". Ein Modell, das man bittet,
+ * ein Wort nicht zu benutzen, denkt zuerst an dieses Wort. Deshalb wird hier
+ * nachgemessen statt gehofft.
+ */
+export const VERBOTENE_RAHMUNG = [
+  "fehlende karte", "fehlenden karte", "halb leer", "halbleer", "unvollständig",
+  "lücke", "luecke", "zu teuer", "platzhalter", "gab es nie", "waren nie eine karte",
+  "nie eine karte", "warten müssen", "warteliste",
+];
+
+/** Welche verbotenen Wendungen ein Text enthält (kleingeschrieben, ohne Dubletten). */
+export function rahmungsVerstoesse(...texte: string[]): string[] {
+  const alles = texte.join(" \n ").toLowerCase();
+  return [...new Set(VERBOTENE_RAHMUNG.filter((w) => alles.includes(w)))];
+}
 
 const Out = z.object({
   title: z.string().default(""),
@@ -342,6 +363,44 @@ export async function generateArtworkBundle(
     platform: leadPlatform, limit: PLATFORM_LIMITS[leadPlatform] ?? 2000, maxRounds: 2,
   });
 
+  /**
+   * Die Rahmung nachmessen und notfalls umschreiben lassen.
+   *
+   * Bis zu zwei Anläufe, und diesmal mit den gefundenen Wörtern im Auftrag —
+   * ein allgemeines „schreib es anders" hatte das Modell schon zweimal
+   * ignoriert. Bleibt danach etwas stehen, wird gar nicht erst geschrieben:
+   * ein Beitrag, der die Kunstseite als Ersatz für fehlende Karten verkauft,
+   * ist schlechter als kein Beitrag.
+   */
+  const saeubern = async (text: string, platform: string): Promise<{ text: string; rest: string[] }> => {
+    let jetzt = text;
+    for (let versuch = 0; versuch < 2; versuch++) {
+      const treffer = rahmungsVerstoesse(jetzt);
+      if (!treffer.length) return { text: jetzt, rest: [] };
+      const neu = await chatJson(ctx.llm, modelFor("content"), z.object({ body: z.string().min(1) }), rahmungsRewritePrompt({
+        text: jetzt, treffer, language: lang, voiceProfile: base.voice, limit: PLATFORM_LIMITS[platform] ?? 2000,
+      }), usage, { maxTokens: 3000, temperature: 0.4 });
+      jetzt = neu.body;
+    }
+    return { text: jetzt, rest: rahmungsVerstoesse(jetzt) };
+  };
+
+  const leadSauber = await saeubern(rev.body, leadPlatform);
+  const sauberJe = new Map<string, string>([[leadPlatform, leadSauber.text]]);
+  const offen = [...leadSauber.rest];
+  for (const platform of platforms.filter((p) => p !== leadPlatform)) {
+    const roh = captionOf(platform);
+    if (!roh) continue;
+    const r = await saeubern(roh, platform);
+    sauberJe.set(platform, r.text);
+    offen.push(...r.rest);
+  }
+  // Auch Deckseite und Abschluss stehen im Bild — sie müssen genauso sauber sein.
+  offen.push(...rahmungsVerstoesse(coverTitle, ctaLine, ...claims));
+  if (offen.length) {
+    throw err(`Der Text trägt die alte Rahmung (${[...new Set(offen)].join(", ")}) und ließ sich nicht wegschreiben. Kein Stück angelegt — lieber kein Beitrag als der falsche.`, 409);
+  }
+
   const notes = [rev.notes];
   if (!page.mein) notes.push(`Die Seite steht unter „${page.besitzer}“ in der Vitrine — vor dem Posten prüfen, ob das dein Konto ist.`);
   if (karten.length < echt.length) notes.push(`${karten.length} von ${echt.length} echten Karten gezeigt.`);
@@ -353,7 +412,7 @@ export async function generateArtworkBundle(
     taskId: req.taskId ?? null,
     title: out.title || `${page.titel} · ${L.seite}`,
     score: rev.score, notes: notes.filter(Boolean).join("\n"),
-    captionFor: (platform, isLead) => (isLead ? rev.body : captionOf(platform) || rev.body),
+    captionFor: (platform, isLead) => sauberJe.get(platform) ?? (isLead ? leadSauber.text : leadSauber.text),
     hashtagsFor: (platform) => out.captions.find((c) => c.platform.trim().toLowerCase() === platform)?.hashtags ?? [],
     assetsFor: (platform) => {
       const size = opts.reel ? sizes[0]! : sizeForPlatform(platform);

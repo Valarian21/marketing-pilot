@@ -384,3 +384,30 @@ PERSONA
 ${personaBlock(input.persona)}` },
   ];
 }
+
+/**
+ * Eine Wendung aus einem Text schreiben, die dort nicht stehen darf.
+ *
+ * Anders als `rewritePrompt`: der Auftrag nennt die **gefundenen Wörter**
+ * wörtlich. Ein allgemeines „schreib es anders" hatte das Modell zuvor zweimal
+ * ignoriert — es braucht den konkreten Treffer, sonst schreibt es denselben
+ * Gedanken mit denselben Wörtern noch einmal.
+ */
+export function rahmungsRewritePrompt(input: {
+  text: string; treffer: string[]; language: Exclude<ContentLanguage, "both">; voiceProfile: string | null; limit: number;
+}): LlmMessage[] {
+  return [
+    { role: "system", content: `[task:reframe]
+The text below sells an art page as a SUBSTITUTE for cards the collector could not get. That is the opposite of what the product does, and it must go.
+
+What the product does: a card's artwork stops at its border; the art page carries it on across the other pockets. One card or nine, they become one picture. Nobody is waiting for anything and nothing is missing — the collector chose to extend the art.
+
+Rewrite the text so the idea is the CONTINUATION of the artwork, not the filling of a hole. Keep the concrete facts (card names, set, style, the steps), keep the length class and the language, keep any hashtags at the end unchanged. Hard limit ${input.limit} characters.
+
+These words and phrases were found and must not appear in any form, not even negated:
+${input.treffer.map((w) => `- "${w}"`).join("\n")}
+${writingRules({ language: input.language, voiceProfile: input.voiceProfile })}
+Return JSON: {"body"}` },
+    { role: "user", content: input.text },
+  ];
+}
