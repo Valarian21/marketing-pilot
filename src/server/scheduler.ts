@@ -14,14 +14,15 @@ import { dueSeries } from "./agents/series/series.js";
 import { SERIES_STEPS } from "./agents/series/job.js";
 import { berlinParts } from "./agents/series/time.js";
 import { duePosts } from "./publish/schedule.js";
-import { PUBLISH_STEPS } from "./publish/job.js";
+import { METRICS_STEPS, PUBLISH_STEPS } from "./publish/job.js";
+import { faelligeMetriken } from "./publish/metrics.js";
 
 const DAY = 86_400_000;
 const stampKey = (kind: string, pid: string) => `sched:${kind}:${pid}`;
 const lastRun = (db: Db, kind: string, pid: string): number => { const r = db.select().from(t.mpSettings).where(eq(t.mpSettings.key, stampKey(kind, pid))).get(); return r ? Date.parse(r.value) : 0; };
 const stamp = (db: Db, kind: string, pid: string, at: string): void => { db.insert(t.mpSettings).values({ key: stampKey(kind, pid), value: at, updatedAt: nowIso() }).onConflictDoUpdate({ target: t.mpSettings.key, set: { value: at, updatedAt: nowIso() } }).run(); };
 
-export interface Due { kind: "community.scan" | "weekly.report" | "geo.measure" | "series.run" | "publish.due"; projectId: string; seriesId?: string }
+export interface Due { kind: "community.scan" | "weekly.report" | "geo.measure" | "series.run" | "publish.due" | "metrics.fetch"; projectId: string; seriesId?: string }
 
 /** Pure: which jobs are due right now. */
 export function dueJobs(db: Db, now = new Date()): Due[] {
@@ -34,6 +35,9 @@ export function dueJobs(db: Db, now = new Date()): Due[] {
     if (!confirmed) continue;
     if (now.getTime() - lastRun(db, "community.scan", p.id) > DAY) due.push({ kind: "community.scan", projectId: p.id });
     if (now.getTime() - lastRun(db, "geo.measure", p.id) > 7 * DAY) due.push({ kind: "geo.measure", projectId: p.id });
+    // Plattform-Zahlen einmal am Tag. Welcher Beitrag wirklich dran ist,
+    // entscheidet `faelligeMetriken` — hier steht nur der Takt.
+    if (now.getTime() - lastRun(db, "metrics.fetch", p.id) > DAY && faelligeMetriken(db, p.id, now).length > 0) due.push({ kind: "metrics.fetch", projectId: p.id });
     // Sunday from 18:00 UTC on, once per week
     if (hasPlan && now.getUTCDay() === 0 && now.getUTCHours() >= 18 && now.getTime() - lastRun(db, "weekly.report", p.id) > 6 * DAY) due.push({ kind: "weekly.report", projectId: p.id });
   }
@@ -61,7 +65,7 @@ export function enqueueDue(db: Db, now = new Date()): Due[] {
       out.push(d);
       continue;
     }
-    const steps = d.kind === "community.scan" ? ["scan"] : d.kind === "weekly.report" ? ["report"] : d.kind === "publish.due" ? PUBLISH_STEPS : ["geo"];
+    const steps = d.kind === "community.scan" ? ["scan"] : d.kind === "weekly.report" ? ["report"] : d.kind === "publish.due" ? PUBLISH_STEPS : d.kind === "metrics.fetch" ? METRICS_STEPS : ["geo"];
     enqueueJob(db, { projectId: d.projectId, kind: d.kind, payload: { projectId: d.projectId, scheduled: true }, steps });
     if (d.kind !== "publish.due") stamp(db, d.kind, d.projectId, now.toISOString());
     out.push(d);

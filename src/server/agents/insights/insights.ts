@@ -4,6 +4,10 @@ import { and, desc, eq } from "drizzle-orm";
 import type * as s from "../../../shared/schemas.js";
 import * as t from "../../db/schema.js";
 import { newId, nowIso, parseJson, toJson, type Db } from "../../db/index.js";
+import { leseMetriken } from "../../publish/metrics.js";
+
+/** Plattformen, deren Zahlen der Pilot selbst abrufen kann. */
+const MESSBAR = new Set(["instagram", "facebook"]);
 
 export function weekStartOf(iso: string): string {
   const d = new Date(iso);
@@ -45,13 +49,27 @@ export function insightsView(db: Db, projectId: string, webhookConfigured: boole
   const pieces = db.select().from(t.mpContentPieces).where(and(eq(t.mpContentPieces.projectId, projectId), eq(t.mpContentPieces.status, "published"))).all()
     .map((p) => ({ pieceId: p.id, title: p.title, channel: p.channel, format: p.format, signups: byPiece.get(p.id) ?? 0, clicks: clicks.get(p.id) ?? 0, publishedAt: p.publishedAt }))
     .sort((a, b) => b.signups - a.signups || b.clicks - a.clicks);
+  // Die Beitraege auf den Plattformen: eigene Einheit, eigene Zahlen. Ein
+  // Stueck laeuft auf zwei Plattformen und hat dort zwei Reichweiten.
+  const titel = new Map(db.select({ id: t.mpContentPieces.id, title: t.mpContentPieces.title, format: t.mpContentPieces.format })
+    .from(t.mpContentPieces).where(eq(t.mpContentPieces.projectId, projectId)).all().map((p) => [p.id, p]));
+  const posts = db.select().from(t.mpScheduledPosts).where(and(eq(t.mpScheduledPosts.projectId, projectId), eq(t.mpScheduledPosts.status, "posted"))).all()
+    .map((r) => ({
+      id: r.id, pieceId: r.pieceId, title: titel.get(r.pieceId)?.title ?? "", platform: r.platform,
+      format: titel.get(r.pieceId)?.format ?? "", postedAt: r.postedAt, externalUrl: r.externalUrl,
+      metrics: leseMetriken(r), metricsAt: r.metricsAt,
+      // Wo der Pilot nicht posten darf, kann er auch nicht messen.
+      nurHand: !MESSBAR.has(r.platform),
+    }))
+    .sort((a, b) => (b.postedAt ?? "").localeCompare(a.postedAt ?? ""));
+
   const geo = db.select().from(t.mpGeoSnapshots).where(eq(t.mpGeoSnapshots.projectId, projectId)).all();
   const batches = new Map<string, { takenAt: string; asked: number; mentioned: number }>();
   for (const g of geo) { const b = batches.get(g.batch) ?? { takenAt: g.takenAt, asked: 0, mentioned: 0 }; b.asked++; if (g.mentioned) b.mentioned++; batches.set(g.batch, b); }
   return {
     weeks: [...weeks.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([weekStart, v]) => ({ weekStart, ...v })),
     byChannel: [...channels.entries()].map(([source, v]) => ({ source, ...v })).sort((a, b) => b.signups - a.signups),
-    pieces,
+    pieces, posts,
     geoHistory: [...batches.entries()].map(([batch, b]) => ({ batch, takenAt: b.takenAt, asked: b.asked, visibility: b.asked ? b.mentioned / b.asked : 0 })).sort((a, b) => a.takenAt.localeCompare(b.takenAt)),
     totalEvents: events.length,
     webhookConfigured,

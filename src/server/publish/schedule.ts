@@ -20,6 +20,7 @@ import { weekOf } from "../routes/tasks.js";
 import { getPiece } from "../agents/studio/generate.js";
 import { assetToken, assetUrl } from "./asset-tokens.js";
 import { credentialsFor, posterFor } from "./index.js";
+import { leseMetriken } from "./metrics.js";
 import type { PostAsset } from "./types.js";
 
 const err = (msg: string, statusCode = 400) => Object.assign(new Error(msg), { statusCode });
@@ -29,7 +30,10 @@ type Row = typeof t.mpScheduledPosts.$inferSelect;
 
 export function scheduledOf(db: Db, r: Row): s.ScheduledPost {
   const piece = db.select({ title: t.mpContentPieces.title }).from(t.mpContentPieces).where(eq(t.mpContentPieces.id, r.pieceId)).get();
-  return { ...r, status: r.status as s.ScheduledPost["status"], origin: r.origin as s.PostOrigin, title: piece?.title ?? "" };
+  return {
+    ...r, status: r.status as s.ScheduledPost["status"], origin: r.origin as s.PostOrigin, title: piece?.title ?? "",
+    metrics: leseMetriken(r), metricsAt: r.metricsAt,
+  };
 }
 
 export function listScheduled(db: Db, projectId: string, limit = 50): s.ScheduledPost[] {

@@ -345,12 +345,21 @@ export const mpScheduledPosts = sqliteTable("mp_scheduled_posts", {
   scheduledAt: text("scheduled_at").notNull(),
   /** queued | posted | failed | cancelled */
   status: text("status").notNull().default("queued"),
-  /** manual | scheduled | auto - womit der Eintrag entstanden ist. */
+  /** manual | scheduled | auto | extern - womit der Eintrag entstanden ist. */
   origin: text("origin").notNull().default("scheduled"),
   providerRef: text("provider_ref"),
   externalUrl: text("external_url"),
   error: text("error"),
   attempts: integer("attempts").notNull().default(0),
   postedAt: text("posted_at"),
+  /**
+   * Was die Plattform ueber diesen Beitrag meldet — Reichweite, Aufrufe,
+   * Likes, Saves, Shares. Der Beitrag auf der Plattform ist die Einheit, an
+   * der Zahlen haengen, nicht das Stueck: dasselbe Carousel laeuft auf
+   * Instagram und Facebook und hat dort zwei verschiedene Reichweiten.
+   */
+  metrics: text("metrics").notNull().default("{}"),
+  /** Wann zuletzt abgerufen. `null` = noch nie. */
+  metricsAt: text("metrics_at"),
   createdAt: createdAt(),
 }, (t) => [index("mp_scheduled_status").on(t.status, t.scheduledAt), index("mp_scheduled_project").on(t.projectId)]);

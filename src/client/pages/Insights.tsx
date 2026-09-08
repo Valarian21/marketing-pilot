@@ -60,6 +60,8 @@ export function InsightsPage() {
         </Card>
       </div>
 
+      <PostMetrikCard id={id} posts={view.posts} busy={busy} run={run} />
+
       <div className="mp-two-col">
         <Card>
           <h2>Beste und schwächste Stücke <span className="mp-muted mp-small">veröffentlicht · Klicks über den Kurzlink, Signups über utm_content</span></h2>
@@ -94,5 +96,78 @@ export function InsightsPage() {
         {showSnippet && snippet && <><pre className="mp-pre">{snippet.snippet}</pre><Button onClick={() => void navigator.clipboard.writeText(snippet.snippet)}>Snippet kopieren</Button></>}
       </Card>
     </>
+  );
+}
+
+const NUM = (x: number | null | undefined) => (typeof x === "number" ? x.toLocaleString("de-DE") : "–");
+const FELDER = [
+  { key: "reichweite" as const, label: "Reichweite" },
+  { key: "aufrufe" as const, label: "Aufrufe" },
+  { key: "likes" as const, label: "Likes" },
+  { key: "kommentare" as const, label: "Kommentare" },
+  { key: "saves" as const, label: "Saves" },
+  { key: "shares" as const, label: "Shares" },
+];
+
+/**
+ * Was die Plattformen über die einzelnen Beiträge melden.
+ *
+ * Eigene Karte und nicht in „Beste und schwächste Stücke" hineingemischt: dort
+ * ist die Einheit das Stück, hier der Beitrag auf einer Plattform. Dasselbe
+ * Carousel läuft auf Instagram und Facebook und hat dort zwei Reichweiten.
+ */
+function PostMetrikCard({ id, posts, busy, run }: { id: string; posts: InsightsView["posts"]; busy: boolean; run: (fn: () => Promise<unknown>) => Promise<void> }) {
+  const [offen, setOffen] = useState<string | null>(null);
+  const [werte, setWerte] = useState<Record<string, string>>({});
+  const fehler = posts.find((p) => p.metrics?.fehler)?.metrics?.fehler ?? "";
+  const ohneZahlen = posts.filter((p) => !p.nurHand && !p.metricsAt).length;
+
+  const speichern = async (postId: string) => {
+    const body: Record<string, number | null> = {};
+    for (const f of FELDER) {
+      const roh = werte[f.key]?.trim();
+      if (roh !== undefined && roh !== "") body[f.key] = Number(roh.replace(/[.\s]/g, "").replace(",", "."));
+    }
+    await run(() => api(`/scheduled/${postId}/metrics`, { method: "PUT", json: body }));
+    setOffen(null); setWerte({});
+  };
+
+  return (
+    <Card>
+      <div className="mp-card-head">
+        <h2>Zahlen je Beitrag <span className="mp-muted mp-small">was die Plattform selbst meldet</span></h2>
+        <Button disabled={busy} onClick={() => void run(() => api(`/projects/${id}/metrics/run`, { method: "POST" }))}>Jetzt abrufen</Button>
+      </div>
+      {fehler && <Notice kind="warn">Meta lehnt den Abruf ab: <em>{fehler}</em><br />Meist fehlt dem Token ein Recht — Instagram braucht <code className="mp-code">instagram_manage_insights</code>, die Facebook-Seite <code className="mp-code">read_insights</code>. Token im Graph API Explorer mit diesen Rechten neu holen und auf der Kanäle-Seite eintragen.</Notice>}
+      {posts.length === 0 ? <p className="mp-muted">Noch nichts über den Piloten veröffentlicht.</p> : (
+        <>
+          {ohneZahlen > 0 && !fehler && <p className="mp-small mp-muted">{ohneZahlen} Beiträge noch ohne Abruf — der Sammler läuft einmal täglich.</p>}
+          <div className="mp-table-wrap">
+            <table className="mp-table">
+              <thead><tr><th>Beitrag</th><th>Kanal</th>{FELDER.map((f) => <th key={f.key} className="mp-num-cell">{f.label}</th>)}<th></th></tr></thead>
+              <tbody>{posts.map((p) => (
+                <tr key={p.id}>
+                  <td><Link to={`/projects/${id}/publish/${p.pieceId}`}>{p.title || p.format}</Link>
+                    <br /><span className="mp-small mp-muted">{p.postedAt ? new Date(p.postedAt).toLocaleDateString("de-DE") : "–"}{p.metrics?.quelle === "hand" && " · von Hand"}</span></td>
+                  <td className="mp-small">{p.platform}</td>
+                  {FELDER.map((f) => <td key={f.key} className="mp-num-cell">{NUM(p.metrics?.[f.key])}</td>)}
+                  <td>{(p.nurHand || p.metrics?.fehler) && <Button onClick={() => { setOffen(offen === p.id ? null : p.id); setWerte({}); }}>{offen === p.id ? "Abbrechen" : "Eintragen"}</Button>}</td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </div>
+          {offen && (
+            <div className="mp-sub">
+              <p className="mp-small mp-muted">Zahlen aus dem Analytics-Bildschirm der Plattform abschreiben. Leere Felder bleiben, wie sie sind.</p>
+              <div className="mp-form mp-form--row">
+                {FELDER.map((f) => <label key={f.key} className="mp-field mp-field--short"><span>{f.label}</span><input inputMode="numeric" value={werte[f.key] ?? ""} onChange={(e) => setWerte({ ...werte, [f.key]: e.target.value })} placeholder="–" /></label>)}
+                <div className="mp-form-actions"><Button variant="primary" disabled={busy} onClick={() => void speichern(offen)}>Speichern</Button></div>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+      <p className="mp-small mp-muted">TikTok gibt ohne bestandenen Content-Posting-Audit keine Zahlen heraus — dort ist die Handeingabe der einzige Weg.</p>
+    </Card>
   );
 }

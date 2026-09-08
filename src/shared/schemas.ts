@@ -910,6 +910,35 @@ export const ChannelCard = z.object({
   }),
 });
 
+/**
+ * Was die Plattform ueber einen abgesetzten Beitrag meldet.
+ *
+ * Bewusst plattformunabhaengig benannt: Meta nennt dasselbe je nach Medientyp
+ * anders (`reach` beim Carousel, `views` beim Reel,
+ * `post_impressions_unique` auf der Seite). `quelle` haelt fest, ob die Zahl
+ * gemessen oder abgeschrieben ist — bei TikTok geht nur Letzteres.
+ */
+export const PostMetrics = z.object({
+  reichweite: z.number().nullable().default(null),
+  aufrufe: z.number().nullable().default(null),
+  likes: z.number().nullable().default(null),
+  kommentare: z.number().nullable().default(null),
+  saves: z.number().nullable().default(null),
+  shares: z.number().nullable().default(null),
+  roh: z.record(z.string(), z.number()).optional(),
+  fehler: z.string().optional(),
+  quelle: z.enum(["api", "hand"]).default("api"),
+});
+/** Handeingabe: nur die Zahlen, die auf dem Bildschirm der Plattform stehen. */
+export const PostMetricsPatch = z.object({
+  reichweite: z.number().nullable().optional(),
+  aufrufe: z.number().nullable().optional(),
+  likes: z.number().nullable().optional(),
+  kommentare: z.number().nullable().optional(),
+  saves: z.number().nullable().optional(),
+  shares: z.number().nullable().optional(),
+});
+
 export const ScheduledStatus = z.enum(["queued", "posted", "failed", "cancelled"]);
 /**
  * Woher ein Eintrag im Zeitplan stammt.
@@ -929,6 +958,8 @@ export const ScheduledPost = z.object({
   attempts: z.number().int(), postedAt: Iso.nullable(), createdAt: Iso,
   /** Titel des Stuecks — die Liste soll ohne zweite Abfrage lesbar sein. */
   title: z.string().default(""),
+  metrics: PostMetrics.nullable().default(null),
+  metricsAt: Iso.nullable().default(null),
 });
 
 export const ScheduleCreate = z.object({
@@ -1150,6 +1181,19 @@ export const InsightsView = z.object({
   weeks: z.array(z.object({ weekStart: z.string(), signups: z.number().int(), activated: z.number().int(), paid: z.number().int() })),
   byChannel: z.array(z.object({ source: z.string(), signups: z.number().int(), activated: z.number().int(), paid: z.number().int() })),
   pieces: z.array(z.object({ pieceId: z.string(), title: z.string(), channel: z.string(), format: z.string(), signups: z.number().int(), clicks: z.number().int().default(0), publishedAt: Iso.nullable() })),
+  /**
+   * Was die Plattformen ueber die einzelnen Beitraege melden.
+   *
+   * Getrennt von `pieces`, weil die Einheit eine andere ist: ein Stueck kann
+   * auf zwei Plattformen laufen und hat dort zwei Reichweiten.
+   */
+  posts: z.array(z.object({
+    id: z.string(), pieceId: z.string(), title: z.string(), platform: z.string(), format: z.string(),
+    postedAt: Iso.nullable(), externalUrl: z.string().nullable(),
+    metrics: PostMetrics.nullable(), metricsAt: Iso.nullable(),
+    /** Auf dieser Plattform kann der Pilot nichts messen — Zahlen nur von Hand. */
+    nurHand: z.boolean().default(false),
+  })).default([]),
   geoHistory: z.array(z.object({ batch: z.string(), takenAt: Iso, visibility: z.number(), asked: z.number().int() })),
   totalEvents: z.number().int(),
   webhookConfigured: z.boolean(),
@@ -1247,6 +1291,8 @@ export type PublishMode = z.infer<typeof PublishMode>;
 export type PostOrigin = z.infer<typeof PostOrigin>;
 export type ExternPostCreate = z.infer<typeof ExternPostCreate>;
 export type ArtworkContentOptions = z.infer<typeof ArtworkContentOptions>;
+export type PostMetrics = z.infer<typeof PostMetrics>;
+export type PostMetricsPatch = z.infer<typeof PostMetricsPatch>;
 export type PostingMode = z.infer<typeof PostingMode>;
 export type PlatformPosting = z.infer<typeof PlatformPosting>;
 export type ScheduledPost = z.infer<typeof ScheduledPost>;

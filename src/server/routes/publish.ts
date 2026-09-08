@@ -8,6 +8,8 @@ import { z } from "zod";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import * as s from "../../shared/schemas.js";
+import { eq } from "drizzle-orm";
+import * as t from "../db/schema.js";
 import type { Db } from "../db/index.js";
 import type { Env } from "../env.js";
 import { writeAudit } from "../audit.js";
@@ -20,7 +22,8 @@ import { getPiece } from "../agents/studio/generate.js";
 import { loadCredentials, platformStatus, posterFor, saveCredentials } from "../publish/index.js";
 import { cancelScheduled, listScheduled, nextFreeSlot, postedToday, recordExternPost, schedulePiece } from "../publish/schedule.js";
 import { pipelineView } from "../publish/pipeline.js";
-import { PUBLISH_STEPS } from "../publish/job.js";
+import { METRICS_STEPS, PUBLISH_STEPS } from "../publish/job.js";
+import { metrikenVonHand } from "../publish/metrics.js";
 import { loadBio, saveBio } from "../publish/bio.js";
 
 export function publishRoutes(app: FastifyInstance, db: Db, env: Env): void {
@@ -126,6 +129,32 @@ export function publishRoutes(app: FastifyInstance, db: Db, env: Env): void {
       content: { platform: eintrag.platform, at: eintrag.scheduledAt, posted: eintrag.status === "posted", url: eintrag.externalUrl },
     });
     return reply.code(201).send(eintrag);
+  });
+
+  /**
+   * Zahlen von Hand eintragen — der einzige Weg fuer TikTok.
+   *
+   * Ohne bestandenen Content-Posting-Audit gibt TikTok keine API her, weder
+   * zum Posten noch zum Lesen. Die Zahlen stehen im Analytics-Bildschirm der
+   * App und werden hier abgeschrieben; `quelle: "hand"` haelt fest, dass sie
+   * nicht gemessen sind.
+   */
+  r.put("/api/mp/scheduled/:id/metrics", {
+    schema: { params: s.IdParams, body: s.PostMetricsPatch, response: { 200: s.PostMetrics, 404: s.ErrorBody } },
+  }, async (req, reply) => {
+    const row = db.select().from(t.mpScheduledPosts).where(eq(t.mpScheduledPosts.id, req.params.id)).get();
+    if (!row) return reply.code(404).send({ detail: "Eintrag nicht gefunden." });
+    const m = metrikenVonHand(db, req.params.id, req.body);
+    writeAudit(db, { user: req.user, action: "publish.metrics", entityType: "scheduled_post", entityId: req.params.id, projectId: row.projectId, content: { ...req.body, quelle: "hand" } });
+    return m;
+  });
+
+  /** Die Zahlen der Plattformen jetzt holen, statt auf den Tagestakt zu warten. */
+  r.post("/api/mp/projects/:projectId/metrics/run", { schema: { params: P, response: { 202: s.Job, 400: s.ErrorBody, 409: s.ErrorBody } } }, async (req, reply) => {
+    if (!workerAlive(db)) return reply.code(400).send({ detail: "Der Worker läuft nicht (app-marketing-pilot-worker)." });
+    if (hasActiveJob(db, req.params.projectId, "metrics.fetch")) return reply.code(409).send({ detail: "Es läuft bereits ein Abruf." });
+    const job = enqueueJob(db, { projectId: req.params.projectId, kind: "metrics.fetch", payload: { projectId: req.params.projectId }, steps: METRICS_STEPS });
+    return reply.code(202).send(getJob(db, job.id)!);
   });
 
   r.delete("/api/mp/scheduled/:id", { schema: { params: s.IdParams, response: { 200: z.object({ cancelled: z.boolean() }), 409: s.ErrorBody } } }, async (req, reply) => {
