@@ -19,6 +19,7 @@ export function PublishPage() {
   const [error, setError] = useState<string | null>(null);
   const [url, setUrl] = useState("");
   const [date, setDate] = useState("");
+  const [externAt, setExternAt] = useState("");
   const [busy, setBusy] = useState(false);
   const [step, setStep] = useState(1);
 
@@ -34,6 +35,18 @@ export function PublishPage() {
     setBusy(true); setError(null);
     try { await api(`/content/${pieceId}/schedule`, { method: "POST", json: { date: new Date(date).toISOString() } }); await load(); }
     catch (e) { setError(e instanceof Error ? e.message : "Fehler"); } finally { setBusy(false); }
+  };
+  /** Ein Termin, den die Plattform hält — der Pilot merkt ihn sich nur. */
+  const markExtern = async (posted: boolean) => {
+    if (!pkg) return;
+    setBusy(true); setError(null);
+    try {
+      await api(`/projects/${id}/publish/extern`, {
+        method: "POST",
+        json: { pieceId, platform: pkg.platform, scheduledAt: new Date(externAt).toISOString(), externalUrl: url, posted },
+      });
+      await load();
+    } catch (e) { setError(e instanceof Error ? e.message : "Fehler"); } finally { setBusy(false); }
   };
   const openPlatform = async () => {
     // copy first, then open - the composer opens with the text already in the clipboard
@@ -120,6 +133,19 @@ export function PublishPage() {
               </div>
               <p className="mp-small mp-muted">Setzt das Stück auf „veröffentlicht“, hakt die zugehörige Aufgabe ab und schaltet die Messung (Klicks, Signups) für dieses Stück frei.</p>
             </div>
+            {!published && (
+              <details className="mp-details" open={Boolean(externAt)}>
+                <summary className="mp-label">Stattdessen: auf der Plattform vorgeplant</summary>
+                <p className="mp-small mp-muted">Für Kanäle, auf denen der Pilot nicht posten darf — TikTok, X, LinkedIn. Der Termin landet im Zeitplan und in der Ampel, abgesetzt wird er von der Plattform. Ein zweiter Eintrag für denselben Kanal verschiebt den vorhandenen Termin.</p>
+                <div className="mp-form mp-form--row">
+                  <label className="mp-field mp-field--short"><span>Termin auf der Plattform</span><input type="datetime-local" value={externAt} onChange={(e) => setExternAt(e.target.value)} /></label>
+                  <div className="mp-form-actions">
+                    <Button disabled={busy || !externAt} onClick={() => void markExtern(false)}>Vorgemerkt</Button>
+                    <Button disabled={busy || !externAt} onClick={() => void markExtern(true)}>Steht schon draußen</Button>
+                  </div>
+                </div>
+              </details>
+            )}
           </Card>
         </div>
       </div>

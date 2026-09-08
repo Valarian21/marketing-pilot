@@ -82,6 +82,8 @@ export interface PipelineSlot {
   error: string;
   /** Slot liegt in der Vergangenheit und wurde nicht bedient. */
   missed: boolean;
+  /** Von Hand auf der Plattform eingeplant — der Pilot setzt ihn nicht ab. */
+  extern: boolean;
 }
 
 export interface PipelineRow {
@@ -135,7 +137,7 @@ export function pipelineView(db: Db, projectId: string, opts: { days?: number; n
       const tag = berlinParts(new Date(start.getTime() + i * DAY + 12 * 3_600_000));
       for (const sl of [...profile.slots].filter((x) => x.day === tag.day).sort((a, b) => a.hour - b.hour)) {
         const at = berlinInstant(tag.date, sl.hour);
-        slots.push({ at: at.toISOString(), date: tag.date, hour: sl.hour, state: "empty", pieceId: null, title: "", format: "", error: "", missed: at.getTime() < now.getTime() });
+        slots.push({ at: at.toISOString(), date: tag.date, hour: sl.hour, state: "empty", pieceId: null, title: "", format: "", error: "", missed: at.getTime() < now.getTime(), extern: false });
       }
     }
 
@@ -146,7 +148,7 @@ export function pipelineView(db: Db, projectId: string, opts: { days?: number; n
     for (const sp of mine) {
       const piece = byId.get(sp.pieceId);
       const state: SlotState = sp.status === "posted" ? "published" : sp.status === "failed" ? "failed" : "queued";
-      const eintrag = { state, pieceId: sp.pieceId, title: piece?.title ?? "", format: piece?.format ?? "", error: sp.error ?? "" };
+      const eintrag = { state, pieceId: sp.pieceId, title: piece?.title ?? "", format: piece?.format ?? "", error: sp.error ?? "", extern: sp.origin === "extern" };
       // Eine Story teilt sich den Slot mit ihrem Beitrag — sie ersetzt ihn nicht.
       if (piece?.format === "story") continue;
       const frei = slots.find((x) => x.state === "empty" && Math.abs(Date.parse(x.at) - Date.parse(sp.scheduledAt)) < 30 * 60_000);
@@ -171,7 +173,7 @@ export function pipelineView(db: Db, projectId: string, opts: { days?: number; n
       const p = kandidaten[k];
       if (!p) break;
       k++;
-      Object.assign(slot, { state: p.status === "approved" ? "approved" : "review", pieceId: p.id, title: p.title, format: p.format });
+      Object.assign(slot, { state: p.status === "approved" ? "approved" : "review", pieceId: p.id, title: p.title, format: p.format, extern: false });
     }
 
     return { platform, label: PLATFORMS[platform]?.label ?? platform, stage: profile.stage, automatic, slots, backlog: Math.max(0, kandidaten.length - k) };

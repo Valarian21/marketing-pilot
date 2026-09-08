@@ -12,6 +12,8 @@ import { pieceCosts } from "../audit.js";
 
 export const MediaItem = z.object({
   id: z.string(), projectId: z.string(), projectName: z.string(), title: z.string(), format: s.ContentFormat, status: s.ContentStatus, channel: z.string(),
+  /** Der Plattform-Schluessel des Stuecks — `meta.platform`, sonst der Kanal. Danach laesst sich filtern. */
+  platform: z.string(),
   createdAt: z.string(), updatedAt: z.string(), renderedAt: z.string().nullable(), costUsd: z.number(),
   thumbUrl: z.string().nullable(), previewUrl: z.string().nullable(), assetCount: z.number().int(), bytes: z.number().int(), humanEdited: z.boolean(),
 });
@@ -19,6 +21,7 @@ export type MediaItem = z.infer<typeof MediaItem>;
 
 const MediaQuery = z.object({
   format: s.ContentFormat.optional(), projectId: z.string().optional(), status: s.ContentStatus.optional(),
+  platform: z.string().optional(),
   /** ISO date/time lower bound on createdAt */ since: z.string().optional(), q: z.string().optional(),
   limit: z.coerce.number().int().min(1).max(500).default(200),
 });
@@ -27,8 +30,12 @@ export function listMedia(db: Db, dataDir: string, f: z.infer<typeof MediaQuery>
   const projects = new Map(db.select({ id: t.mpProjects.id, name: t.mpProjects.name }).from(t.mpProjects).all().map((p) => [p.id, p.name]));
   let q = db.select().from(t.mpContentPieces).$dynamic();
   if (f.projectId) q = q.where(eq(t.mpContentPieces.projectId, f.projectId));
+  const platformOf = (r: { channel: string; meta: string }): string =>
+    String(parseJson<Record<string, unknown>>(r.meta, {})["platform"] ?? r.channel).trim().toLowerCase();
+  const wanted = f.platform?.trim().toLowerCase();
   const rows = q.orderBy(desc(t.mpContentPieces.createdAt)).all()
-    .filter((r) => (!f.format || r.format === f.format) && (!f.status || r.status === f.status) && (!f.since || r.createdAt >= f.since) && (!f.q || r.title.toLowerCase().includes(f.q.toLowerCase())))
+    .filter((r) => (!f.format || r.format === f.format) && (!f.status || r.status === f.status) && (!f.since || r.createdAt >= f.since)
+      && (!wanted || platformOf(r) === wanted) && (!f.q || r.title.toLowerCase().includes(f.q.toLowerCase())))
     .slice(0, f.limit);
   const costs = pieceCosts(db, rows.map((r) => r.id));
   return rows.map((r) => {
@@ -40,6 +47,7 @@ export function listMedia(db: Db, dataDir: string, f: z.infer<typeof MediaQuery>
     const preview = assets.find((a) => a.kind === "render") ?? null;
     return {
       id: r.id, projectId: r.projectId, projectName: projects.get(r.projectId) ?? "?", title: r.title, format: r.format as z.infer<typeof s.ContentFormat>, status: r.status as z.infer<typeof s.ContentStatus>, channel: r.channel,
+      platform: platformOf(r),
       createdAt: r.createdAt, updatedAt: r.updatedAt, renderedAt: typeof meta["renderedAt"] === "string" ? meta["renderedAt"] : null, costUsd: costs.get(r.id) ?? 0,
       thumbUrl: thumb ? `/api/mp/assets/${thumb.id}/file` : null, previewUrl: preview ? `/api/mp/assets/${preview.id}/file` : null, assetCount: assets.length, bytes, humanEdited: Boolean(r.humanEdited),
     };

@@ -29,7 +29,7 @@ type Row = typeof t.mpScheduledPosts.$inferSelect;
 
 export function scheduledOf(db: Db, r: Row): s.ScheduledPost {
   const piece = db.select({ title: t.mpContentPieces.title }).from(t.mpContentPieces).where(eq(t.mpContentPieces.id, r.pieceId)).get();
-  return { ...r, status: r.status as s.ScheduledPost["status"], origin: r.origin as s.PublishMode, title: piece?.title ?? "" };
+  return { ...r, status: r.status as s.ScheduledPost["status"], origin: r.origin as s.PostOrigin, title: piece?.title ?? "" };
 }
 
 export function listScheduled(db: Db, projectId: string, limit = 50): s.ScheduledPost[] {
@@ -90,14 +90,74 @@ export function schedulePiece(db: Db, projectId: string, input: ScheduleInput): 
   return out;
 }
 
+/**
+ * Einen Beitrag eintragen, den du selbst auf der Plattform eingestellt hast.
+ *
+ * Der Pilot postet ihn nicht — er merkt ihn sich nur, damit Ampel, Kanalkarte
+ * und Zeitplan die Woche vollständig zeigen. Ein zweiter Aufruf für dasselbe
+ * Stück und dieselbe Plattform überschreibt den vorhandenen Eintrag, statt
+ * einen zweiten anzulegen: „ich habe den Termin verschoben" ist der häufigere
+ * Fall als „ich habe es zweimal gepostet".
+ */
+export function recordExternPost(db: Db, projectId: string, input: s.ExternPostCreate): s.ScheduledPost {
+  const piece = getPiece(db, input.pieceId);
+  if (!piece) throw err("Stück nicht gefunden.", 404);
+  if (piece.projectId !== projectId) throw err("Das Stück gehört zu einem anderen Projekt.", 400);
+  const platform = input.platform.trim().toLowerCase();
+  const at = new Date(input.scheduledAt);
+  if (Number.isNaN(at.getTime())) throw err("Kein gültiger Termin.");
+  const url = input.externalUrl.trim();
+  const ts = nowIso();
+
+  const vorhanden = db.select().from(t.mpScheduledPosts)
+    .where(and(eq(t.mpScheduledPosts.pieceId, piece.id), eq(t.mpScheduledPosts.platform, platform))).all()
+    .find((x) => x.origin === "extern" && x.status !== "cancelled");
+
+  const felder = {
+    scheduledAt: at.toISOString(),
+    status: input.posted ? "posted" : "queued",
+    externalUrl: url || null,
+    postedAt: input.posted ? (at.getTime() <= Date.now() ? at.toISOString() : ts) : null,
+    error: null,
+  };
+  let row: Row;
+  if (vorhanden) {
+    db.update(t.mpScheduledPosts).set(felder).where(eq(t.mpScheduledPosts.id, vorhanden.id)).run();
+    row = { ...vorhanden, ...felder } as Row;
+  } else {
+    row = {
+      id: newId(), projectId, pieceId: piece.id, platform, origin: "extern",
+      providerRef: null, attempts: 0, createdAt: ts, ...felder,
+    } as Row;
+    db.insert(t.mpScheduledPosts).values(row).run();
+  }
+
+  // Ein Stück, das draußen steht, ist veröffentlicht — sonst taucht es weiter
+  // in der Freigabe-Warteschlange auf und die Projektion plant es noch einmal ein.
+  if (input.posted) {
+    db.update(t.mpContentPieces).set({
+      status: "published", publishedAt: felder.postedAt, externalUrl: url || piece.externalUrl,
+      meta: toJson({ ...piece.meta, postedVia: `extern:${platform}` }), updatedAt: ts,
+    }).where(eq(t.mpContentPieces.id, piece.id)).run();
+  }
+  return scheduledOf(db, row);
+}
+
 export function cancelScheduled(db: Db, id: string): boolean {
   return db.update(t.mpScheduledPosts).set({ status: "cancelled" })
     .where(and(eq(t.mpScheduledPosts.id, id), eq(t.mpScheduledPosts.status, "queued"))).run().changes > 0;
 }
 
-/** Fällige Einträge — reine Abfrage, damit der Scheduler testbar bleibt. */
+/**
+ * Fällige Einträge — reine Abfrage, damit der Scheduler testbar bleibt.
+ *
+ * `extern` bleibt draußen: das sind Beiträge, die auf der Plattform selbst
+ * eingeplant sind. Sie stehen im Zeitplan, damit die Woche vollständig ist —
+ * abgesetzt werden sie dort, nicht hier.
+ */
 export function duePosts(db: Db, now = new Date()): s.ScheduledPost[] {
   return db.select().from(t.mpScheduledPosts).where(eq(t.mpScheduledPosts.status, "queued")).all()
+    .filter((r) => r.origin !== "extern")
     .filter((r) => Date.parse(r.scheduledAt) <= now.getTime())
     .sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt))
     .map((r) => scheduledOf(db, r));

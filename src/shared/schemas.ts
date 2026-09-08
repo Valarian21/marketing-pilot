@@ -308,6 +308,13 @@ export const PipelineSlot = z.object({
   at: Iso, date: z.string(), hour: z.number().int(),
   state: z.enum(["published", "queued", "failed", "approved", "review", "empty"]),
   pieceId: z.string().nullable(), title: z.string(), format: z.string(), error: z.string(), missed: z.boolean(),
+  /**
+   * Der Eintrag ist von Hand auf der Plattform geplant, nicht vom Piloten.
+   * `queued` heisst hier „du hast es dort eingestellt", nicht „der Pilot postet
+   * es" — ohne diese Unterscheidung verspricht die Ampel etwas, das der Pilot
+   * gar nicht tun kann (TikTok, X, LinkedIn).
+   */
+  extern: z.boolean().default(false),
 });
 export const PipelineRow = z.object({
   platform: z.string(), label: z.string(), stage: z.string(), automatic: z.boolean(),
@@ -852,9 +859,20 @@ export const ChannelCard = z.object({
 });
 
 export const ScheduledStatus = z.enum(["queued", "posted", "failed", "cancelled"]);
+/**
+ * Woher ein Eintrag im Zeitplan stammt.
+ *
+ * `manual`/`scheduled`/`auto` sind die Stufen des Piloten. `extern` ist der
+ * vierte Fall und der einzige, den der Pilot **nicht** ausfuehrt: ein Beitrag,
+ * den Marcel selbst auf der Plattform vorgeplant hat. Er steht im Zeitplan,
+ * damit Ampel und Kanaluebersicht die Woche vollstaendig zeigen — TikTok laesst
+ * sich ohne Content-Posting-Audit nicht bespielen, war dadurch aber auch
+ * unsichtbar, obwohl dort taeglich zwei Reels liefen.
+ */
+export const PostOrigin = z.enum(["manual", "scheduled", "auto", "extern"]);
 export const ScheduledPost = z.object({
   id: Id, projectId: Id, pieceId: Id, platform: z.string(),
-  scheduledAt: Iso, status: ScheduledStatus, origin: PublishMode,
+  scheduledAt: Iso, status: ScheduledStatus, origin: PostOrigin,
   providerRef: z.string().nullable(), externalUrl: z.string().nullable(), error: z.string().nullable(),
   attempts: z.number().int(), postedAt: Iso.nullable(), createdAt: Iso,
   /** Titel des Stuecks — die Liste soll ohne zweite Abfrage lesbar sein. */
@@ -865,6 +883,21 @@ export const ScheduleCreate = z.object({
   /** Leer = naechster freier Slot des Kanals. */
   scheduledAt: Iso.optional(),
   platforms: z.array(z.string()).default([]),
+});
+
+/**
+ * Ein Beitrag, den du selbst auf der Plattform eingestellt hast.
+ *
+ * `posted: true` heisst „steht schon draussen" — dann wandert auch das Stueck
+ * auf `published`. Sonst ist es eine Vormerkung fuer einen Termin, den die
+ * Plattform haelt, nicht wir.
+ */
+export const ExternPostCreate = z.object({
+  pieceId: Id,
+  platform: z.string().min(1),
+  scheduledAt: Iso,
+  externalUrl: z.string().default(""),
+  posted: z.boolean().default(false),
 });
 
 /** Oeffentliche Bio-Seite eines Projekts. */
@@ -1159,6 +1192,8 @@ export type SeriesView = z.infer<typeof SeriesView>;
 export type Weekday = z.infer<typeof Weekday>;
 export type PostSlot = z.infer<typeof PostSlot>;
 export type PublishMode = z.infer<typeof PublishMode>;
+export type PostOrigin = z.infer<typeof PostOrigin>;
+export type ExternPostCreate = z.infer<typeof ExternPostCreate>;
 export type PostingMode = z.infer<typeof PostingMode>;
 export type PlatformPosting = z.infer<typeof PlatformPosting>;
 export type ScheduledPost = z.infer<typeof ScheduledPost>;

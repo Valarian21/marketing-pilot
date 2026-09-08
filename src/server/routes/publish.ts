@@ -18,7 +18,7 @@ import { STAGES, stageAtLeast } from "../../shared/channels.js";
 import { enqueueJob, getJob, hasActiveJob, workerAlive } from "../jobs.js";
 import { getPiece } from "../agents/studio/generate.js";
 import { loadCredentials, platformStatus, posterFor, saveCredentials } from "../publish/index.js";
-import { cancelScheduled, listScheduled, nextFreeSlot, postedToday, schedulePiece } from "../publish/schedule.js";
+import { cancelScheduled, listScheduled, nextFreeSlot, postedToday, recordExternPost, schedulePiece } from "../publish/schedule.js";
 import { pipelineView } from "../publish/pipeline.js";
 import { PUBLISH_STEPS } from "../publish/job.js";
 import { loadBio, saveBio } from "../publish/bio.js";
@@ -106,6 +106,26 @@ export function publishRoutes(app: FastifyInstance, db: Db, env: Env): void {
     const planned = schedulePiece(db, piece.projectId, { pieceId: piece.id, ...(req.body.platforms.length ? { platforms: req.body.platforms } : {}), ...(req.body.scheduledAt ? { at: req.body.scheduledAt } : {}) });
     writeAudit(db, { user: req.user, action: "publish.schedule", entityType: "content_piece", entityId: piece.id, projectId: piece.projectId, content: { entries: planned.map((x) => ({ platform: x.platform, at: x.scheduledAt })) } });
     return reply.code(201).send(planned);
+  });
+
+  /**
+   * Ein Beitrag, den du selbst auf der Plattform eingestellt hast.
+   *
+   * Der einzige Weg, TikTok, X oder LinkedIn im Zeitplan sichtbar zu machen:
+   * dort kann der Pilot nicht posten, aber er soll wissen, dass dort etwas
+   * läuft. Ohne das zeigt die Ampel eine leere Woche, während zweimal täglich
+   * ein Reel rausgeht.
+   */
+  r.post("/api/mp/projects/:projectId/publish/extern", {
+    schema: { params: P, body: s.ExternPostCreate, response: { 201: s.ScheduledPost, 400: s.ErrorBody, 404: s.ErrorBody } },
+  }, async (req, reply) => {
+    if (!getProject(db, req.params.projectId)) return reply.code(404).send({ detail: "Projekt nicht gefunden." });
+    const eintrag = recordExternPost(db, req.params.projectId, req.body);
+    writeAudit(db, {
+      user: req.user, action: "publish.extern", entityType: "content_piece", entityId: req.body.pieceId, projectId: req.params.projectId,
+      content: { platform: eintrag.platform, at: eintrag.scheduledAt, posted: eintrag.status === "posted", url: eintrag.externalUrl },
+    });
+    return reply.code(201).send(eintrag);
   });
 
   r.delete("/api/mp/scheduled/:id", { schema: { params: s.IdParams, response: { 200: z.object({ cancelled: z.boolean() }), 409: s.ErrorBody } } }, async (req, reply) => {

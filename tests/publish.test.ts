@@ -13,7 +13,7 @@ import { buildApp } from "../src/server/app.js";
 import { assetToken, ASSET_TTL_MS, readAssetToken } from "../src/server/publish/asset-tokens.js";
 import { linkFacets, blueskyPoster, telegramPoster, instagramPoster, threadsPoster } from "../src/server/publish/posters.js";
 import { platformStatus, posterFor, saveCredentials } from "../src/server/publish/index.js";
-import { duePosts, nextFreeSlot, runScheduledPost, schedulePiece } from "../src/server/publish/schedule.js";
+import { duePosts, nextFreeSlot, recordExternPost, runScheduledPost, schedulePiece } from "../src/server/publish/schedule.js";
 import { PLATFORM_POSTING } from "../src/server/publish/types.js";
 import { loadProfiles, patchChannel, saveProfiles } from "../src/server/channels.js";
 import { fullProfile } from "../src/shared/channels.js";
@@ -353,6 +353,30 @@ describe("Slots und Zeitplan", () => {
 
   it("verweigert das Einplanen ohne Zugangsdaten", () => {
     expect(() => schedulePiece(built.db, pid, { pieceId, platforms: ["mastodon"] })).toThrowError(/Zugangsdaten fehlen/);
+  });
+
+  /**
+   * TikTok laesst sich ohne Content-Posting-Audit nicht bespielen — trotzdem
+   * gehen dort taeglich zwei Reels raus, von Hand vorgeplant. Der Eintrag macht
+   * sie sichtbar, ohne dass der Pilot je versucht, sie abzusetzen.
+   */
+  it("merkt sich von Hand vorgeplante Beiträge und postet sie nie selbst", () => {
+    const at = "2026-11-04T12:00:00.000Z";
+    const eintrag = recordExternPost(built.db, pid, { pieceId, platform: "tiktok", scheduledAt: at, externalUrl: "", posted: false });
+    expect(eintrag.origin).toBe("extern");
+    expect(eintrag.status).toBe("queued");
+    // laengst faellig, taucht aber nie in der Warteschlange des Posters auf
+    expect(duePosts(built.db, new Date("2026-11-05T00:00:00Z")).some((d) => d.id === eintrag.id)).toBe(false);
+
+    // Ein zweiter Aufruf verschiebt den Termin, statt einen zweiten Eintrag anzulegen.
+    const spaeter = recordExternPost(built.db, pid, { pieceId, platform: "tiktok", scheduledAt: "2026-11-05T12:00:00.000Z", externalUrl: "", posted: false });
+    expect(spaeter.id).toBe(eintrag.id);
+    expect(spaeter.scheduledAt).toBe("2026-11-05T12:00:00.000Z");
+  });
+
+  it("verweigert einen externen Eintrag für ein fremdes Stück", () => {
+    expect(() => recordExternPost(built.db, pid, { pieceId: "gibtsnicht", platform: "tiktok", scheduledAt: "2026-11-04T12:00:00.000Z", externalUrl: "", posted: false }))
+      .toThrowError(/nicht gefunden/);
   });
 
   /**
