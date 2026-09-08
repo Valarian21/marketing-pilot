@@ -921,7 +921,7 @@ export const ChannelCard = z.object({
  *
  * Bewusst plattformunabhaengig benannt: Meta nennt dasselbe je nach Medientyp
  * anders (`reach` beim Carousel, `views` beim Reel,
- * `post_impressions_unique` auf der Seite). `quelle` haelt fest, ob die Zahl
+ * `post_media_view` auf der Seite). `quelle` haelt fest, ob die Zahl
  * gemessen oder abgeschrieben ist — bei TikTok geht nur Letzteres.
  */
 export const PostMetrics = z.object({

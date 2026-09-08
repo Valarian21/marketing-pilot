@@ -53,21 +53,21 @@ describe("Graph-Antworten lesen", () => {
   it("holt Facebooks Reaktionen vom Beitrag, nicht aus den Insights", async () => {
     const impl = (async (url: string | URL) => {
       const u = String(url);
-      if (u.includes("/insights")) return ok(werte({ post_impressions_unique: 500, post_impressions: 640 }));
+      if (u.includes("/insights")) return ok(werte({ post_media_view: 640, post_clicks: 12 }));
       return ok({ reactions: { summary: { total_count: 9 } }, comments: { summary: { total_count: 4 } }, shares: { count: 2 } });
     }) as unknown as typeof fetch;
     const m = await facebookMetriken("fb-1", "tok", impl);
-    expect(m).toMatchObject({ reichweite: 500, aufrufe: 640, likes: 9, kommentare: 4, shares: 2 });
+    expect(m).toMatchObject({ reichweite: null, aufrufe: 640, likes: 9, kommentare: 4, shares: 2 });
   });
 
   it("liefert die Insights auch, wenn die Zählwerte scheitern", async () => {
     const impl = (async (url: string | URL) => {
       const u = String(url);
-      if (u.includes("/insights")) return ok(werte({ post_impressions_unique: 500 }));
+      if (u.includes("/insights")) return ok(werte({ post_media_view: 500 }));
       return fehler("nope");
     }) as unknown as typeof fetch;
     const m = await facebookMetriken("fb-2", "tok", impl);
-    expect(m.reichweite).toBe(500);
+    expect(m.aufrufe).toBe(500);
     expect(m.likes).toBeNull();
   });
 });

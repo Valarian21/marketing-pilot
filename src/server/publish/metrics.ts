@@ -29,7 +29,7 @@ const DAY = 86_400_000;
  * Die Zahlen eines Beitrags, plattformunabhängig benannt.
  *
  * Meta nennt dasselbe je nach Medientyp anders (`reach` beim Carousel,
- * `views` beim Reel, `post_impressions_unique` auf der Seite). Übersetzt wird
+ * `views` beim Reel, `post_media_view` auf der Seite). Übersetzt wird
  * hier, damit die Anzeige eine Tabelle bleibt und nicht drei.
  */
 export interface PostMetrics {
@@ -67,7 +67,10 @@ const zahl = (x: unknown): number | null => (typeof x === "number" && Number.isF
 const IG_VOLL = ["reach", "views", "likes", "comments", "saved", "shares", "total_interactions"];
 const IG_SPARSAM = ["reach", "likes", "comments"];
 
-const FB_METRIKEN = ["post_impressions_unique", "post_impressions", "post_clicks"];
+// Meta hat `post_impressions*` für Beiträge abgeschafft (Graph v21, gemessen
+// am 08.09.2026: „must be a valid insights metric"). Übrig bleiben Aufrufe des
+// Mediums und Klicks; eine eindeutige Reichweite je Beitrag gibt es nicht mehr.
+const FB_METRIKEN = ["post_media_view", "post_clicks"];
 
 interface Graph { data?: { name?: string; values?: { value?: unknown }[] }[]; error?: { message?: string; code?: number } }
 
@@ -97,6 +100,10 @@ export async function instagramMetriken(mediaId: string, token: string, fetchImp
     // Nur der Metrik-Streit rechtfertigt einen zweiten Versuch. Ein fehlendes
     // Recht bleibt ein fehlendes Recht, egal wie kurz die Liste ist.
     const text = e instanceof Error ? e.message : String(e);
+    // Fehler 10 „Not enough viewers": Meta hält die Zahlen zurück, bis ein
+    // Beitrag genug Konten erreicht hat. Das ist kein Rechteproblem und wird
+    // beim nächsten fälligen Abruf einfach noch einmal versucht.
+    if (/not enough viewers/i.test(text)) return { ...LEERE_METRIKEN, fehler: "Noch zu wenige Zuschauer — Meta zeigt Zahlen erst ab einer Mindestgröße." };
     if (!/must be one of|does not support|not available/i.test(text)) throw e;
     roh = await hol(IG_SPARSAM);
   }
@@ -124,8 +131,8 @@ export async function facebookMetriken(postId: string, token: string, fetchImpl:
     shares = zahl(res.shares?.count);
   } catch { /* Insights stehen, die Zaehlwerte sind Kuer */ }
   return {
-    reichweite: zahl(roh["post_impressions_unique"]),
-    aufrufe: zahl(roh["post_impressions"]),
+    reichweite: null,
+    aufrufe: zahl(roh["post_media_view"]),
     likes, kommentare, saves: null, shares,
     roh, quelle: "api",
   };
