@@ -36,6 +36,17 @@ export function taskTarget(t: Task): { to: string; label: string } | null {
   return null;
 }
 
+/** „heute 15:00" / „morgen 09:00" / „Do., 11.09., 12:00" — je nach Abstand. */
+function naechsterText(iso: string): string {
+  const d = new Date(iso);
+  const heute = new Date();
+  const tage = Math.round((new Date(d.toDateString()).getTime() - new Date(heute.toDateString()).getTime()) / 86_400_000);
+  const uhr = d.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
+  if (tage === 0) return `heute ${uhr}`;
+  if (tage === 1) return `morgen ${uhr}`;
+  return `${d.toLocaleDateString("de-DE", { weekday: "short", day: "2-digit", month: "2-digit" })}, ${uhr}`;
+}
+
 export function TodayPage() {
   const { id = "" } = useParams();
   const [view, setView] = useState<TodayView | null>(null);
@@ -117,8 +128,25 @@ export function TodayPage() {
         </Card>
 
         <Card className="mp-today-block">
-          <div className="mp-card-head"><h2><span className="mp-today-no">2</span> Posten <span className="mp-today-count">{v.toPost.length}</span></h2></div>
-          {v.toPost.length === 0 ? <p className="mp-muted mp-small">Nichts freigegeben, das noch zu posten wäre.</p> : (
+          <div className="mp-card-head"><h2><span className="mp-today-no">2</span> Von Hand posten <span className="mp-today-count">{v.toPost.length}</span></h2></div>
+          {/* Was der Pilot selbst absetzt, steht als Zustandszeile — nicht als Aufgabe.
+              Sonst arbeitet man eine Liste ab, die sich von allein erledigt. */}
+          {v.eingeplant.anzahl > 0 && (
+            <Link className="mp-geplant" to={`/projects/${id}/pipeline`}>
+              <span><b className="mp-num">{v.eingeplant.anzahl}</b> Beiträge sind eingeplant — der Pilot postet sie selbst</span>
+              <span className="mp-small mp-muted">
+                {v.eingeplant.naechsterAt && <>nächster {naechsterText(v.eingeplant.naechsterAt)}{v.eingeplant.naechsterPlatform && ` · ${PLATFORMS[v.eingeplant.naechsterPlatform]?.label ?? v.eingeplant.naechsterPlatform}`}</>}
+                {v.eingeplant.plattformen.length > 1 && ` · ${v.eingeplant.plattformen.map((x) => `${x.anzahl}× ${PLATFORMS[x.platform]?.label ?? x.platform}`).join(", ")}`}
+              </span>
+            </Link>
+          )}
+          {v.gescheitert.anzahl > 0 && (
+            <Link className="mp-gescheitert" to={`/projects/${id}/pipeline`}>
+              <span><b className="mp-num">{v.gescheitert.anzahl}</b> Beiträge sind beim automatischen Posten gescheitert</span>
+              {v.gescheitert.grund && <span className="mp-small">{v.gescheitert.grund}</span>}
+            </Link>
+          )}
+          {v.toPost.length === 0 ? <p className="mp-muted mp-small">{v.eingeplant.anzahl > 0 ? "Nichts, was von Hand gepostet werden müsste." : "Nichts freigegeben, das noch zu posten wäre."}</p> : (
             <ul className="mp-today-list">{v.toPost.map(({ piece: p, composeLink, profileLink, appOnly, platform }) => (
               <li key={p.id}>
                 <div className="mp-today-main"><span className="mp-today-title">{p.title || FORMAT_LABEL[p.format]}</span><span className="mp-small mp-muted">{FORMAT_LABEL[p.format] ?? p.format} · <ChannelTag name={p.channel || platform} projectId={id} className="" />{appOnly ? " · Upload per App" : ""}</span></div>

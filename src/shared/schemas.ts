@@ -340,7 +340,30 @@ export const TodayPost = z.object({ piece: ContentPiece, platform: z.string(), c
 export const TodayView = z.object({
   startDate: z.string(), week: z.number().int(), weekPlanned: z.boolean(),
   review: z.array(ContentPiece),
+  /**
+   * Was **von Hand** gepostet werden muss: freigegebene Stücke ohne Termin.
+   *
+   * Bis zum 09.09.2026 stand hier jedes freigegebene Stück — auch die 83, für
+   * die der Pilot längst einen Termin hatte. Wer die Liste abarbeitete, postete
+   * doppelt; wer sie ignorierte, übersah die wenigen, die wirklich Handarbeit
+   * sind (TikTok, Pinterest, LinkedIn — die Kanäle ohne Schnittstelle).
+   */
   toPost: z.array(TodayPost),
+  /**
+   * Termine, an denen der Pilot gescheitert ist.
+   *
+   * Sie verschwinden sonst lautlos: das Stück ist nicht gepostet, steht aber
+   * auch in keiner Liste, weil sein Termin „vergeben" ist. Eine Zeile mit Zahl
+   * und Grund führt in die Pipeline, wo der Fehltritt samt Meldung steht.
+   */
+  gescheitert: z.object({ anzahl: z.number().int(), grund: z.string() }).default({ anzahl: 0, grund: "" }),
+  /** Was der Pilot selbst absetzt. Bewusst getrennt von `toPost`: das ist keine Arbeit, das ist Zustand. */
+  eingeplant: z.object({
+    anzahl: z.number().int(),
+    naechsterAt: Iso.nullable(),
+    naechsterPlatform: z.string(),
+    plattformen: z.array(z.object({ platform: z.string(), anzahl: z.number().int() })),
+  }).default({ anzahl: 0, naechsterAt: null, naechsterPlatform: "", plattformen: [] }),
   leads: z.object({ count: z.number().int(), top: z.array(CommunityLead) }),
   myTasks: z.array(Task),
   agentTasks: z.array(Task),

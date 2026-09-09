@@ -25,6 +25,8 @@ import { saveCredentials } from "../src/server/publish/index.js";
 import { cockpitView } from "../src/server/agents/insights/cockpit.js";
 import { fehlerKlartext } from "../src/server/publish/metrics.js";
 import { zaehleTagesklick } from "../src/server/shortlinks.js";
+import { todayView } from "../src/server/today.js";
+import { raeumeAuf } from "../src/server/cleanup.js";
 import { fakeHost } from "./helpers.js";
 
 const DATA = fs.mkdtempSync(path.join(os.tmpdir(), "mp-uebersicht-"));
@@ -224,5 +226,81 @@ describe("Übersicht", () => {
   it("räumt die Testzeilen wieder ab", () => {
     built.db.delete(t.mpKanalStats).where(eq(t.mpKanalStats.projectId, pid)).run();
     expect(leseKanalTage(built.db, pid, "2026-01-01")).toHaveLength(0);
+  });
+});
+
+/**
+ * Welle 1: die Startseite trennt Arbeit von Zustand.
+ *
+ * Der Fehler, der hier nicht wiederkommen darf: „Posten" zeigte jedes
+ * freigegebene Stück, auch die 83, für die der Pilot längst einen Termin hatte.
+ * Wer die Liste abarbeitete, postete doppelt.
+ */
+describe("Heute trennt Handarbeit von Terminiertem", () => {
+  it("nimmt eingeplante Stücke aus der Posten-Liste und zählt sie getrennt", async () => {
+    const pid = (await built.app.inject({ method: "POST", url: "/api/mp/projects", headers: auth, payload: { name: "Stau", url: "https://stau.test" } })).json().id as string;
+    const stueck = (kanal: string) => {
+      const id = newId();
+      built.db.insert(t.mpContentPieces).values({ id, projectId: pid, channel: kanal, format: "carousel", title: `Stück ${kanal}`, status: "approved", createdAt: nowIso(), updatedAt: nowIso(), meta: JSON.stringify({ platform: kanal }) }).run();
+      return id;
+    };
+    const mitTermin = stueck("instagram");
+    const ohneTermin = stueck("tiktok");
+    const gepostet = stueck("facebook");
+    built.db.insert(t.mpScheduledPosts).values({ id: newId(), projectId: pid, pieceId: mitTermin, platform: "instagram", scheduledAt: "2099-01-01T12:00:00.000Z", status: "queued", createdAt: nowIso() }).run();
+    built.db.insert(t.mpScheduledPosts).values({ id: newId(), projectId: pid, pieceId: gepostet, platform: "facebook", scheduledAt: "2026-09-01T12:00:00.000Z", status: "posted", postedAt: "2026-09-01T12:00:05.000Z", createdAt: nowIso() }).run();
+
+    const v = todayView(built.db, pid);
+    expect(v.toPost.map((x) => x.piece.id)).toEqual([ohneTermin]);
+    expect(v.eingeplant).toMatchObject({ anzahl: 1, naechsterAt: "2099-01-01T12:00:00.000Z", naechsterPlatform: "instagram" });
+    expect(v.eingeplant.plattformen).toEqual([{ platform: "instagram", anzahl: 1 }]);
+  });
+
+  it("meldet gescheiterte Termine mit einem Grund, den man lesen kann", async () => {
+    const pid = (await built.app.inject({ method: "POST", url: "/api/mp/projects", headers: auth, payload: { name: "Fehlschlag", url: "https://fehl.test" } })).json().id as string;
+    const id = newId();
+    built.db.insert(t.mpContentPieces).values({ id, projectId: pid, channel: "facebook", format: "carousel", title: "Gescheitert", status: "approved", createdAt: nowIso(), updatedAt: nowIso() }).run();
+    built.db.insert(t.mpScheduledPosts).values({
+      id: newId(), projectId: pid, pieceId: id, platform: "facebook", scheduledAt: new Date().toISOString(), status: "failed",
+      error: 'Facebook-Album 400: {"error":{"message":"Bestätige deine Identität","code":368}}', createdAt: nowIso(),
+    }).run();
+    const v = todayView(built.db, pid);
+    expect(v.gescheitert.anzahl).toBe(1);
+    expect(v.gescheitert.grund).toMatch(/Identitätsprüfung/);
+    // Das Stück selbst bleibt Handarbeit: der Pilot hat es nicht abgesetzt.
+    expect(v.toPost).toHaveLength(1);
+  });
+});
+
+/** Der Aufräum-Job: abgelehnte Stücke verlieren ihre Dateien, nicht ihren Text. */
+describe("Aufräumen", () => {
+  it("löscht nur, was älter ist als das Fenster, und merkt sich den Lauf", async () => {
+    const pid = (await built.app.inject({ method: "POST", url: "/api/mp/projects", headers: auth, payload: { name: "Müll", url: "https://muell.test" } })).json().id as string;
+    const alt = newId(), neu = newId();
+    const vorTagen = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString();
+    built.db.insert(t.mpContentPieces).values({ id: alt, projectId: pid, channel: "instagram", format: "video", title: "alt", status: "rejected", createdAt: vorTagen(20), updatedAt: vorTagen(10) }).run();
+    built.db.insert(t.mpContentPieces).values({ id: neu, projectId: pid, channel: "instagram", format: "video", title: "neu", status: "rejected", createdAt: vorTagen(1), updatedAt: vorTagen(1) }).run();
+    raeumeAuf(built.db, DATA);
+    const meta = (id: string) => JSON.parse(built.db.select().from(t.mpContentPieces).where(eq(t.mpContentPieces.id, id)).get()!.meta) as Record<string, unknown>;
+    expect(meta(alt)["dateienGeloescht"]).toBeTruthy();
+    expect(meta(neu)["dateienGeloescht"]).toBeUndefined();
+    // Der Text bleibt: die Ablehnung muss nachvollziehbar sein.
+    expect(built.db.select().from(t.mpContentPieces).where(eq(t.mpContentPieces.id, alt)).get()?.title).toBe("alt");
+  });
+
+  it("entfernt abgesagte Termine erst nach dreißig Tagen", async () => {
+    const pid = (await built.app.inject({ method: "POST", url: "/api/mp/projects", headers: auth, payload: { name: "Absagen", url: "https://absage.test" } })).json().id as string;
+    const piece = newId();
+    built.db.insert(t.mpContentPieces).values({ id: piece, projectId: pid, channel: "instagram", format: "carousel", title: "x", status: "rejected", createdAt: nowIso(), updatedAt: nowIso() }).run();
+    const eintrag = (tage: number) => {
+      const id = newId();
+      built.db.insert(t.mpScheduledPosts).values({ id, projectId: pid, pieceId: piece, platform: "instagram", scheduledAt: nowIso(), status: "cancelled", createdAt: new Date(Date.now() - tage * 86_400_000).toISOString() }).run();
+      return id;
+    };
+    const alt = eintrag(40), jung = eintrag(5);
+    raeumeAuf(built.db, DATA);
+    const da = (id: string) => Boolean(built.db.select().from(t.mpScheduledPosts).where(eq(t.mpScheduledPosts.id, id)).get());
+    expect(da(alt)).toBe(false);
+    expect(da(jung)).toBe(true);
   });
 });

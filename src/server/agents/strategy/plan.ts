@@ -11,6 +11,8 @@ import { getProject } from "../../repo/projects.js";
 import { listPersonas } from "../analysis/personas.js";
 import { listChannels } from "../analysis/attention.js";
 import { listCompetitors } from "../analysis/competitors.js";
+import { platformKey } from "../../../shared/channels.js";
+import { postingDef } from "../../publish/types.js";
 import { writeAudit } from "../../audit.js";
 import type { HostUser } from "../../../host-adapter.js";
 
@@ -96,7 +98,7 @@ export async function generateTasks(ctx: AgentContext, projectId: string, versio
   ctx.db.delete(t.mpTasks).where(and(eq(t.mpTasks.projectId, projectId), eq(t.mpTasks.status, "todo"))).run();
   const ts = nowIso();
   const perWeek = new Map<number, number>();
-  const tasks = out.tasks.filter((x) => x.week <= weeks).sort((a, b) => a.week - b.week || a.dayOffset - b.dayOffset).map(enforceApproval);
+  const tasks = out.tasks.filter((x) => x.week <= weeks && !vomZeitplanErledigt(x)).sort((a, b) => a.week - b.week || a.dayOffset - b.dayOffset).map(enforceApproval);
   for (const x of tasks) {
     const order = (perWeek.get(x.week) ?? 0) + 1; perWeek.set(x.week, order);
     ctx.db.insert(t.mpTasks).values({
@@ -106,6 +108,26 @@ export async function generateTasks(ctx: AgentContext, projectId: string, versio
     }).run();
   }
   return tasks.length;
+}
+
+/**
+ * Eine Aufgabe, um die sich der Zeitplan schon kümmert.
+ *
+ * Seit Shot 10 entscheidet `mp_scheduled_posts`, was wann auf Instagram,
+ * Facebook oder Threads rausgeht. Eine Aufgabe „Erstes Instagram-Reel posten"
+ * daneben war eine zweite, konkurrierende Liste: sie zeigte auf nichts, ließ
+ * sich nur einzeln abhaken und zählte trotzdem in jeder Fortschrittsanzeige mit
+ * (gemessen am 09.09.2026: 42 solcher Aufgaben offen, keine davon aktuell).
+ *
+ * Ausdrücklich **nicht** betroffen sind Kanäle ohne Zeitplan — Verzeichnisse,
+ * Reddit, Foren, Newsletter. Dort ist die Aufgabe der einzige Weg, und sie
+ * bleibt.
+ */
+export function vomZeitplanErledigt(task: { type: string; channel: string }): boolean {
+  if (task.type !== "publish") return false;
+  const key = platformKey(task.channel ?? "");
+  const def = key ? postingDef(key) : undefined;
+  return Boolean(def && (def.mode === "api" || def.mode === "needs_setup"));
 }
 
 const jobs = new Map<string, { running: boolean; error: string | null }>();

@@ -11,7 +11,7 @@ import { modelFor } from "../../../../config/models.js";
 import { chatJson, withRun, type AgentContext } from "../runner.js";
 import { nextWeekTasksPrompt, weeklyReportPrompt, type WeekFacts } from "../prompts/community.js";
 import { getProject } from "../../repo/projects.js";
-import { currentVersion, dueAtFor, enforceApproval, planDiff } from "../strategy/plan.js";
+import { vomZeitplanErledigt, currentVersion, dueAtFor, enforceApproval, planDiff } from "../strategy/plan.js";
 import { loadBrandKit } from "../studio/brandkit.js";
 import { voiceBlock } from "../studio/voice.js";
 import { countEvents, latestGeoVisibility, weekStartOf } from "../insights/insights.js";
@@ -93,7 +93,8 @@ export async function adoptReport(ctx: AgentContext, reportId: string, user: Hos
     chatJson(ctx.llm, modelFor("strategy"), TasksOut, nextWeekTasksPrompt({ brief, plan, week: weekNo, focus, openTasks: open.map((x) => ({ title: x.title, type: x.type })) }), usage, { maxTokens: 8000 }));
   const ts = nowIso();
   let order = ctx.db.select().from(t.mpTasks).where(and(eq(t.mpTasks.projectId, row.projectId), eq(t.mpTasks.week, weekNo))).all().length;
-  const tasks = result.tasks.map(enforceApproval);
+  // Was der Zeitplan ohnehin absetzt, wird keine Aufgabe (siehe plan.ts).
+  const tasks = result.tasks.filter((x) => !vomZeitplanErledigt(x)).map(enforceApproval);
   for (const x of tasks) {
     ctx.db.insert(t.mpTasks).values({ id: newId(), projectId: row.projectId, title: x.title, description: x.description, type: x.type, status: "todo", dueAt: dueAtFor(plan.startDate, weekNo, x.dayOffset), assignedTo: x.assignedTo, approvalLevel: x.approvalLevel, outputRefs: "[]", order: ++order, channel: x.channel, week: weekNo, planVersion: version, createdAt: ts, updatedAt: ts }).run();
   }

@@ -541,3 +541,11 @@ button, input { font: inherit; color: inherit; }
 }
 .mp-ohne-zahlen { margin-top: 10px; }
 .mp-ohne-zahlen summary { padding: 6px 0; }
+
+/* Zustandszeile „x Beiträge sind eingeplant" — kein Listeneintrag, keine Aufgabe. */
+.mp-geplant { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; margin-bottom: 10px; background: var(--mp-accent-soft); border-radius: var(--mp-radius-sm); text-decoration: none; color: var(--mp-ink); }
+.mp-geplant:hover { background: color-mix(in srgb, var(--mp-accent-soft) 70%, var(--mp-surface)); color: var(--mp-ink); }
+.mp-geplant .mp-num { color: var(--mp-accent); margin-right: 2px; }
+.mp-gescheitert { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; margin-bottom: 10px; background: var(--mp-bad-soft); color: var(--mp-bad); border-radius: var(--mp-radius-sm); text-decoration: none; }
+.mp-gescheitert:hover { color: var(--mp-bad); text-decoration: underline; }
+.mp-gescheitert .mp-num { margin-right: 2px; }

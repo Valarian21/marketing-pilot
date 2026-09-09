@@ -16,6 +16,7 @@ import { berlinParts } from "./agents/series/time.js";
 import { duePosts } from "./publish/schedule.js";
 import { KANAL_STEPS, METRICS_STEPS, PUBLISH_STEPS } from "./publish/job.js";
 import { faelligeMetriken } from "./publish/metrics.js";
+import { CLEANUP_STEPS } from "./cleanup.js";
 
 const DAY = 86_400_000;
 const stampKey = (kind: string, pid: string) => `sched:${kind}:${pid}`;
@@ -60,6 +61,15 @@ export function dueJobs(db: Db, now = new Date()): Due[] {
 
 export function enqueueDue(db: Db, now = new Date()): Due[] {
   const out: Due[] = [];
+  // Aufräumen gilt für alle Projekte zusammen: abgelehnte Stücke verlieren nach
+  // sieben Tagen ihre Dateien, abgesagte Termine nach dreißig ihre Zeile.
+  if (now.getTime() - lastRun(db, "cleanup.run", "global") > DAY) {
+    const laeuft = db.select().from(t.mpJobs).all().some((j) => j.kind === "cleanup.run" && (j.status === "queued" || j.status === "running"));
+    if (!laeuft) {
+      enqueueJob(db, { projectId: null, kind: "cleanup.run", payload: {}, steps: CLEANUP_STEPS });
+      stamp(db, "cleanup.run", "global", now.toISOString());
+    }
+  }
   for (const d of dueJobs(db, now)) {
     if (hasActiveJob(db, d.projectId, d.kind)) continue;
     if (d.kind === "series.run" && d.seriesId) {
