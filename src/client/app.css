@@ -103,12 +103,41 @@ button, input { font: inherit; color: inherit; }
 .mp-dl dt { color: var(--mp-ink-2); }
 .mp-dl dd { margin: 0; }
 
+/* --- Schmale Geräte ------------------------------------------------------------
+   Die Seitenleiste lag hier als 900 px hoher Block über dem Inhalt: wer die
+   Startseite öffnete, sah zuerst das Menü und scrollte an ihm vorbei. Jetzt
+   liegt sie über der Seite und öffnet sich über „Mehr"; unten stehen vier feste
+   Wege. */
 @media (max-width: 900px) {
   .mp-shell { grid-template-columns: 1fr; }
-  .mp-sidebar { position: static; height: auto; }
-  .mp-main { padding: 18px; }
+  .mp-main { padding: 18px 16px calc(64px + env(safe-area-inset-bottom, 0px)); }
   .mp-stats--4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+  .mp-sidebar {
+    position: fixed; top: 0; bottom: 0; left: 0; width: min(300px, 86vw); height: 100dvh;
+    z-index: 60; transform: translateX(-102%); transition: transform .18s ease-out;
+    box-shadow: var(--mp-shadow-float);
+  }
+  .mp-shell.is-menu-offen .mp-sidebar { transform: none; }
+  .mp-menu-schatten { position: fixed; inset: 0; z-index: 55; border: 0; padding: 0; background: rgba(0, 0, 0, .38); }
+
+  .mp-tabs {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 50;
+    display: grid; grid-template-columns: repeat(5, 1fr);
+    background: var(--mp-surface); border-top: var(--mp-border);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .mp-tab {
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+    min-height: 56px; padding: 6px 2px; border: 0; background: none; cursor: pointer;
+    font: inherit; font-size: var(--mp-text-xs); font-weight: 600; color: var(--mp-ink-2); text-decoration: none;
+  }
+  .mp-tab.is-active { color: var(--mp-accent); }
+  .mp-tab-icon { display: inline-flex; }
+  .mp-root a.mp-tab, .mp-root a.mp-tab:hover { text-decoration: none; }
 }
+/* Auf breiten Geräten trägt die Seitenleiste alles; die Tabs entfallen. */
+@media (min-width: 901px) { .mp-tabs, .mp-menu-schatten { display: none; } }
 
 /* Analysis page */
 .mp-card-head { display: flex; justify-content: space-between; align-items: center; gap: var(--mp-gap); flex-wrap: wrap; margin-bottom: 8px; }
@@ -133,7 +162,7 @@ button, input { font: inherit; color: inherit; }
 .mp-field textarea, .mp-field select { padding: 8px 12px; border: var(--mp-border); border-radius: var(--mp-radius-sm); background: var(--mp-surface); color: var(--mp-ink); resize: vertical; line-height: 1.45; }
 .mp-field select { height: var(--mp-control-h); }
 .mp-field textarea:focus, .mp-field select:focus { border-color: var(--mp-accent); outline: none; box-shadow: 0 0 0 3px var(--mp-accent-soft); }
-.mp-field--inline { flex: 0 0 auto; flex-direction: row; align-items: center; gap: 8px; }
+.mp-field--inline { flex: 0 1 auto; min-width: 0; flex-direction: row; align-items: center; gap: 8px; }
 .mp-edited { color: var(--mp-warn); font-style: normal; text-transform: none; letter-spacing: 0; }
 .mp-root .mp-card + .mp-card { margin-top: var(--mp-gap); }
 .mp-shots { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: var(--mp-gap-sm); }
@@ -549,3 +578,38 @@ button, input { font: inherit; color: inherit; }
 .mp-gescheitert { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; margin-bottom: 10px; background: var(--mp-bad-soft); color: var(--mp-bad); border-radius: var(--mp-radius-sm); text-decoration: none; }
 .mp-gescheitert:hover { color: var(--mp-bad); text-decoration: underline; }
 .mp-gescheitert .mp-num { margin-right: 2px; }
+
+/* „Heute": Abschnitte innerhalb eines Blocks — Freigeben, Posten, Erledigen
+   stehen untereinander in einer Karte, statt vier Karten zu füllen. */
+.mp-today-teil + .mp-today-teil { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--mp-line); }
+.mp-today-teil-kopf { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 4px; }
+.mp-root .mp-today-teil-kopf h3 { font-family: var(--mp-font-display); font-size: var(--mp-text-base); font-weight: 600; margin: 0; }
+.mp-gescheitert--warn { background: var(--mp-warn-soft); color: var(--mp-warn); }
+.mp-gescheitert--warn:hover { color: var(--mp-warn); }
+
+/* --- Querscroll: die Wurzel, nicht die Symptome -------------------------------
+   Fünf Seiten scrollten auf dem Handy seitwärts. Die Ursachen waren immer
+   dieselben drei: ein Grid- oder Flex-Kind wächst am Inhalt, weil ihm
+   `min-width: 0` fehlt (Voreinstellung ist `auto`, also „so breit wie der
+   Inhalt"); ein Etikett mit `nowrap`, das einen ganzen Satz trägt; und lange
+   Zeichenketten ohne Trennmöglichkeit (Adressen, Modellnamen, Pfade). */
+.mp-root .mp-two-col > *, .mp-root .mp-grid > *, .mp-root .mp-today > *, .mp-root .mp-kanal-grid > * { min-width: 0; }
+.mp-card, .mp-today-main, .mp-table-wrap { min-width: 0; max-width: 100%; }
+/* Pillen tragen Status („freigegeben"); `--kind` trägt Fließtext und darf umbrechen. */
+.mp-pill--kind { white-space: normal; }
+.mp-dl dd, .mp-dl dt { min-width: 0; overflow-wrap: anywhere; }
+.mp-code, .mp-break, .mp-project-url { overflow-wrap: anywhere; }
+.mp-page-header, .mp-page-actions { flex-wrap: wrap; }
+.mp-chart-tip { max-width: min(240px, 70vw); }
+/* Eingabefelder wachsen nicht über ihren Platz hinaus — ein `select` mit langen
+   Optionen (Modellnamen, Kartensets) war auf dem Handy 448 px breit. */
+.mp-field, .mp-field input, .mp-field select, .mp-field textarea, .mp-toolbar select { max-width: 100%; min-width: 0; }
+.mp-form--row > *, .mp-inline > * { min-width: 0; }
+.mp-blaettern { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding-top: 10px; margin-top: 4px; border-top: 1px solid var(--mp-grid-line); }
+/* Auswahlfelder mit langen Optionen (Modellnamen, Setnamen) sprengten die Zeile. */
+.mp-root select, .mp-root input, .mp-root textarea { max-width: 100%; }
+.mp-card-head > *, .mp-toolbar > * { min-width: 0; }
+.mp-toolbar label { white-space: normal; }
+/* Die Aktionszeile der Produktdaten: Auswahlfelder mit Set-Namen sprengten sie. */
+.mp-action-row { display: flex; flex-wrap: wrap; gap: var(--mp-gap-sm); align-items: center; }
+.mp-action-row > * { min-width: 0; max-width: 100%; }

@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router";
 
 import { api } from "../api.js";
-import { Button, Card, EmptyState, Notice, PageHeader, Pill, fmtDateTime } from "../components/ui.js";
+import { Blaettern, Button, Card, EmptyState, Notice, PageHeader, Pill, fmtDateTime, useSeiten } from "../components/ui.js";
 import { PLATFORMS } from "../../shared/channels.js";
 import { fmtUsd } from "../components/Revise.js";
 import { fmtBytes } from "./Storage.js";
@@ -54,6 +54,8 @@ export function MediaPage() {
   const platforms = Array.from(new Set((items ?? []).map((i) => i.platform).filter(Boolean))).sort();
   const sorted = [...(items ?? [])].filter((i) => !nurBewegt || BEWEGT.includes(i.format)).sort((a, b) => sort === "cost" ? b.costUsd - a.costUsd : sort === "bytes" ? b.bytes - a.bytes : sort === "updated" ? b.updatedAt.localeCompare(a.updatedAt) : b.createdAt.localeCompare(a.createdAt));
   const total = sorted.reduce((n, i) => n + i.costUsd, 0), bytes = sorted.reduce((n, i) => n + i.bytes, 0);
+  // 24 Kacheln je Seite: ein Bildschirm voll, statt 200 Bilder auf 99.407 px.
+  const seiten = useSeiten(sorted, 24);
   const linkFor = (i: MediaItem) => i.format === "video" ? `/projects/${i.projectId}/studio/video?piece=${i.id}` : i.status === "approved" || i.status === "published" ? `/projects/${i.projectId}/publish/${i.id}` : `/projects/${i.projectId}/review?piece=${i.id}`;
   return (
     <>
@@ -76,7 +78,7 @@ export function MediaPage() {
       </div></Card>
       {items && sorted.length === 0 && <EmptyState title="Nichts gefunden" text="Mit diesen Filtern gibt es keine Stücke." />}
       <div className="mp-media-grid">
-        {sorted.map((i) => (
+        {seiten.aktuell.map((i) => (
           <Card key={i.id} className="mp-media-card">
             <Link to={linkFor(i)} className="mp-media-thumb" aria-label={i.title}>
               {i.thumbUrl ? <img src={i.thumbUrl} alt="" loading="lazy" /> : <span className="mp-media-thumb-fallback">{FORMAT_LABEL[i.format] ?? i.format}</span>}
@@ -91,6 +93,7 @@ export function MediaPage() {
           </Card>
         ))}
       </div>
+      <Blaettern {...seiten} einheit="Stücke" />
     </>
   );
 }

@@ -14,6 +14,7 @@ import { STAGES, STAGE_ORDER, stageAtLeast, stageRank } from "../../shared/chann
 import { api } from "../api.js";
 import { Button, Card, Notice, PageHeader, Pill, fmtDateTime, type PillKind } from "../components/ui.js";
 import { ProjectNav } from "../components/ProjectNav.js";
+import { ProfilesCard } from "../components/Profiles.js";
 import { loadProfiles } from "../components/ChannelLink.js";
 
 const DAYS: { id: Weekday; label: string }[] = [
@@ -142,6 +143,10 @@ export function ChannelsPage() {
       </Card>
 
       <BioCard projectId={id} view={view} busy={busy} run={run} />
+
+      {/* Die Profiladressen gehören hierher, nicht auf die Startseite: hier
+          richtet man Kanäle ein, dort entscheidet man über Beiträge. */}
+      <div id="profile"><ProfilesCard projectId={id} /></div>
     </>
   );
 }

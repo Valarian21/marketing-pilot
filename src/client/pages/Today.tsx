@@ -1,18 +1,26 @@
-/** „Heute": die Startseite des Content-Piloten. Drei Blöcke, je eine Aktion — freigeben, posten, erledigen —
- *  dazu der Stand der Kanäle. Produkt und Datenquelle stehen unten. Der Marketing-Teil (Leads, Strategie) ist ausgeblendet. */
+/**
+ * „Heute" — die Startseite: was jetzt zu entscheiden ist, was von allein läuft,
+ * was fehlt. In dieser Reihenfolge, und höchstens fünf Zeilen je Liste.
+ *
+ * Vorher war sie eine Ablage: 13.630 px auf dem Desktop, 31.411 px auf dem
+ * Handy, 168 Knöpfe, dazu Produktdaten, Kanalprofile und vier Kennzahl-Kacheln,
+ * die niemand von der Startseite aus braucht. Wer sie öffnete, sah zuerst eine
+ * Liste, nicht seine Lage. Die langen Listen haben ihre eigenen Seiten; hier
+ * steht nur der Anfang mit dem Weg dorthin.
+ */
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router";
-import type { AnalysisView, ContentPiece, Project, PublishView, Task, TodayView } from "../../shared/schemas.js";
+import type { ContentPiece, Project, PublishView, Task, TodayView } from "../../shared/schemas.js";
 import { api } from "../api.js";
-import { Button, Card, Notice, PageHeader, Pill, Stat, type PillKind } from "../components/ui.js";
+import { Button, Card, Notice, PageHeader, Pill, type PillKind } from "../components/ui.js";
 import { ProjectNav } from "../components/ProjectNav.js";
-import { ProfilesCard } from "../components/Profiles.js";
-import { ProductDataCard } from "../components/ProductData.js";
 import { ChannelTag } from "../components/ChannelLink.js";
 import { PLATFORMS, STAGES, STAGE_ORDER, type ChannelStage } from "../../shared/channels.js";
 
 const FORMAT_LABEL: Record<string, string> = { text: "Text-Post", carousel: "Carousel", pin: "Pin", image: "Bild", ad_creative: "Ad", article: "Artikel", directory_entry: "Verzeichnis", video: "Video", community_reply: "Antwort" };
 const TYPE_LABEL: Record<Task["type"], string> = { research: "Recherche", strategy: "Strategie", content: "Content", publish: "Posten", community: "Community", ads: "Ads", measure: "Messen" , setup: "Einrichtung" };
+/** Höchstens so viele Zeilen je Liste — der Rest hat seine eigene Seite. */
+const MAX = 5;
 const PIECE_PILL: Record<string, PillKind> = { draft: "todo", review: "review", approved: "done", published: "done", rejected: "kind" };
 
 /** Where a task leads: its piece (review or package), or the studio with the format pre-filled. */
@@ -51,7 +59,6 @@ export function TodayPage() {
   const { id = "" } = useParams();
   const [view, setView] = useState<TodayView | null>(null);
   const [project, setProject] = useState<Project | null>(null);
-  const [analysis, setAnalysis] = useState<AnalysisView | null>(null);
   const [publish, setPublish] = useState<PublishView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -63,7 +70,6 @@ export function TodayPage() {
   useEffect(() => {
     void load();
     api<Project>(`/projects/${id}`).then(setProject).catch((e: unknown) => setError(e instanceof Error ? e.message : "Fehler"));
-    api<AnalysisView>(`/projects/${id}/analysis`).then(setAnalysis).catch(() => undefined);
     api<PublishView>(`/projects/${id}/publish`).then(setPublish).catch(() => undefined);
   }, [id, load]);
 
@@ -95,7 +101,6 @@ export function TodayPage() {
   if (error && !view) return <><ProjectNav id={id} /><Notice kind="bad">{error} – <Link to="/projects">zurück zur Übersicht</Link></Notice></>;
   if (!view || !project) return <ProjectNav id={id} />;
   const v = view;
-  const nothing = v.review.length + v.toPost.length + v.myTasks.length === 0;
   const channelsOn = publish?.board.filter((c) => c.stage !== "off") ?? [];
   const blocked = channelsOn.filter((c) => !c.ready);
   const setupHints: { text: string; to: string }[] = [];
@@ -115,23 +120,59 @@ export function TodayPage() {
         <span className="mp-label mp-stage-summary">{channelsOn.length === 0 ? "Kein Kanal eingeschaltet" : STAGE_ORDER.filter((st) => st !== "off").map((st: ChannelStage) => <span key={st}><b className="mp-num">{channelsOn.filter((c) => c.stage === st).length}</b> {STAGES[st].label.toLowerCase()}</span>)}</span>
       )} />
       {error && <Notice kind="bad">{error}</Notice>}
-      {nothing && <Card className="mp-empty"><h2>Nichts offen</h2><p>Keine Freigaben, nichts zu posten, nichts zu erledigen. {channelsOn.length === 0 ? <Link to={`/projects/${id}/channels`}>Kanäle einschalten</Link> : <Link to={`/projects/${id}/studio`}>Etwas erstellen</Link>} oder eine <Link to={`/projects/${id}/series`}>Serie</Link> anlegen, die von selbst liefert.</p></Card>}
 
       <div className="mp-today">
+        {/* 1. Was jetzt eine Entscheidung braucht. Alles andere kommt danach. */}
         <Card className="mp-today-block">
-          <div className="mp-card-head"><h2><span className="mp-today-no">1</span> Freigeben <span className="mp-today-count">{v.review.length}</span></h2>{v.review.length > 0 && <Link className="mp-btn" to={`/projects/${id}/review`}>Alle prüfen</Link>}</div>
-          {v.review.length === 0 ? <p className="mp-muted mp-small">Nichts wartet auf Freigabe.</p> : (
-            <ul className="mp-today-list">{v.review.slice(0, 6).map((p) => (
-              <li key={p.id}><div className="mp-today-main"><span className="mp-today-title">{p.title || FORMAT_LABEL[p.format]}</span><span className="mp-small mp-muted">{FORMAT_LABEL[p.format] ?? p.format} · <ChannelTag name={p.channel} projectId={id} className="" /></span></div><Link className="mp-btn mp-btn--primary" to={p.format === "video" && !p.assets.length ? `/projects/${id}/studio/video?piece=${p.id}` : `/projects/${id}/review?piece=${p.id}`}>Prüfen</Link></li>
-            ))}{v.review.length > 6 && <li className="mp-small mp-muted">+{v.review.length - 6} weitere</li>}</ul>
+          <div className="mp-card-head"><h2><span className="mp-today-no">1</span> Jetzt entscheiden</h2></div>
+
+          <div className="mp-today-teil">
+            <div className="mp-today-teil-kopf"><h3>Freigeben <span className="mp-today-count">{v.review.length}</span></h3>{v.review.length > MAX && <Link className="mp-small" to={`/projects/${id}/review`}>alle {v.review.length} ansehen</Link>}</div>
+            {v.review.length === 0 ? <p className="mp-muted mp-small">Nichts wartet auf Freigabe.</p> : (
+              <ul className="mp-today-list">{v.review.slice(0, MAX).map((p) => (
+                <li key={p.id}><div className="mp-today-main"><span className="mp-today-title">{p.title || FORMAT_LABEL[p.format]}</span><span className="mp-small mp-muted">{FORMAT_LABEL[p.format] ?? p.format} · <ChannelTag name={p.channel} projectId={id} className="" /></span></div><Link className="mp-btn mp-btn--primary" to={p.format === "video" && !p.assets.length ? `/projects/${id}/studio/video?piece=${p.id}` : `/projects/${id}/review?piece=${p.id}`}>Prüfen</Link></li>
+              ))}</ul>
+            )}
+          </div>
+
+          <div className="mp-today-teil">
+            <div className="mp-today-teil-kopf"><h3>Von Hand posten <span className="mp-today-count">{v.toPost.length}</span></h3>{v.toPost.length > MAX && <Link className="mp-small" to={`/projects/${id}/pipeline`}>alle {v.toPost.length} ansehen</Link>}</div>
+            {v.toPost.length === 0 ? <p className="mp-muted mp-small">{v.eingeplant.anzahl > 0 ? "Nichts, was von Hand gepostet werden müsste." : "Nichts freigegeben, das noch zu posten wäre."}</p> : (
+              <ul className="mp-today-list">{v.toPost.slice(0, MAX).map(({ piece: p, composeLink, profileLink, appOnly, platform }) => (
+                <li key={p.id}>
+                  <div className="mp-today-main"><span className="mp-today-title">{p.title || FORMAT_LABEL[p.format]}</span><span className="mp-small mp-muted">{FORMAT_LABEL[p.format] ?? p.format} · <ChannelTag name={p.channel || platform} projectId={id} className="" />{appOnly ? " · Upload per App" : ""}</span></div>
+                  <div className="mp-inline">
+                    <Button variant="primary" onClick={() => void copyAndOpen(p, composeLink ?? profileLink)}>{copied === p.id ? "Text kopiert" : `Kopieren & ${PLATFORMS[platform]?.label ?? platform}`}</Button>
+                    <Link className="mp-btn" to={`/projects/${id}/publish/${p.id}`}>Paket</Link>
+                  </div>
+                </li>
+              ))}</ul>
+            )}
+          </div>
+
+          {v.myTasks.length > 0 && (
+            <div className="mp-today-teil">
+              <div className="mp-today-teil-kopf"><h3>Zu erledigen <span className="mp-today-count">{v.myTasks.length}</span></h3>{v.myTasks.length > MAX && <Link className="mp-small" to={`/projects/${id}/tasks`}>alle {v.myTasks.length} ansehen</Link>}</div>
+              <ul className="mp-today-list">{v.myTasks.slice(0, MAX).map((t) => { const tgt = taskTarget(t); return (
+                <li key={t.id}>
+                  <button type="button" className="mp-check" aria-label="Als erledigt markieren" onClick={() => void doneTask(t)} />
+                  <div className="mp-today-main"><span className="mp-today-title">{t.title}</span><span className="mp-small mp-muted">{TYPE_LABEL[t.type]}{t.channel && <> · <ChannelTag name={t.channel} projectId={id} className="" /></>}{t.week < v.week && <> · <span className="mp-over">aus Woche {t.week}</span></>}{t.link && <> · <Pill kind={PIECE_PILL[t.link.status] ?? "todo"}>{t.link.status === "approved" ? "freigegeben" : t.link.status === "review" ? "in Freigabe" : t.link.status === "published" ? "veröffentlicht" : t.link.status}</Pill></>}</span></div>
+                  {tgt && <Link className={`mp-btn${t.link ? " mp-btn--primary" : ""}`} to={tgt.to}>{tgt.label}</Link>}
+                </li>
+              ); })}</ul>
+            </div>
+          )}
+
+          {v.review.length + v.toPost.length + v.myTasks.length === 0 && (
+            <p className="mp-muted mp-small">Nichts offen. {channelsOn.length === 0 ? <Link to={`/projects/${id}/channels`}>Kanäle einschalten</Link> : <Link to={`/projects/${id}/studio`}>Etwas erstellen</Link>} oder eine <Link to={`/projects/${id}/series`}>Serie</Link> anlegen, die von selbst liefert.</p>
           )}
         </Card>
 
+        {/* 2. Was ohne Zutun weiterläuft — Zustand, keine Aufgabe. */}
         <Card className="mp-today-block">
-          <div className="mp-card-head"><h2><span className="mp-today-no">2</span> Von Hand posten <span className="mp-today-count">{v.toPost.length}</span></h2></div>
-          {/* Was der Pilot selbst absetzt, steht als Zustandszeile — nicht als Aufgabe.
-              Sonst arbeitet man eine Liste ab, die sich von allein erledigt. */}
-          {v.eingeplant.anzahl > 0 && (
+          <div className="mp-card-head"><h2><span className="mp-today-no">2</span> Läuft</h2><Link className="mp-btn" to={`/projects/${id}/pipeline`}>Zeitplan</Link></div>
+
+          {v.eingeplant.anzahl > 0 ? (
             <Link className="mp-geplant" to={`/projects/${id}/pipeline`}>
               <span><b className="mp-num">{v.eingeplant.anzahl}</b> Beiträge sind eingeplant — der Pilot postet sie selbst</span>
               <span className="mp-small mp-muted">
@@ -139,86 +180,48 @@ export function TodayPage() {
                 {v.eingeplant.plattformen.length > 1 && ` · ${v.eingeplant.plattformen.map((x) => `${x.anzahl}× ${PLATFORMS[x.platform]?.label ?? x.platform}`).join(", ")}`}
               </span>
             </Link>
-          )}
+          ) : <p className="mp-muted mp-small">Kein Beitrag eingeplant. Freigegebene Stücke bekommen ihren Termin auf der Kanäle-Seite.</p>}
+
           {v.gescheitert.anzahl > 0 && (
             <Link className="mp-gescheitert" to={`/projects/${id}/pipeline`}>
               <span><b className="mp-num">{v.gescheitert.anzahl}</b> Beiträge sind beim automatischen Posten gescheitert</span>
               {v.gescheitert.grund && <span className="mp-small">{v.gescheitert.grund}</span>}
             </Link>
           )}
-          {v.toPost.length === 0 ? <p className="mp-muted mp-small">{v.eingeplant.anzahl > 0 ? "Nichts, was von Hand gepostet werden müsste." : "Nichts freigegeben, das noch zu posten wäre."}</p> : (
-            <ul className="mp-today-list">{v.toPost.map(({ piece: p, composeLink, profileLink, appOnly, platform }) => (
-              <li key={p.id}>
-                <div className="mp-today-main"><span className="mp-today-title">{p.title || FORMAT_LABEL[p.format]}</span><span className="mp-small mp-muted">{FORMAT_LABEL[p.format] ?? p.format} · <ChannelTag name={p.channel || platform} projectId={id} className="" />{appOnly ? " · Upload per App" : ""}</span></div>
-                <div className="mp-inline">
-                  <Button variant="primary" onClick={() => void copyAndOpen(p, composeLink ?? profileLink)}>{copied === p.id ? "Text kopiert" : `Text kopieren & ${PLATFORMS[platform]?.label ?? platform} öffnen`}</Button>
-                  <Link className="mp-btn" to={`/projects/${id}/publish/${p.id}`}>Paket</Link>
-                </div>
-              </li>
-            ))}</ul>
-          )}
-        </Card>
 
-        <Card className="mp-today-block">
-          <div className="mp-card-head"><h2><span className="mp-today-no">3</span> Kanäle <span className="mp-today-count">{channelsOn.length}</span></h2><Link className="mp-btn" to={`/projects/${id}/channels`}>Einrichten</Link></div>
-          {!publish ? null : channelsOn.length === 0 ? <p className="mp-muted mp-small">Noch kein Kanal eingeschaltet — dort wählst du, welche Plattformen bespielt werden und wie viel der Pilot von selbst tut.</p> : (
-            <ul className="mp-today-list">{channelsOn.map((c) => (
-              <li key={c.platform}><div className="mp-today-main"><span className="mp-today-title">{c.label}</span><span className="mp-small mp-muted">{STAGES[c.stage].label}{c.stats.waitingReview > 0 && <> · {c.stats.waitingReview} in Freigabe</>}{c.stats.queued > 0 && <> · {c.stats.queued} eingeplant</>}{c.stats.posted7d > 0 && <> · {c.stats.posted7d} gepostet (7 T)</>}</span></div><Pill kind={c.ready ? "done" : "review"}>{c.ready ? "läuft" : "fehlt etwas"}</Pill></li>
-            ))}</ul>
-          )}
-        </Card>
+          {v.seriesStuck.length > 0 && v.seriesStuck.map((st) => (
+            <Link key={st.id} className="mp-gescheitert mp-gescheitert--warn" to={`/projects/${id}/series`}>
+              <span>Serie „{st.name}“ staut sich: {st.pending} Ausgaben unfreigegeben</span>
+              <span className="mp-small">Freigeben oder die Kadenz senken.</span>
+            </Link>
+          ))}
 
-        <Card className="mp-today-block">
-          <div className="mp-card-head"><h2><span className="mp-today-no">4</span> Zu erledigen <span className="mp-today-count">{v.myTasks.length}</span></h2><Link className="mp-btn" to={`/projects/${id}/tasks`}>Alle</Link></div>
-          {v.myTasks.length === 0 ? <p className="mp-muted mp-small">Nichts zu erledigen. Hier landen Post-Aufgaben aus Serien und gescheiterte automatische Beiträge.</p> : (
-            <ul className="mp-today-list">{v.myTasks.map((t) => { const tgt = taskTarget(t); return (
-              <li key={t.id}>
-                <button type="button" className="mp-check" aria-label="Als erledigt markieren" onClick={() => void doneTask(t)} />
-                <div className="mp-today-main"><span className="mp-today-title">{t.title}</span><span className="mp-small mp-muted">{TYPE_LABEL[t.type]}{t.channel && <> · <ChannelTag name={t.channel} projectId={id} className="" /></>}{t.week < v.week && <> · <span className="mp-over">aus Woche {t.week}</span></>}{t.link && <> · <Pill kind={PIECE_PILL[t.link.status] ?? "todo"}>{t.link.status === "approved" ? "freigegeben" : t.link.status === "review" ? "in Freigabe" : t.link.status === "published" ? "veröffentlicht" : t.link.status}</Pill></>}</span></div>
-                {tgt && <Link className={`mp-btn${t.link ? " mp-btn--primary" : ""}`} to={tgt.to}>{tgt.label}</Link>}
-              </li>
-            ); })}</ul>
-          )}
+          <div className="mp-today-teil">
+            <div className="mp-today-teil-kopf"><h3>Kanäle <span className="mp-today-count">{channelsOn.length}</span></h3><Link className="mp-small" to={`/projects/${id}/channels`}>{channelsOn.length > MAX ? `alle ${channelsOn.length} ansehen` : "einrichten"}</Link></div>
+            {!publish ? <p className="mp-muted mp-small">Lade…</p> : channelsOn.length === 0 ? <p className="mp-muted mp-small">Noch kein Kanal eingeschaltet — dort wählst du, welche Plattformen bespielt werden und wie viel der Pilot von selbst tut.</p> : (
+              <ul className="mp-today-list mp-today-list--compact">{[...channelsOn].sort((a, b) => (b.stats.queued + b.stats.posted7d) - (a.stats.queued + a.stats.posted7d)).slice(0, MAX).map((c) => (
+                <li key={c.platform}><div className="mp-today-main"><span className="mp-today-title">{c.label}</span><span className="mp-small mp-muted">{STAGES[c.stage].label}{c.stats.queued > 0 && <> · {c.stats.queued} eingeplant</>}{c.stats.posted7d > 0 && <> · {c.stats.posted7d} gepostet (7 T)</>}</span></div><Pill kind={c.ready ? "done" : "review"}>{c.ready ? "läuft" : "fehlt etwas"}</Pill></li>
+              ))}</ul>
+            )}
+          </div>
         </Card>
       </div>
 
       {v.agentTasks.length > 0 && <Card className="mp-today-agent">
         <div className="mp-card-head"><h2>Der Agent kann jetzt <span className="mp-today-count">{v.agentTasks.length}</span></h2>{v.agentTasks.length > 1 && <Button variant="primary" disabled={busy !== null} onClick={() => void runAll(v.agentTasks)}>{busy === "all" ? "läuft …" : `Alle ${v.agentTasks.length} ausführen`}</Button>}</div>
-        {v.agentTasks.length === 0 ? <p className="mp-muted mp-small">Keine offenen Agent-Aufgaben bis einschließlich dieser Woche.</p> : (
-          <ul className="mp-today-list mp-today-list--compact">{v.agentTasks.map((t) => (
-            <li key={t.id}><div className="mp-today-main"><span className="mp-today-title">{t.title}</span><span className="mp-small mp-muted">{TYPE_LABEL[t.type]}{t.channel && <> · <ChannelTag name={t.channel} projectId={id} className="" /></>} · Ergebnis landet in der Freigabe</span></div><Button disabled={busy !== null} onClick={() => void runOne(t)}>{busy === t.id ? "läuft …" : "Ausführen"}</Button></li>
-          ))}</ul>
-        )}
+        <ul className="mp-today-list mp-today-list--compact">{v.agentTasks.slice(0, MAX).map((t) => (
+          <li key={t.id}><div className="mp-today-main"><span className="mp-today-title">{t.title}</span><span className="mp-small mp-muted">{TYPE_LABEL[t.type]}{t.channel && <> · <ChannelTag name={t.channel} projectId={id} className="" /></>} · Ergebnis landet in der Freigabe</span></div><Button disabled={busy !== null} onClick={() => void runOne(t)}>{busy === t.id ? "läuft …" : "Ausführen"}</Button></li>
+        ))}</ul>
+        {v.agentTasks.length > MAX && <p className="mp-small mp-muted"><Link to={`/projects/${id}/tasks`}>alle {v.agentTasks.length} ansehen</Link></p>}
       </Card>}
 
+      {/* 3. Was fehlt, damit der Rest überhaupt laufen kann. */}
       {setupHints.length > 0 && (
         <Card>
-          <h2>Einrichtung</h2>
+          <div className="mp-card-head"><h2><span className="mp-today-no">3</span> Fehlt noch</h2></div>
           <ul className="mp-plain-list">{setupHints.map((h, i) => <li key={i}>{h.to.startsWith("#") ? <a href={h.to}>{h.text}</a> : <Link to={h.to}>{h.text}</Link>}</li>)}</ul>
         </Card>
       )}
-
-      <h2 className="mp-section">Projekt</h2>
-      <div className="mp-stats mp-stats--4 mp-stats--tiles">
-        <Stat label="Freigaben offen" value={v.review.length} />
-        <Stat label="Zu posten" value={v.toPost.length} />
-        <Stat label="Kanäle an" value={channelsOn.length} highlight />
-        <Stat label="Gepostet (7 T)" value={channelsOn.reduce((n, c) => n + c.stats.posted7d, 0)} />
-      </div>
-      <div className="mp-two-col">
-        <Card>
-          <h2>Produkt</h2>
-          <p><a href={project.url} target="_blank" rel="noreferrer">{project.url} ↗</a></p>
-          {analysis?.brief ? <p><strong>{analysis.brief.oneLiner}</strong></p> : <p className="mp-muted">Brief, Personas und Attention Map erscheinen hier nach der Analyse.</p>}
-          <div className="mp-inline">
-            {analysis?.run && <Pill kind={analysis.run.status === "done" ? "done" : analysis.run.status === "running" ? "progress" : "review"}>Analyse {analysis.run.status === "done" ? "abgeschlossen" : analysis.run.status === "running" ? "läuft" : "fehlgeschlagen"}</Pill>}
-            <Link to={`/projects/${id}/analysis`} className="mp-btn">{analysis?.run ? "Produkt-Brief" : "Analyse starten"}</Link>
-            <Link to={`/projects/${id}/studio?tab=brand`} className="mp-btn">Marke & Stimme</Link>
-          </div>
-        </Card>
-        <div id="profile"><ProfilesCard projectId={id} /></div>
-      </div>
-      <div id="produktdaten"><ProductDataCard projectId={id} /></div>
     </>
   );
 }

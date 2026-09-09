@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 import type { BrandKit, ContentPiece, DirectoryStatus, HashtagPools, Job, ProductDataView, SocialKitTexts, SocialKitView, StudioView, VideoView } from "../../shared/schemas.js";
 import { api } from "../api.js";
-import { Button, Card, Notice, PageHeader, Pill, fmtDateTime, type PillKind } from "../components/ui.js";
+import { Blaettern, Button, Card, Notice, PageHeader, Pill, fmtDateTime, type PillKind, useSeiten } from "../components/ui.js";
 import { ProjectNav } from "../components/ProjectNav.js";
 import { fmtUsd } from "../components/Revise.js";
 import { ChannelTag, useProfiles } from "../components/ChannelLink.js";
@@ -259,13 +259,14 @@ export function PieceList({ id, pieces: all }: { id: string; pieces: ContentPiec
   const members = new Map<string, number>();
   for (const p of all) { const b = bundleIdOf(p); if (b) members.set(b, (members.get(b) ?? 0) + 1); }
   const pieces = all.filter((p) => { const b = bundleIdOf(p); return !b || b === p.id; });
+  const seiten = useSeiten(pieces, 20);
   if (!pieces.length) return <Card className="mp-empty"><h2>Noch keine Stücke</h2><p>Erzeuge oben einen Entwurf oder führe eine Agent-Aufgabe aus.</p></Card>;
   return (
     <Card>
       <h2>Zuletzt erzeugt</h2>
       <div className="mp-table-wrap"><table className="mp-table">
         <thead><tr><th>Stück</th><th>Format</th><th>Kanal</th><th>Erstellt</th><th>AI-Tell</th><th>Kosten</th><th>Status</th><th></th></tr></thead>
-        <tbody>{pieces.map((p) => { const st = STATUS[p.status]; return (
+        <tbody>{seiten.aktuell.map((p) => { const st = STATUS[p.status]; return (
           <tr key={p.id}>
             <td>{p.title || "(ohne Titel)"}</td>
             <td><Pill kind="kind">{FORMAT_LABEL[p.format] ?? p.format}</Pill></td>
@@ -277,6 +278,7 @@ export function PieceList({ id, pieces: all }: { id: string; pieces: ContentPiec
             <td><Link className="mp-btn" to={p.status === "approved" || p.status === "published" ? `/projects/${id}/publish/${p.id}` : `/projects/${id}/review?piece=${p.id}`}>{p.status === "approved" || p.status === "published" ? "Paket" : "Prüfen"}</Link></td>
           </tr>); })}</tbody>
       </table></div>
+      <Blaettern {...seiten} einheit="Stücke" />
     </Card>
   );
 }

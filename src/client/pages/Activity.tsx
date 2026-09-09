@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { AgentRun, AuditEntry } from "../../shared/schemas.js";
 import { api } from "../api.js";
-import { Card, Notice, PageHeader, Pill, Stat, type PillKind } from "../components/ui.js";
+import {Blaettern, Card, Notice, PageHeader, Pill, Stat, type PillKind , useSeiten} from "../components/ui.js";
 import { fmtUsd } from "../components/Revise.js";
 
 const RUN_PILL: Record<AgentRun["status"], PillKind> = { running: "progress", done: "done", failed: "review" };
@@ -23,6 +23,9 @@ export function ActivityPage() {
   for (const r of runs) byProvider.set(r.provider, (byProvider.get(r.provider) ?? 0) + r.costUsd);
   const since7 = Date.now() - 7 * 86_400_000;
   const total7 = runs.filter((r) => Date.parse(r.startedAt) >= since7).reduce((n, r) => n + r.costUsd, 0);
+  const laeufe = useSeiten(runs, 25);
+  const protokoll = useSeiten(audit, 25);
+
   return (
     <>
       <PageHeader label="Beobachtbarkeit" title="Aktivität" />
@@ -36,9 +39,10 @@ export function ActivityPage() {
         <Card>
           <h2>Agenten-Läufe</h2>
           {runs.length === 0 ? <p className="mp-muted">Noch kein Lauf. Jeder Aufruf eines Modells erscheint hier mit Tokens, Kosten und Dauer.</p> : (
+            <>
             <div className="mp-table-wrap"><table className="mp-table">
               <thead><tr><th>Start</th><th>Aufgabe</th><th>Modell</th><th>Stück</th><th>Tokens</th><th>Kosten</th><th>Dauer</th><th>Status</th></tr></thead>
-              <tbody>{runs.map((r) => (
+              <tbody>{laeufe.aktuell.map((r) => (
                 <tr key={r.id}>
                   <td>{fmt(r.startedAt)}</td><td>{r.task}</td><td>{r.model ?? "–"}</td><td className="mp-small">{r.pieceId ? r.pieceId.slice(0, 8) : "–"}</td>
                   <td className="mp-num-cell">{r.tokensIn + r.tokensOut}</td>
@@ -48,14 +52,17 @@ export function ActivityPage() {
                 </tr>
               ))}</tbody>
             </table></div>
+            <Blaettern {...laeufe} einheit="Läufe" />
+            </>
           )}
         </Card>
         <Card>
           <h2>Audit-Log</h2>
           {audit.length === 0 ? <p className="mp-muted">Noch keine Einträge.</p> : (
+            <>
             <div className="mp-table-wrap"><table className="mp-table">
               <thead><tr><th>Zeit</th><th>Nutzer</th><th>Aktion</th><th>Objekt</th></tr></thead>
-              <tbody>{audit.map((a) => (
+              <tbody>{protokoll.aktuell.map((a) => (
                 <tr key={a.id}>
                   <td>{fmt(a.createdAt)}</td><td>{a.user}</td>
                   <td><code className="mp-code">{a.action}</code></td>
@@ -63,6 +70,8 @@ export function ActivityPage() {
                 </tr>
               ))}</tbody>
             </table></div>
+            <Blaettern {...protokoll} einheit="Einträge" />
+            </>
           )}
         </Card>
       </div>

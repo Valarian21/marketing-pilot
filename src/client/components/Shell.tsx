@@ -14,7 +14,7 @@ import { lastProject, rememberProject } from "./ProjectNav.js";
  * Marketing-Teil (Analyse, Strategie, Aufgaben, Timeline, Community, Insights)
  * bleibt gebaut, ist aber eingeklappt: er kommt später wieder nach vorn.
  */
-const NAV: { group: string; to: string; label: string; icon: IconName; end?: boolean; later?: boolean }[] = [
+const NAV: { group: string; to: string; label: string; icon: IconName; end?: boolean }[] = [
   { group: "Content Pilot", to: "/projects", label: "Projekte", icon: "projects", end: true },
   { group: "Content Pilot", to: "/uebersicht", label: "Übersicht", icon: "insights" },
   { group: "Content Pilot", to: "/channels", label: "Kanäle", icon: "send" },
@@ -23,17 +23,27 @@ const NAV: { group: string; to: string; label: string; icon: IconName; end?: boo
   { group: "Content Pilot", to: "/review", label: "Freigaben", icon: "review" },
   { group: "Content Pilot", to: "/pipeline", label: "Pipeline", icon: "timeline" },
   { group: "Content Pilot", to: "/media", label: "Medien", icon: "media" },
-  { group: "Content Pilot", to: "/music", label: "Musik", icon: "media" },
   { group: "Betrieb", to: "/activity", label: "Aktivität", icon: "activity" },
+  { group: "Betrieb", to: "/music", label: "Musik", icon: "media" },
   { group: "Betrieb", to: "/storage", label: "Speicher", icon: "storage" },
   { group: "Betrieb", to: "/settings", label: "Einstellungen", icon: "settings" },
-  { group: "Marketing · später", to: "/tasks", label: "Aufgaben", icon: "tasks", later: true },
-  { group: "Marketing · später", to: "/timeline", label: "Timeline", icon: "timeline", later: true },
-  { group: "Marketing · später", to: "/community", label: "Community", icon: "community", later: true },
-  { group: "Marketing · später", to: "/insights", label: "Insights", icon: "insights", later: true },
 ];
+
+/**
+ * Die vier Tabs am unteren Rand auf schmalen Geräten.
+ *
+ * Die Seitenleiste lag mobil als 900 px hoher Block über dem Inhalt: wer die
+ * Startseite öffnete, sah zuerst das Menü. Unten liegen jetzt die vier Wege,
+ * die man täglich geht; alles andere steht hinter „Mehr".
+ */
+const TABS: { to: string; label: string; icon: IconName; end?: boolean }[] = [
+  { to: "/", label: "Heute", icon: "projects", end: true },
+  { to: "/uebersicht", label: "Zahlen", icon: "insights" },
+  { to: "/channels", label: "Kanäle", icon: "send" },
+  { to: "/studio", label: "Erstellen", icon: "studio" },
+];
+
 const GROUPS = Array.from(new Set(NAV.map((n) => n.group)));
-const LATER_KEY = "mp_nav_later_open";
 
 interface ProjectLite { id: string; name: string; url: string; piecesInReview?: number; openTasksThisWeek?: number }
 
@@ -89,12 +99,12 @@ export function Shell() {
   useEffect(() => { api<ProjectLite[]>("/overview").then(setProjects).catch(() => setProjects([])); }, [reloadKey, pathname]);
   const current = useCurrentProject(projects);
   const badge = (to: string): number | null => !current ? null : to === "/review" ? (current.piecesInReview ?? null) : to === "/tasks" ? (current.openTasksThisWeek ?? null) : null;
-  const [laterOpen, setLaterOpen] = useState<boolean>(() => { try { return localStorage.getItem(LATER_KEY) === "1"; } catch { return false; } });
-  // Wer gerade auf einer Marketing-Seite ist, soll den Eintrag auch sehen.
-  const onLaterPage = NAV.some((n) => n.later && pathname.includes(n.to));
-  const toggleLater = () => setLaterOpen((v) => { try { localStorage.setItem(LATER_KEY, v ? "0" : "1"); } catch { /* ignore */ } return !v; });
+  // Auf schmalen Geräten liegt die Seitenleiste über dem Inhalt und wird über
+  // „Mehr" geöffnet; jeder Seitenwechsel schließt sie wieder.
+  const [menuOffen, setMenuOffen] = useState(false);
+  useEffect(() => setMenuOffen(false), [pathname]);
   return (
-    <div className="mp-shell">
+    <div className={`mp-shell${menuOffen ? " is-menu-offen" : ""}`}>
       <aside className="mp-sidebar">
         <div className="mp-brand">
           <span className="mp-brand-icon"><Icons.leaf /></span>
@@ -102,15 +112,10 @@ export function Shell() {
         </div>
         <ProjectBox projects={projects} />
         <nav className="mp-nav" aria-label="Hauptnavigation">
-          {GROUPS.map((g) => {
-            const later = NAV.find((n) => n.group === g)?.later ?? false;
-            const open = !later || laterOpen || onLaterPage;
-            return (
-            <div key={g} className={`mp-nav-group${later ? " mp-nav-group--later" : ""}`}>
-              {later
-                ? <button type="button" className="mp-nav-group-label mp-linkbtn" onClick={toggleLater} aria-expanded={open}>{g}<span aria-hidden="true">{open ? "−" : "+"}</span></button>
-                : <div className="mp-nav-group-label">{g}</div>}
-              {open && NAV.filter((n) => n.group === g).map((n) => {
+          {GROUPS.map((g) => (
+            <div key={g} className="mp-nav-group">
+              <div className="mp-nav-group-label">{g}</div>
+              {NAV.filter((n) => n.group === g).map((n) => {
                 const Icon = Icons[n.icon];
                 return (
                   <NavLink key={n.to} to={n.to} end={n.end ?? false} className={({ isActive }) => `mp-nav-item${isActive ? " is-active" : ""}`}>
@@ -119,8 +124,7 @@ export function Shell() {
                 );
               })}
             </div>
-            );
-          })}
+          ))}
         </nav>
         <div className="mp-sidebar-foot">
           {info?.backLink && (
@@ -143,6 +147,23 @@ export function Shell() {
         )}
         <Outlet />
       </main>
+
+      {/* Nur auf schmalen Geräten sichtbar (siehe app.css). */}
+      <nav className="mp-tabs" aria-label="Hauptbereiche">
+        {TABS.map((t) => {
+          const Icon = Icons[t.icon];
+          const ziel = current ? `/projects/${current.id}${t.to === "/" ? "" : t.to}` : t.to;
+          return (
+            <NavLink key={t.to} to={ziel} end={t.end ?? false} className={({ isActive }) => `mp-tab${isActive ? " is-active" : ""}`}>
+              <span className="mp-tab-icon"><Icon /></span>{t.label}
+            </NavLink>
+          );
+        })}
+        <button type="button" className={`mp-tab${menuOffen ? " is-active" : ""}`} onClick={() => setMenuOffen((v) => !v)} aria-expanded={menuOffen}>
+          <span className="mp-tab-icon"><Icons.settings /></span>Mehr
+        </button>
+      </nav>
+      {menuOffen && <button type="button" className="mp-menu-schatten" aria-label="Menü schließen" onClick={() => setMenuOffen(false)} />}
     </div>
   );
 }

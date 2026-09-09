@@ -2,8 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router";
 import type { AnalysisStep, AnalysisStepName, AnalysisView, Brief, GeoSnapshot } from "../../shared/schemas.js";
 import { api, ApiError } from "../api.js";
-import { Button, Card, Notice, PageHeader, Pill, Stat, type PillKind } from "../components/ui.js";
+import { Blaettern, Button, Card, Notice, PageHeader, Pill, Stat, type PillKind, useSeiten } from "../components/ui.js";
 import { ProjectNav } from "../components/ProjectNav.js";
+import { ProductDataCard } from "../components/ProductData.js";
 
 const STEP_LABEL: Record<AnalysisStepName, string> = { crawl: "Website crawlen", brief: "Product Brief", competitors: "Wettbewerber", personas: "Personas", attention: "Attention Map", geo: "GEO-Baseline" };
 const STEP_PILL: Record<AnalysisStep["status"], { kind: PillKind; label: string }> = {
@@ -58,6 +59,10 @@ export function AnalysisPage() {
     const rows = modelFilter === "alle" ? view.geo.snapshots : view.geo.snapshots.filter((x) => x.engine === modelFilter);
     return [...rows].sort((a, b) => a.query.localeCompare(b.query) || a.engine.localeCompare(b.engine));
   }, [view, modelFilter]);
+
+  // 25 Messungen je Seite: die Tabelle hatte 100 Zeilen und machte die Seite
+  // auf dem Handy 33.754 px lang.
+  const geoSeiten = useSeiten(geoRows, 25);
 
   if (error && !view) return <><ProjectNav id={id} /><Notice kind="bad">{error} – <Link to="/">zurück</Link></Notice></>;
   if (!view) return null;
@@ -204,7 +209,7 @@ export function AnalysisPage() {
           <div className="mp-table-wrap">
             <table className="mp-table">
               <thead><tr><th>Frage</th><th>Modell</th><th>Genannt</th><th>Position</th><th>Genannte Wettbewerber</th></tr></thead>
-              <tbody>{geoRows.map((g) => (
+              <tbody>{geoSeiten.aktuell.map((g) => (
                 <tr key={g.id}>
                   <td title={g.rawAnswer.slice(0, 600)}>{g.query}</td>
                   <td className="mp-num-cell mp-small">{g.engine}</td>
@@ -215,8 +220,14 @@ export function AnalysisPage() {
               ))}</tbody>
             </table>
           </div>
+          <Blaettern {...geoSeiten} einheit="Messungen" />
         </Card>
       )}
+
+      {/* Produktdaten: die Zahlen, aus denen Daten-Formate entstehen. Sie
+          gehören zum Produkt, nicht auf die Startseite. */}
+      <div id="produktdaten"><ProductDataCard projectId={id} /></div>
+
     </>
   );
 }
