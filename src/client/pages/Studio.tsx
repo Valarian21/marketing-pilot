@@ -6,7 +6,7 @@ import { formatName, jobName } from "../../shared/labels.js";
 import { Blaettern, Button, Card, Notice, PageHeader, Pill, fmtDateTime, type PillKind, useSeiten } from "../components/ui.js";
 import { ProjectNav } from "../components/ProjectNav.js";
 import { ChannelTag, useProfiles } from "../components/ChannelLink.js";
-import { STAGES } from "../../shared/channels.js";
+import { PLATFORMS, STAGES, stageRank } from "../../shared/channels.js";
 
 const TABS = [{ id: "erstellen", label: "Erstellen" }, { id: "brand", label: "Brand-Kit & Stimme" }, { id: "hashtags", label: "Hashtags" }, { id: "verzeichnisse", label: "Verzeichnisse" }, { id: "geo", label: "GEO-Artikel" }] as const;
 type Tab = (typeof TABS)[number]["id"];
@@ -60,13 +60,24 @@ function CreateTab({ id, view, busy, run }: { id: string; view: StudioView; busy
   // tasks link here with format/platform/topic pre-filled ("Im Studio erstellen")
   const [params] = useSearchParams();
   const [format, setFormat] = useState(params.get("format") ?? "text");
-  const [platform, setPlatform] = useState(params.get("platform") ?? "linkedin");
+  // Vorauswahl war fest „linkedin" — ein Kanal, der bei den meisten Projekten
+  // auf „Aus" steht, samt Warnhinweis direkt darunter. Jetzt entscheidet die
+  // Stufe: der am weitesten eingeschaltete Kanal steht vorn.
+  const [platform, setPlatform] = useState(params.get("platform") ?? "");
   const [template, setTemplate] = useState("clean");
   const [topic, setTopic] = useState(params.get("topic") ?? "");
   const [hint, setHint] = useState(params.get("hint") ?? "");
   const profiles = useProfiles(id);
   const stageOf = (p: string) => profiles.find((x) => x.platform === p)?.stage ?? "off";
-  const opt = (p: string) => <option key={p} value={p}>{p} · {STAGES[stageOf(p)].label}</option>;
+  const opt = (p: string) => <option key={p} value={p}>{PLATFORMS[p]?.label ?? p} · {STAGES[stageOf(p)].label}</option>;
+  /** Eingeschaltete Kanäle zuerst, danach die ausgeschalteten. */
+  const nachStufe = (liste: string[]) => [...liste].sort((a, b) => stageRank(stageOf(b)) - stageRank(stageOf(a)));
+  useEffect(() => {
+    if (platform || !profiles.length) return;
+    const stufe = (p: string) => profiles.find((x) => x.platform === p)?.stage ?? "off";
+    const aktiv = Object.keys(PLATFORMS).sort((a, b) => stageRank(stufe(b)) - stageRank(stufe(a))).find((p) => stufe(p) !== "off");
+    setPlatform(aktiv ?? "instagram");
+  }, [platform, profiles]);
 
   // Daten-Carousel: Bereich, Umfang und Bündel-Plattformen
   const [data, setData] = useState<ProductDataView | null>(null);
@@ -127,8 +138,8 @@ function CreateTab({ id, view, busy, run }: { id: string; view: StudioView; busy
                 {hasData && <option value="artwork_reel">Kunstseiten-Reel (Video 1080×1920)</option>}
                 <option value="pin">Pinterest-Pin (1000×1500)</option><option value="image">Bild / Thumbnail (KI)</option><option value="ad_creative">Ad-Hintergrund (KI)</option>
               </select></label>
-            {format === "text" && <label className="mp-field mp-field--short"><span>Plattform</span><select value={platform} onChange={(e) => setPlatform(e.target.value)}>{["linkedin", "x", "threads", "bluesky", "facebook", "instagram"].map(opt)}</select></label>}
-            {format === "carousel" && <><label className="mp-field mp-field--short"><span>Plattform</span><select value={platform} onChange={(e) => setPlatform(e.target.value)}>{["instagram", "linkedin"].map(opt)}</select></label>
+            {format === "text" && <label className="mp-field mp-field--short"><span>Plattform</span><select value={platform} onChange={(e) => setPlatform(e.target.value)}>{nachStufe(["instagram", "threads", "facebook", "linkedin", "x", "bluesky"]).map(opt)}</select></label>}
+            {format === "carousel" && <><label className="mp-field mp-field--short"><span>Plattform</span><select value={platform} onChange={(e) => setPlatform(e.target.value)}>{nachStufe(["instagram", "linkedin"]).map(opt)}</select></label>
               <label className="mp-field mp-field--short"><span>Layout</span><select value={template} onChange={(e) => setTemplate(e.target.value)}>{["clean", "bold", "screenshot", "list", "story"].map((t) => <option key={t} value={t}>{t}</option>)}</select></label></>}
             {!isData && !isArtwork && format !== "pin" && stageOf(platform) === "off" && <Notice kind="info">{platform} ist auf der <Link to={`/projects/${id}/channels`}>Kanäle-Seite</Link> ausgeschaltet. Erstellen geht trotzdem — nur Serien lassen den Kanal aus.</Notice>}
             {!isData && !isArtwork && <label className="mp-field"><span>Thema / Blickwinkel</span><input value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="z. B. „Sonntagabend-Vorbereitung in 10 Minuten“" /></label>}

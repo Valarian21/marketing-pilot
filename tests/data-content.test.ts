@@ -653,6 +653,12 @@ describe("Serien (Shot 9)", () => {
     built.db.run(`UPDATE mp_content_series SET last_run_at = '2020-01-01T00:00:00.000Z' WHERE id = '${seriesId}'` as never);
     built.db.run("DELETE FROM mp_settings WHERE key LIKE 'sched:series:%'" as never);
 
+    // Solange zwei Ausgaben unfreigegeben liegen, hält die Serie von selbst an —
+    // sonst erzeugt sie schneller, als jemand freigeben kann (Welle 4).
+    expect(enqueueDue(built.db, now).filter((d) => d.kind === "series.run")).toEqual([]);
+    built.db.run("UPDATE mp_content_pieces SET status = 'rejected' WHERE status = 'review'" as never);
+    built.db.run("DELETE FROM mp_settings WHERE key LIKE 'sched:series:%'" as never);
+
     const erste = enqueueDue(built.db, now).filter((d) => d.kind === "series.run");
     expect(erste.map((d) => d.seriesId)).toContain(seriesId);
     // zweiter Takt am selben Tag: nichts mehr

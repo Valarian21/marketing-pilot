@@ -13,7 +13,7 @@ import { loadProfiles, planChannelNames } from "./channels.js";
 import { loadBrandKit } from "./agents/studio/brandkit.js";
 import { briefConfirmed } from "./routes/strategy.js";
 import { weekOf } from "./routes/tasks.js";
-import { jammedSeries } from "./agents/series/series.js";
+import { jammedSeries, listSeries } from "./agents/series/series.js";
 
 const OPEN: s.Task["status"][] = ["todo", "in_progress", "review"];
 
@@ -128,6 +128,7 @@ export function todayView(db: Db, projectId: string, opts?: { now?: Date }): s.T
     // Stau: eine Serie hat zweimal geliefert, ohne dass jemand freigegeben hat -
     // dann ist nicht der Agent zu langsam, sondern die Kadenz zu hoch.
     seriesStuck: jammedSeries(db, projectId),
+    serienPausiert: listSeries(db, projectId).filter((x) => x.status === "active" && x.bremsgrund).length,
     setup: {
       briefConfirmed: briefConfirmed(db, projectId), planVersion: plan?.version ?? null,
       profilesMissing: profiles.filter((p) => !p.url).length, voiceProfile: Boolean(kit.voiceProfile),

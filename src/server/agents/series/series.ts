@@ -43,6 +43,7 @@ export function seriesOf(db: Db, r: Row, now = new Date()): s.ContentSeries {
     lastRunAt: r.lastRunAt, nextRunAt: next ? next.toISOString() : null,
     coverage: s.SeriesCoverage.parse(parseJson<Record<string, unknown>>(r.coverage, {})),
     pendingReview: pendingReview(db, r.projectId, r.id),
+    bremsgrund: bremsgrund(db, r.projectId, r.id),
     createdAt: r.createdAt, updatedAt: r.updatedAt,
   };
 }
@@ -57,6 +58,36 @@ export function pendingReview(db: Db, projectId: string, seriesId: string): numb
     .map((r) => parseJson<Record<string, unknown>>(r.meta, {}))
     .filter((m) => m["bundleLead"] === true && (m["request"] as { seriesId?: string } | undefined)?.seriesId === seriesId)
     .length;
+}
+
+/** Ab so vielen unfreigegebenen Ausgaben hält eine Serie von selbst an. */
+export const AUSGABEN_DECKEL = 2;
+/** Ab so vielen freigegebenen Stücken ohne Termin halten **alle** Serien des Projekts an. */
+export const STAU_DECKEL = 12;
+
+/** Freigegebene Stücke, für die kein Termin wartet — der Stau, den man wirklich spürt. */
+export function ohneTermin(db: Db, projectId: string): number {
+  const verplant = new Set(db.select().from(t.mpScheduledPosts).where(eq(t.mpScheduledPosts.projectId, projectId)).all()
+    .filter((x) => x.status === "queued" || x.status === "posted").map((x) => x.pieceId));
+  return db.select().from(t.mpContentPieces).where(eq(t.mpContentPieces.projectId, projectId)).all()
+    .filter((r) => r.status === "approved" && !verplant.has(r.id)).length;
+}
+
+/**
+ * Warum eine Serie gerade nicht liefert — leerer Text heißt: sie darf.
+ *
+ * Der Pilot erzeugte schneller, als irgendjemand freigeben oder posten konnte:
+ * am 09.09.2026 waren 404 von 553 Stücken abgelehnt und 35 freigegebene warteten
+ * ohne Termin. Aufräumen allein hilft dagegen nicht — die Quelle muss selbst
+ * anhalten. Sie tut das sichtbar: der Grund steht in der Serien-Liste und auf
+ * der Startseite, damit niemand rätselt, warum nichts mehr kommt.
+ */
+export function bremsgrund(db: Db, projectId: string, seriesId: string): string {
+  const offen = pendingReview(db, projectId, seriesId);
+  if (offen >= AUSGABEN_DECKEL) return `${offen} Ausgaben dieser Serie liegen unfreigegeben`;
+  const wartend = ohneTermin(db, projectId);
+  if (wartend >= STAU_DECKEL) return `${wartend} freigegebene Stücke warten ohne Termin`;
+  return "";
 }
 
 export function listSeries(db: Db, projectId: string, now = new Date()): s.ContentSeries[] {
@@ -348,6 +379,8 @@ export function dueSeries(db: Db, now = new Date()): s.ContentSeries[] {
     if (loadDataSource(db, r.projectId).provider === "none") continue;
     const series = seriesOf(db, r, now);
     if (!isAvailable(series.kind)) continue;
+    // Eine Serie, deren Ausgaben sich stapeln, liefert nicht nach.
+    if (bremsgrund(db, r.projectId, r.id)) continue;
     if (isDue(series.cadence, series.lastRunAt, now)) out.push(series);
   }
   return out;

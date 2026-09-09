@@ -51,6 +51,22 @@ export const pieceOf = (r: typeof t.mpContentPieces.$inferSelect): s.ContentPiec
   assets: parseJson<string[]>(r.assets, []), utm: parseJson<Record<string, unknown>>(r.utm, {}), meta: parseJson<Record<string, unknown>>(r.meta, {}), costUsd: 0,
 });
 /** Attach the booked agent-run costs (all providers) to pieces. */
+/**
+ * Die jüngsten Ablehnungsgründe eines Projekts, entdoppelt.
+ *
+ * Sie standen bisher nur im Protokoll — bei 73 % Ausschuss die teuerste
+ * ungenutzte Information des Werkzeugs. Drei Gründe, weil mehr als Regel nicht
+ * mehr wirken, und nur solche mit Substanz (ein „passt nicht" hilft niemandem).
+ */
+export function letzteAblehnungen(db: Db, projectId: string, anzahl = 3): string[] {
+  const roh = db.select({ grund: t.mpContentPieces.rejectionReason, updatedAt: t.mpContentPieces.updatedAt })
+    .from(t.mpContentPieces).where(and(eq(t.mpContentPieces.projectId, projectId), eq(t.mpContentPieces.status, "rejected"))).all()
+    .filter((r) => r.grund.trim().length >= 8)
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+    .map((r) => r.grund.trim().slice(0, 160));
+  return [...new Set(roh)].slice(0, anzahl);
+}
+
 export function withCosts<T extends { id: string; costUsd: number }>(db: Db, pieces: T[]): T[] {
   const costs = pieceCosts(db, pieces.map((p) => p.id));
   return pieces.map((p) => ({ ...p, costUsd: Math.round((costs.get(p.id) ?? 0) * 10000) / 10000 }));
@@ -97,7 +113,8 @@ async function draftFor(ctx: StudioContext, base: Base, req: s.ContentRequest, p
   const outDir = path.join(ctx.dataDir, "assets", base.project.id, "pieces", pieceId);
   const renderer = ctx.renderer ?? playwrightRenderer;
   const brand = base.brief.productName;
-  const common = { brief: base.brief, ...(persona ? { persona } : {}), topic: req.topic, hint: req.hint, voiceProfile: base.voice };
+  // Was zuletzt abgelehnt wurde, geht als Regel in den nächsten Entwurf ein.
+  const common = { brief: base.brief, ...(persona ? { persona } : {}), topic: req.topic, hint: req.hint, voiceProfile: base.voice, vermeiden: letzteAblehnungen(ctx.db, base.project.id) };
 
   switch (req.format) {
     case "text": {

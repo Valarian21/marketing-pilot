@@ -29,7 +29,7 @@ import { loadProfiles } from "../../channels.js";
 import { leseMetriken } from "../../publish/metrics.js";
 import { leseKanalStatus, leseKanalTage, MESSBARE_KANAELE, type KanalWerte } from "../../publish/kanal-metriken.js";
 import { loadCredentials } from "../../publish/index.js";
-import { berlinTag } from "../../shortlinks.js";
+import { BIO_CODE, berlinTag } from "../../shortlinks.js";
 import { geschaeftsZahlen, tageZwischen, type GeschaeftsTag } from "../../providers/geschaeft.binderplan.js";
 import { loadDataSource } from "../../data-source.js";
 
@@ -135,8 +135,12 @@ export function cockpitView(db: Db, projectId: string, opts: CockpitOptions): s.
   // --- Zeitreihe --------------------------------------------------------------
   const beitragJeTag = new Map<string, number>();
   for (const p of posts) { const tg = berlinTag(new Date(p.postedAt!)); beitragJeTag.set(tg, (beitragJeTag.get(tg) ?? 0) + 1); }
+  // Aufrufe der Link-in-Bio-Seite sind keine Klicks auf einen Beitrag: getrennt
+  // gezählt, getrennt angezeigt.
   const klickJeTag = new Map<string, number>();
-  for (const k of klickTage) klickJeTag.set(k.tag, (klickJeTag.get(k.tag) ?? 0) + k.klicks);
+  for (const k of klickTage.filter((x) => x.code !== BIO_CODE)) klickJeTag.set(k.tag, (klickJeTag.get(k.tag) ?? 0) + k.klicks);
+  const bioIn = (vonTag: string, bisTag: string): number =>
+    klickTage.filter((k) => k.code === BIO_CODE && k.tag >= vonTag && k.tag <= bisTag).reduce((n, k) => n + k.klicks, 0);
 
   /**
    * Follower sind ein Bestand: der letzte bekannte Wert je Plattform gilt weiter.
@@ -218,7 +222,7 @@ export function cockpitView(db: Db, projectId: string, opts: CockpitOptions): s.
   const zeitraumSumme = (feld: keyof KanalWerte, vonTag: string, bisTag: string): number | null =>
     summe(tageZwischen(vonTag, bisTag).flatMap((tag) => MESSBARE_KANAELE.map((p) => jeKanal.get(p)?.get(tag)?.[feld])));
   const klicksIn = (vonTag: string, bisTag: string): number =>
-    klickTage.filter((k) => k.tag >= vonTag && k.tag <= bisTag).reduce((s2, k) => s2 + k.klicks, 0);
+    klickTage.filter((k) => k.code !== BIO_CODE && k.tag >= vonTag && k.tag <= bisTag).reduce((s2, k) => s2 + k.klicks, 0);
   const anmeldungenIn = (vonTag: string, bisTag: string): number =>
     [...anmeldungJeTag.entries()].filter(([tag]) => tag >= vonTag && tag <= bisTag).reduce((s2, [, n]) => s2 + n, 0);
   const gestern = berlinTag(new Date(Date.parse(`${von}T00:00:00Z`) - TAG_MS));
@@ -237,6 +241,7 @@ export function cockpitView(db: Db, projectId: string, opts: CockpitOptions): s.
     { id: "beitraege", label: "Beiträge", wert: imZeitraum.length, davor: davor.length, einheit: "zahl", art: "summe", hinweis: "Was der Pilot in diesem Zeitraum veröffentlicht hat." },
     { id: "beitragsaufrufe", label: "Aufrufe dieser Beiträge", wert: beitragsAufrufe, davor: beitragsAufrufeDavor, einheit: "zahl", art: "summe", hinweis: "Gesamtstand der im Zeitraum veröffentlichten Beiträge — Meta liefert je Beitrag keine Tageswerte." },
     { id: "klicks", label: "Klicks auf die Seite", wert: klicksIn(von, bis), davor: klicksIn(vorherVon, gestern), einheit: "zahl", art: "summe", hinweis: "Klicks auf die Kurzlinks des Piloten." },
+    { id: "bioaufrufe", label: "Profil-Link geöffnet", wert: bioIn(von, bis), davor: bioIn(vorherVon, gestern), einheit: "zahl", art: "summe", hinweis: "Aufrufe der Link-in-Bio-Seite — auf Instagram und Threads der einzige Weg zur Seite." },
     { id: "anmeldungen", label: "Anmeldungen", wert: anmeldungenIn(von, bis), davor: anmeldungenIn(vorherVon, gestern), einheit: "zahl", art: "summe", hinweis: "Aus dem Webhook des Produkts (utm-gestützt)." },
     { id: "konten", label: "Konten im Produkt", wert: produkt.konten, davor: null, einheit: "zahl", art: "bestand", hinweis: produkt.hinweis },
     { id: "zahlende", label: "Zahlende Kunden", wert: produkt.zahlende, davor: null, einheit: "zahl", art: "bestand", hinweis: "Konten mit laufendem Abo; der Betreiberzugang zählt nicht mit." },
@@ -248,6 +253,7 @@ export function cockpitView(db: Db, projectId: string, opts: CockpitOptions): s.
   const trichter = [
     { id: "aufrufe", label: "Aufrufe", wert: zeitraumSumme("aufrufe", von, bis), erklaerung: "So oft wurden Inhalte der Kanäle gesehen." },
     { id: "interaktionen", label: "Interaktionen", wert: zeitraumSumme("interaktionen", von, bis), erklaerung: "Davon reagiert: Like, Kommentar, Speichern, Teilen." },
+    { id: "bio", label: "Profil-Link geöffnet", wert: bioIn(von, bis) || null, erklaerung: "Die Link-in-Bio-Seite — auf Instagram und Threads der einzige Weg weiter." },
     { id: "klicks", label: "Klicks auf die Seite", wert: klicksIn(von, bis), erklaerung: "Über die Kurzlinks des Piloten." },
     { id: "konten", label: "Neue Konten", wert: neueKonten ?? (anmeldungenIn(von, bis) || null), erklaerung: geschaeft ? "Neu angelegte Konten laut Produktdatenbank." : "Anmeldungen aus dem Webhook — ohne Produktdatenquelle die einzige Quelle." },
     { id: "kaeufe", label: "Käufe", wert: geschaeft ? summe(verlauf.map((v) => v.kaeufe)) : (bezahltImZeitraum || null), erklaerung: "Bezahlte Bestellungen im Zeitraum — Abos und Kreditpakete zusammen." },
@@ -262,7 +268,7 @@ export function cockpitView(db: Db, projectId: string, opts: CockpitOptions): s.
   if (kanaele.some((k) => k.platform === "facebook" && k.beitraege > 0)) hinweise.push("Facebook nennt seit Graph v21 keine Aufrufe je Seite mehr (nur Videoaufrufe). Für die Facebook-Seite stehen deshalb Interaktionen und Seitenaufrufe, aber keine Reichweite.");
   const verschwunden = beitraege.filter((b) => /Nicht mehr abrufbar/.test(b.fehler)).length;
   if (verschwunden) hinweise.push(`${verschwunden} Beiträge liefern keine Zahlen mehr — Stories sind nach 24 Stunden weg, und Meta gibt danach auch ihre Zahlen nicht mehr heraus. Wer Story-Zahlen braucht, muss sie am selben Tag abrufen.`);
-  if (klicksIn(von, bis) === 0 && imZeitraum.length > 0) hinweise.push("Kein einziger Klick auf einen Kurzlink. Auf Instagram und Threads sind Links im Text nicht anklickbar — dort führt nur der Link im Profil zur Seite.");
+  if (klicksIn(von, bis) === 0 && bioIn(von, bis) === 0 && imZeitraum.length > 0) hinweise.push("Weder ein Klick auf einen Kurzlink noch ein Aufruf der Bio-Seite. Auf Instagram und Threads sind Links im Text nicht anklickbar — steht die Bio-Seite im Profil?");
   for (const [platform, fehler] of Object.entries(status.fehler)) hinweise.push(`${PLATFORMS[platform]?.label ?? platform}: ${fehler}`);
 
   return {

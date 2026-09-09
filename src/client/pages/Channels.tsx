@@ -71,7 +71,10 @@ export function ChannelsPage() {
       {error && <Notice kind="bad">{error}</Notice>}
       {!view.workerAlive && on.some((c) => stageAtLeast(c.stage, "approve")) && <Notice kind="bad">Der Worker läuft nicht (<code className="mp-code">app-marketing-pilot-worker</code>) — Kanäle auf „Freigeben“ und „Vollautomatisch“ posten so lange nichts.</Notice>}
 
-      <StageLegend />
+      <details className="mp-details mp-stage-legend-box">
+        <summary className="mp-label">Was die vier Stufen bedeuten</summary>
+        <StageLegend />
+      </details>
 
       {setupMissing.length > 0 && (
         <Card>
@@ -200,6 +203,13 @@ function ChannelCardView({ projectId, card: c, busy, onPatch, onCreds }: { proje
           <h2>{c.label}{c.url && <a className="mp-small mp-muted mp-channel-url" href={c.url} target="_blank" rel="noreferrer">{c.url.replace(/^https?:\/\/(www\.)?/, "")} ↗</a>}</h2>
         </div>
         <div className="mp-inline">
+          {/* Der Zustand stand ganz unten klein am Fuß der Karte — die einzige
+              Zeile, die man wirklich sucht („läuft da was?"). */}
+          <span className="mp-small mp-muted mp-channel-zahlen">
+            {c.stats.queued > 0 && <>{c.stats.queued} eingeplant · </>}
+            {c.stats.approvedUnposted > 0 && <>{c.stats.approvedUnposted} zu posten · </>}
+            {c.stats.posted7d} gepostet (7 T)
+          </span>
           <Pill kind={status.kind}>{status.label}</Pill>
         </div>
       </div>
@@ -223,9 +233,11 @@ function ChannelCardView({ projectId, card: c, busy, onPatch, onCreds }: { proje
       {c.maxStage === "prepare" && <p className="mp-small mp-muted">Höher geht es hier nicht: {c.maxReason}</p>}
 
       {/* Was fehlt */}
-      {c.requirements.length > 0 && (
+      {/* Nur Offenes steht sichtbar. Sieben grüne Häkchen je Kanal sind kein
+          Zustand, sondern Lärm — sie stehen im Ausklapper. */}
+      {c.requirements.some((r) => !r.ok) && (
         <ul className="mp-req-list">
-          {c.requirements.map((r) => (
+          {c.requirements.filter((r) => !r.ok).map((r) => (
             <li key={r.id} className={`mp-req${r.ok ? " is-ok" : r.blocking ? " is-blocking" : " is-hint"}`}>
               <span className="mp-req-mark" aria-hidden="true">{r.ok ? "✓" : r.blocking ? "!" : "○"}</span>
               <div className="mp-today-main">
@@ -235,6 +247,16 @@ function ChannelCardView({ projectId, card: c, busy, onPatch, onCreds }: { proje
             </li>
           ))}
         </ul>
+      )}
+      {c.requirements.some((r) => r.ok) && (
+        <details className="mp-details mp-small">
+          <summary className="mp-label">{c.requirements.filter((r) => r.ok).length} Bedingungen erfüllt</summary>
+          <ul className="mp-req-list">
+            {c.requirements.filter((r) => r.ok).map((r) => (
+              <li key={r.id} className="mp-req is-ok"><span className="mp-req-mark" aria-hidden="true">✓</span><div className="mp-today-main"><span>{r.label}</span></div></li>
+            ))}
+          </ul>
+        </details>
       )}
 
       {/* Aufklappbare Eingaben */}
@@ -278,9 +300,7 @@ function ChannelCardView({ projectId, card: c, busy, onPatch, onCreds }: { proje
       <div className="mp-channel-foot">
         <span className="mp-small mp-muted">
           {c.stats.waitingReview > 0 && <><Link to={`/projects/${projectId}/review`}>{c.stats.waitingReview} in Freigabe</Link> · </>}
-          {c.stats.approvedUnposted > 0 && <>{c.stats.approvedUnposted} zu posten · </>}
-          {c.stats.queued > 0 && <>{c.stats.queued} eingeplant · </>}
-          {c.stats.posted7d} gepostet (7 T){c.stats.series > 0 && <> · {c.stats.series} Serie{c.stats.series > 1 ? "n" : ""}</>}
+          {c.stats.series > 0 ? <>{c.stats.series} Serie{c.stats.series > 1 ? "n" : ""} bespielt diesen Kanal</> : "Keine Serie für diesen Kanal"}
         </span>
         <span className="mp-inline mp-small">
           <button type="button" className="mp-linkbtn mp-small" onClick={() => open("url")}>Adresse</button>

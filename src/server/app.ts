@@ -31,6 +31,7 @@ import { resolveShortlink } from "./shortlinks.js";
 import { eq } from "drizzle-orm";
 import * as schema from "./db/schema.js";
 import { bioHtml, projectByBioCode } from "./publish/bio.js";
+import { zaehleBioAufruf } from "./shortlinks.js";
 import { jpegFuerMeta, readAssetToken } from "./publish/asset-tokens.js";
 
 declare module "fastify" {
@@ -121,7 +122,9 @@ export async function buildApp(env: Env, opts: { host?: HostAdapter; dbFile?: st
     const projectId = /^[a-z0-9]{4,12}$/.test(code) ? projectByBioCode(db, code) : null;
     const html = projectId ? bioHtml(db, projectId, env.MP_PUBLIC_BASE ?? "") : null;
     if (!html) return reply.code(404).type("text/html; charset=utf-8").send("<h1 style='font-family:sans-serif;text-align:center;margin-top:20vh'>Seite nicht gefunden</h1>");
-    return reply.type("text/html; charset=utf-8").header("Cache-Control", "public, max-age=120").send(html);
+    zaehleBioAufruf(db, projectId!);
+    // Kein langer Cache mehr: er würde die Aufrufe verschlucken, die hier gerade gezählt werden.
+    return reply.type("text/html; charset=utf-8").header("Cache-Control", "no-store").send(html);
   });
   app.get("/go/a/:token", async (req, reply) => {
     const assetId = readAssetToken(db, String((req.params as { token: string }).token ?? ""));

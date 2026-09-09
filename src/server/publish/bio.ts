@@ -16,7 +16,7 @@ import { nowIso, parseJson, toJson, type Db } from "../db/index.js";
 import { BioSettings, Brief, type BrandKit } from "../../shared/schemas.js";
 import { loadBrandKit } from "../agents/studio/brandkit.js";
 import { getProject } from "../repo/projects.js";
-import { ensureShortlink, shortUrl } from "../shortlinks.js";
+import { ensureShortlink, ensureShortlinkOhneStueck, shortUrl } from "../shortlinks.js";
 import { buildUtmUrl, slugify } from "../util/utm.js";
 
 const key = (projectId: string) => `bio:${projectId}`;
@@ -60,6 +60,22 @@ export function projectByBioCode(db: Db, code: string): string | null {
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
 /** Die Seite selbst — oder `null`, wenn es sie (noch) nicht gibt. */
+/**
+ * Der Kurzlink für den Hauptlink der Bio-Seite — einer je Projekt, ohne Stück.
+ */
+export function ensureBioHauptlink(db: Db, projectId: string, ziel: string): string {
+  const schluessel = `bioMain:${projectId}`;
+  const vorhanden = db.select().from(t.mpSettings).where(eq(t.mpSettings.key, schluessel)).get();
+  if (vorhanden) {
+    db.update(t.mpShortlinks).set({ target: ziel }).where(eq(t.mpShortlinks.code, vorhanden.value)).run();
+    return vorhanden.value;
+  }
+  const code = ensureShortlinkOhneStueck(db, projectId, ziel);
+  db.insert(t.mpSettings).values({ key: schluessel, value: code, updatedAt: nowIso() })
+    .onConflictDoUpdate({ target: t.mpSettings.key, set: { value: code, updatedAt: nowIso() } }).run();
+  return code;
+}
+
 export function bioHtml(db: Db, projectId: string, publicBase: string): string | null {
   const bio = loadBio(db, projectId);
   const project = getProject(db, projectId);
@@ -71,7 +87,11 @@ export function bioHtml(db: Db, projectId: string, publicBase: string): string |
   const ink = kit.ink ?? "#1E2A20";
   const bg = kit.background ?? "#FFFFFF";
 
-  const mainLink = buildUtmUrl(project.url, { source: "bio", medium: "social", campaign: "link-in-bio" });
+  // Auch der Hauptlink läuft über einen Kurzlink: er ist der wichtigste Klick
+  // des ganzen Werkzeugs (auf Instagram und Threads der einzige mögliche) und
+  // wurde bisher als einziger nicht gezählt.
+  const mainZiel = buildUtmUrl(project.url, { source: "bio", medium: "social", campaign: "link-in-bio" });
+  const mainLink = shortUrl(publicBase, ensureBioHauptlink(db, projectId, mainZiel));
   const pieces = db.select().from(t.mpContentPieces).where(eq(t.mpContentPieces.projectId, projectId)).all()
     .filter((p) => p.status === "published")
     .filter((p) => parseJson<Record<string, unknown>>(p.meta, {})["inBio"] !== false)

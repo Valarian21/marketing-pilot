@@ -9,6 +9,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
+import * as t from "../src/server/db/schema.js";
 import { loadEnv } from "../src/server/env.js";
 import { buildApp } from "../src/server/app.js";
 import { assetToken, ASSET_TTL_MS, readAssetToken } from "../src/server/publish/asset-tokens.js";
@@ -610,7 +611,12 @@ describe("Bio-Seite", () => {
     // das veroeffentlichte Stueck steht mit Kurzlink drauf
     expect(page.body).toContain("Top 5");
     expect(page.body).toMatch(/https:\/\/agi-empire\.test\/go\/[a-z0-9]{6}/);
-    expect(page.body).toContain("utm_source=bio");
+    // Seit Welle 4 läuft auch der Hauptlink über einen Kurzlink — er ist auf
+    // Instagram und Threads der einzige Weg zur Seite und wird jetzt gezählt.
+    const codes = [...page.body.matchAll(/\/go\/([a-z0-9]{6})/g)].map((m) => m[1]!);
+    expect(codes.length).toBeGreaterThanOrEqual(2);
+    const ziele = codes.map((c) => built.db.select().from(t.mpShortlinks).where(eq(t.mpShortlinks.code, c)).get()?.target ?? "");
+    expect(ziele.some((z) => z.includes("utm_source=bio") && z.includes("link-in-bio"))).toBe(true);
   });
   it("zählt einen Klick auf der Bio-Seite wie jeden anderen Kurzlink", async () => {
     const page = await built.app.inject({ method: "GET", url: `/go/bio/${(await built.app.inject({ method: "GET", url: `/api/mp/projects/${pid}/publish`, headers: auth })).json().bio.code}` });

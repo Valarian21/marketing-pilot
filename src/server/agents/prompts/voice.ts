@@ -31,16 +31,27 @@ CAPTION STRUCTURE (mandatory - platforms show one line before "more"):
 - Hashtags are returned separately, never inside the caption text.`;
 }
 
-export function writingRules(opts: { language: string; community?: boolean; voiceProfile?: string | null; hashtags?: HashtagPolicy; caption?: boolean }): string {
+export function writingRules(opts: { language: string; community?: boolean; voiceProfile?: string | null; hashtags?: HashtagPolicy; caption?: boolean; vermeiden?: string[] }): string {
   const de = opts.language.toLowerCase().startsWith("de");
   const tags = opts.hashtags
     ? `\n- Hashtags: ${opts.hashtags.max === 0 ? "none at all on this platform." : `${opts.hashtags.min || 1}-${opts.hashtags.max}, at the end of the caption, lowercase, no duplicates. ${opts.hashtags.note}`}`
+    : "";
+  /**
+   * Was der Mensch zuletzt abgelehnt hat, wörtlich.
+   *
+   * Die Ablehnungsgründe standen bisher nur im Protokoll: 404 abgelehnte Stücke
+   * (73 % aller erzeugten), und der nächste Entwurf machte denselben Fehler
+   * wieder. Drei Gründe reichen — mehr liest kein Modell als Regel, sondern als
+   * Erzählung.
+   */
+  const abgelehnt = opts.vermeiden?.length
+    ? `\n- The human REJECTED recent drafts for these reasons. Do not repeat them: ${opts.vermeiden.slice(0, 3).map((x) => `"${x}"`).join("; ")}.`
     : "";
   const base = `WRITING RULES (mandatory):
 - First person, concrete, with numbers, screenshots and things that went wrong. One thought per post.
 - Write in ${de ? "German" : opts.language}. ${de ? "Use the address form (du/Sie) from the brief's tone." : ""}
 - Forbidden: ${BANNED_PHRASES.map((p) => `"${p}"`).join(", ")}; a rhetorical question as opener followed by its answer; triple lists of staccato adjectives; emojis as bullets; hashtag walls; sentences starting with "It is important to note"; a closing summary of what was just said; em dashes as a stylistic tic.
-- No invented facts, testimonials or numbers. If a claim needs a number you do not have, leave a [PLATZHALTER: …] the human fills in.${tags}`;
+- No invented facts, testimonials or numbers. If a claim needs a number you do not have, leave a [PLATZHALTER: …] the human fills in.${tags}${abgelehnt}`;
   const community = `
 COMMUNITY REPLY RULES:
 - Answer the actual question first and fully. Mention our own product at most in the last third, always with disclosure ("Ich bau das Tool selbst" / "I build this tool myself").

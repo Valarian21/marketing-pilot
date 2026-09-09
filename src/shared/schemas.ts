@@ -384,6 +384,8 @@ export const TodayView = z.object({
   agentTasks: z.array(Task),
   progress: z.object({ done: z.number().int(), total: z.number().int() }),
   setup: z.object({ briefConfirmed: z.boolean(), planVersion: z.number().int().nullable(), profilesMissing: z.number().int(), voiceProfile: z.boolean(), eventsSeen: z.boolean() }),
+  /** Wie viele Serien gerade von selbst pausieren, weil zu viel liegen bleibt. */
+  serienPausiert: z.number().int().default(0),
   /** Serien, deren Ausgaben sich in der Freigabe stapeln (Shot 9). */
   seriesStuck: z.array(z.object({ id: Id, name: z.string(), pending: z.number().int() })).default([]),
 });
@@ -811,6 +813,8 @@ export const ContentSeries = z.object({
   coverage: SeriesCoverage,
   /** Stuecke der letzten beiden Laeufe, die noch in der Freigabe liegen (Stau-Erkennung). */
   pendingReview: z.number().int().default(0),
+  /** Warum die Serie gerade nicht liefert; leer heißt: sie läuft. */
+  bremsgrund: z.string().default(""),
   createdAt: Iso, updatedAt: Iso,
 });
 

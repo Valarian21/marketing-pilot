@@ -83,25 +83,25 @@ Return JSON: {"body"}` },
   ];
 }
 
-export function textPostPrompt(input: { brief: Brief; persona?: Persona; platform: string; limit: number; topic: string; hint: string; coreMessage: string | null; voiceProfile: string | null; screenshotsAvailable: number }): LlmMessage[] {
+export function textPostPrompt(input: { brief: Brief; persona?: Persona; platform: string; limit: number; topic: string; hint: string; coreMessage: string | null; voiceProfile: string | null; screenshotsAvailable: number; vermeiden?: string[] }): LlmMessage[] {
   return [
     { role: "system", content: `[task:text-post]
 Write ONE ${input.platform} post for "${input.brief.productName}". Hard limit: ${input.limit} characters (count them). One thought per post.
 ${input.platform === "linkedin" ? "LinkedIn: first line must work as a hook before 'mehr anzeigen'; short paragraphs; no hashtag block." : ""}
 ${input.platform === "x" ? "X: one idea, no thread unless asked; no link in the first post if possible." : ""}
 ${input.screenshotsAvailable ? `${input.screenshotsAvailable} product screenshots exist - reference what the reader will see ("im Screenshot ...") when it helps.` : ""}
-${writingRules({ language: input.brief.language, voiceProfile: input.voiceProfile, hashtags: hashtagPolicy(input.platform) })}
+${writingRules({ language: input.brief.language, voiceProfile: input.voiceProfile, hashtags: hashtagPolicy(input.platform), ...(input.vermeiden ? { vermeiden: input.vermeiden } : {}) })}
 Return JSON: {"title": "<short internal label, max 60 chars, e.g. 'LinkedIn: Sonntagabend'>", "body": "<the post>", "altText": "<alt text for an attached screenshot, or empty>"}` },
     { role: "user", content: `TOPIC: ${input.topic || "(pick the strongest angle from the brief)"}\nHINT: ${input.hint || "-"}\nCORE MESSAGE: ${input.coreMessage ?? "-"}\n\nBRIEF\n${JSON.stringify(input.brief)}\n\nPERSONA\n${personaBlock(input.persona)}` },
   ];
 }
 
-export function carouselPrompt(input: { brief: Brief; persona?: Persona; topic: string; hint: string; voiceProfile: string | null; screenshots: { id: string; label: string }[]; slides: number; platform: string }): LlmMessage[] {
+export function carouselPrompt(input: { brief: Brief; persona?: Persona; topic: string; hint: string; voiceProfile: string | null; screenshots: { id: string; label: string }[]; slides: number; platform: string; vermeiden?: string[] }): LlmMessage[] {
   return [
     { role: "system", content: `[task:carousel]
 Plan a ${input.slides}-slide carousel (Instagram/LinkedIn) for "${input.brief.productName}". Slide 1 = hook (max 8 words + one supporting line), middle slides = one idea each (headline max 8 words, body max 30 words), last slide = CTA with the product name and what to do.
 ${input.screenshots.length ? `Product screenshots available (use 1-3 of them as slides with kind "screenshot" and the matching "screenshotId"): ${input.screenshots.map((s) => `${s.id} = ${s.label}`).join("; ")}` : "No screenshots available - text slides only."}
-${writingRules({ language: input.brief.language, voiceProfile: input.voiceProfile, hashtags: hashtagPolicy(input.platform) })}
+${writingRules({ language: input.brief.language, voiceProfile: input.voiceProfile, hashtags: hashtagPolicy(input.platform), ...(input.vermeiden ? { vermeiden: input.vermeiden } : {}) })}
 Return JSON: {"title": "<short internal label, max 60 chars>", "caption": "<post caption, max 600 chars, hashtags per the rule above>", "slides": [{"kind": "text"|"screenshot", "headline", "body", "screenshotId": "<id or empty>"}]}` },
     { role: "user", content: `TOPIC: ${input.topic || "(pick the strongest angle)"}\nHINT: ${input.hint || "-"}\n\nBRIEF\n${JSON.stringify(input.brief)}\n\nPERSONA\n${personaBlock(input.persona)}` },
   ];

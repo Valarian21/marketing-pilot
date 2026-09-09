@@ -27,6 +27,20 @@ export function ensureShortlink(db: Db, projectId: string, pieceId: string, targ
   throw new Error("Kein freier Kurzlink-Code gefunden.");
 }
 
+/**
+ * Ein Kurzlink ohne Stück — für Ziele, die zum Projekt gehören statt zu einem
+ * Beitrag (der Hauptlink der Link-in-Bio-Seite).
+ */
+export function ensureShortlinkOhneStueck(db: Db, projectId: string, target: string): string {
+  for (let i = 0; i < 5; i++) {
+    const code = newCode();
+    if (db.select({ code: t.mpShortlinks.code }).from(t.mpShortlinks).where(eq(t.mpShortlinks.code, code)).get()) continue;
+    db.insert(t.mpShortlinks).values({ code, projectId, pieceId: null, target, clicks: 0, createdAt: nowIso(), lastClickAt: null }).run();
+    return code;
+  }
+  throw new Error("Kein freier Kurzlink-Code gefunden.");
+}
+
 /** Target for a code (or null) - counts the click. */
 export function resolveShortlink(db: Db, code: string): string | null {
   const row = db.select().from(t.mpShortlinks).where(eq(t.mpShortlinks.code, code)).get();
@@ -49,6 +63,20 @@ export function zaehleTagesklick(db: Db, projectId: string, pieceId: string | nu
     .where(and(eq(t.mpKlickTage.code, code), eq(t.mpKlickTage.tag, tag))).get();
   if (vorhanden) db.update(t.mpKlickTage).set({ klicks: vorhanden.klicks + 1 }).where(eq(t.mpKlickTage.id, vorhanden.id)).run();
   else db.insert(t.mpKlickTage).values({ id: newId(), projectId, pieceId, code, tag, klicks: 1 }).run();
+}
+
+/**
+ * Aufrufe der Link-in-Bio-Seite.
+ *
+ * Auf Instagram und Threads ist der Link im Profil der einzige Weg zur Seite —
+ * und der einzige, den bisher niemand zählte. Er läuft unter eigenem Code, damit
+ * er die Klicks auf Beiträge nicht verwässert: „Profil geöffnet" ist eine andere
+ * Zahl als „Beitrag geklickt".
+ */
+export const BIO_CODE = "bio-seite";
+
+export function zaehleBioAufruf(db: Db, projectId: string, now = new Date()): void {
+  zaehleTagesklick(db, projectId, null, BIO_CODE, now);
 }
 
 /** Kalendertag in Europe/Berlin — dieselbe Rechnung wie bei den Produktzahlen. */

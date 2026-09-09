@@ -73,7 +73,7 @@ export function SeriesPage() {
                 <td>
                   <strong>{x.name}</strong>
                   <div className="mp-small mp-muted">{x.kind} · {x.params.formats.join(" + ")} · {x.params.platforms.join(", ")}</div>
-                  {x.pendingReview >= 2 && <div className="mp-small mp-over">{x.pendingReview} Ausgaben liegen unfreigegeben – Kadenz zu hoch?</div>}
+                  {x.bremsgrund && <div className="mp-small mp-over">Pausiert: {x.bremsgrund}. Die Serie liefert wieder, sobald der Stau kleiner ist.</div>}
                 </td>
                 <td className="mp-small mp-nowrap">{x.cadence.days.map((d) => DAYS.find((y) => y.id === d)?.label).join(", ")} · {String(x.cadence.hour).padStart(2, "0")}:00</td>
                 <td className="mp-small mp-nowrap">{x.lastRunAt ? fmtDateTime(x.lastRunAt) : "–"}</td>

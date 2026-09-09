@@ -126,6 +126,32 @@ export function ReviewPage() {
     } catch (e) { setError(e instanceof Error ? e.message : "Fehler"); }
     finally { setBusy(false); }
   };
+  /**
+   * Das ganze Bündel freigeben und alles einplanen, was einen Zeitplan hat.
+   *
+   * Vier Varianten eines Themas sind **eine** Entscheidung. Vorher brauchte es
+   * dafür zwei Schritte: erst „Alle freigeben", dann jedes Stück einzeln
+   * einplanen — und wer den zweiten vergaß, hatte vier Stücke ohne Termin.
+   */
+  const bundleFreigebenUndEinplanen = async () => {
+    if (!current || !bundleId) return;
+    setBusy(true); setError(null);
+    try {
+      if (draft !== null && draft !== current.body) await api(`/content/${current.id}`, { method: "PATCH", json: { body: draft } });
+      await api(`/content/${current.id}/bundle/status`, { method: "POST", json: { status: "approved", reason: "" } });
+      const geplant: string[] = [];
+      for (const p of siblings) {
+        if (!stageAtLeast(stageFor(p), "approve")) continue;
+        const res = await api<{ platform: string; scheduledAt: string }[]>(`/content/${p.id}/publish/schedule`, { method: "POST", json: { platforms: [], scheduledAt: undefined } }).catch(() => [] as { platform: string; scheduledAt: string }[]);
+        for (const x of res) geplant.push(`${x.platform}: ${new Date(x.scheduledAt).toLocaleString("de-DE")}`);
+      }
+      window.alert(geplant.length ? `Eingeplant:\n${geplant.join("\n")}` : "Freigegeben. Kein Kanal steht auf „Freigeben“ — die Stücke stehen jetzt unter „Von Hand posten“.");
+      await load();
+      go(queue.find((p) => bundleIdOf(p) !== bundleId && p.id !== current.id));
+    } catch (e) { setError(e instanceof Error ? e.message : "Fehler"); }
+    finally { setBusy(false); }
+  };
+
   /** Freigeben und gleich in den nächsten Slot des Kanals legen (Shot 10). */
   const approveAndSchedule = async () => {
     if (!current) return;
@@ -174,17 +200,47 @@ export function ReviewPage() {
                 <textarea className="mp-piece-body" rows={Math.min(28, Math.max(6, (draft ?? current.body).split("\n").length + 2))} value={draft ?? current.body} onChange={(e) => setDraft(e.target.value)} disabled={current.status === "published"} />
               </label>
             )}
+            {/* Zwei Wege sichtbar, der Rest ausklappbar: vorher standen hier bis
+                zu sechs gleichrangige Knöpfe, und keiner war der offensichtliche. */}
             <div className="mp-form-actions mp-review-actions">
-              {current.status === "review" && siblings.length > 1 && <><Button variant="primary" disabled={busy} onClick={() => void actBundle("approved")}>Alle {siblings.length} freigeben</Button><Button variant="danger" disabled={busy} onClick={() => void actBundle("rejected")}>Bündel ablehnen</Button></>}
-              {current.status === "review" && (stageAtLeast(stageFor(current), "approve") ? (
-                <><Button variant="primary" disabled={busy} title={`Kanal auf „${STAGES[stageFor(current)].label}“: der Pilot postet zum nächsten Slot`} onClick={() => void approveAndSchedule()}>{siblings.length > 1 ? "Nur dieses freigeben & einplanen" : "Freigeben & einplanen"}</Button><Button disabled={busy} onClick={() => void act("approved", true)}>Freigeben & selbst posten</Button><Button disabled={busy} onClick={() => void act("approved")}>Nur freigeben</Button><Button variant="danger" disabled={busy} onClick={() => void act("rejected")}>Ablehnen</Button></>
+              {current.status === "review" && (siblings.length > 1 ? (
+                <>
+                  <Button variant="primary" disabled={busy} onClick={() => void bundleFreigebenUndEinplanen()}>Alle {siblings.length} freigeben &amp; einplanen</Button>
+                  <Button variant="danger" disabled={busy} onClick={() => void actBundle("rejected")}>Alle ablehnen</Button>
+                  <details className="mp-details mp-small">
+                    <summary className="mp-label">Nur dieses Stück</summary>
+                    <div className="mp-form-actions">
+                      {stageAtLeast(stageFor(current), "approve") && <Button disabled={busy} onClick={() => void approveAndSchedule()}>Freigeben &amp; einplanen</Button>}
+                      <Button disabled={busy} onClick={() => void act("approved", true)}>Freigeben &amp; selbst posten</Button>
+                      <Button disabled={busy} onClick={() => void act("approved")}>Nur freigeben</Button>
+                      <Button disabled={busy} onClick={() => void actBundle("approved")}>Alle freigeben, nicht einplanen</Button>
+                      <Button variant="danger" disabled={busy} onClick={() => void act("rejected")}>Dieses ablehnen</Button>
+                    </div>
+                  </details>
+                </>
               ) : (
-                <><Button variant="primary" disabled={busy} title="Kanal auf „Vorbereiten“: du postest selbst — das Paket hat Text, Dateien und den Link zur Plattform" onClick={() => void act("approved", true)}>{siblings.length > 1 ? "Nur dieses freigeben & posten" : "Freigeben & posten"}</Button><Button disabled={busy} onClick={() => void act("approved")}>Nur freigeben</Button><Button variant="danger" disabled={busy} onClick={() => void act("rejected")}>Ablehnen</Button></>
+                <>
+                  {stageAtLeast(stageFor(current), "approve")
+                    ? <Button variant="primary" disabled={busy} title={`Kanal auf „${STAGES[stageFor(current)].label}“: der Pilot postet zum nächsten Slot`} onClick={() => void approveAndSchedule()}>Freigeben &amp; einplanen</Button>
+                    : <Button variant="primary" disabled={busy} title="Kanal auf „Vorbereiten“: du postest selbst — das Paket hat Text, Dateien und den Link zur Plattform" onClick={() => void act("approved", true)}>Freigeben &amp; posten</Button>}
+                  <Button variant="danger" disabled={busy} onClick={() => void act("rejected")}>Ablehnen</Button>
+                  <details className="mp-details mp-small">
+                    <summary className="mp-label">Weitere Wege</summary>
+                    <div className="mp-form-actions">
+                      {stageAtLeast(stageFor(current), "approve") && <Button disabled={busy} onClick={() => void act("approved", true)}>Freigeben &amp; selbst posten</Button>}
+                      <Button disabled={busy} onClick={() => void act("approved")}>Nur freigeben</Button>
+                      <Button disabled={busy} onClick={() => void act("regenerate")}>Neu erzeugen</Button>
+                    </div>
+                  </details>
+                </>
               ))}
-              {current.status !== "published" && <Button disabled={busy} onClick={() => void act("regenerate")}>{busy ? "…" : "Neu generieren"}</Button>}
-              {draft !== null && draft !== current.body && current.status !== "published" && <Button disabled={busy} onClick={() => void saveText()}>Text speichern</Button>}
-              {(current.status === "approved" || current.status === "published") && <Link className="mp-btn mp-btn--primary" to={`/projects/${id}/publish/${current.id}`}>Publish-Paket</Link>}
-              {queue.length > 1 && <span className="mp-inline"><Button disabled={idx <= 0} onClick={() => go(queue[idx - 1])}>← zurück</Button><Button disabled={idx < 0 || idx >= queue.length - 1} onClick={() => go(queue[idx + 1])}>weiter →</Button></span>}
+              {current.status !== "review" && (
+                <>
+                  <Link className="mp-btn mp-btn--primary" to={`/projects/${id}/publish/${current.id}`}>Paket öffnen</Link>
+                  {draft !== null && draft !== current.body && <Button disabled={busy} onClick={() => void saveText()}>Text speichern</Button>}
+                </>
+              )}
+              {current.status === "review" && draft !== null && draft !== current.body && <Button disabled={busy} onClick={() => void saveText()}>Text speichern</Button>}
             </div>
             <ReviseBox piece={current} onDone={load} />
             {current.aiTellNotes && <details className="mp-details mp-small"><summary className="mp-label">{current.format === "video" ? "Render-Hinweise" : "AI-Tell-Prüfer"}</summary><pre className="mp-pre">{current.aiTellNotes}</pre></details>}

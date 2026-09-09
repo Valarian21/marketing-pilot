@@ -250,7 +250,7 @@ export function UebersichtPage() {
       <Card>
         <div className="mp-card-head">
           <h2>Beiträge im Zeitraum <span className="mp-muted mp-small">Zahlen der Plattform, Gesamtstand je Beitrag</span></h2>
-          <Link className="mp-small" to={`/projects/${id}/insights`}>Alle Zahlen und Wochenberichte</Link>
+          <Link className="mp-small" to={`/projects/${id}/insights`}>Wochenberichte und GEO</Link>
         </div>
         {view.beitraege.length === 0 ? <p className="mp-muted">In diesem Zeitraum wurde nichts veröffentlicht.</p> : (() => {
           // Beiträge ohne jede Zahl (meist abgelaufene Stories) stehen unten und

@@ -71,7 +71,7 @@ function Gate() {
           <Route path="projects/:id/insights" element={<InsightsPage />} />
           <Route path="community" element={<ProjectScoped page="community" title="Community" />} />
           <Route path="uebersicht" element={<ProjectScoped page="uebersicht" title="Übersicht" />} />
-          <Route path="insights" element={<ProjectScoped page="insights" title="Insights" />} />
+          <Route path="insights" element={<ProjectScoped page="insights" title="Wochenbericht" />} />
           <Route path="activity" element={<ActivityPage />} />
           <Route path="storage" element={<StoragePage />} />
           <Route path="media" element={<MediaPage />} />

@@ -188,6 +188,12 @@ export function TodayPage() {
             </Link>
           )}
 
+          {v.serienPausiert > 0 && (
+            <Link className="mp-gescheitert mp-gescheitert--warn" to={`/projects/${id}/series`}>
+              <span><b className="mp-num">{v.serienPausiert}</b> {v.serienPausiert === 1 ? "Serie pausiert" : "Serien pausieren"} von selbst</span>
+              <span className="mp-small">Zu viel liegt unfreigegeben oder ohne Termin. Sie laufen weiter, sobald der Stau kleiner ist.</span>
+            </Link>
+          )}
           {v.seriesStuck.length > 0 && v.seriesStuck.map((st) => (
             <Link key={st.id} className="mp-gescheitert mp-gescheitert--warn" to={`/projects/${id}/series`}>
               <span>Serie „{st.name}“ staut sich: {st.pending} Ausgaben unfreigegeben</span>
