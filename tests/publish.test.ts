@@ -540,6 +540,36 @@ describe("Posten", () => {
     expect(out.externalUrl).toContain("threads.net");
   });
 
+  it("fragt bei Threads nie nach status_code — die echte API antwortet darauf mit 400", async () => {
+    // Attrappe der echten Threads-API: sie kennt `status`, und jede Abfrage, die
+    // `status_code` auch nur nennt, lehnt sie ab. Genau daran scheiterte am
+    // 09.09.2026 jeder Threads-Beitrag mit Bild — die alte Attrappe antwortete
+    // auf alles mit `{ id }` und deckte den Fehler zu.
+    const statusAbfragen: string[] = [];
+    const impl = (async (url: string | URL) => {
+      const u = String(url);
+      const body = (x: unknown, status = 200) => new Response(JSON.stringify(x), { status, headers: { "content-type": "application/json" } });
+      if (u.includes("fields=")) {
+        const felder = decodeURIComponent(new URL(u).searchParams.get("fields") ?? "");
+        if (felder.includes("permalink")) return body({ permalink: "https://www.threads.net/@binderplan/post/abc" });
+        statusAbfragen.push(felder);
+        if (felder.includes("status_code")) {
+          return body({ error: { message: "Tried accessing nonexisting field (status_code)", code: 100, type: "THApiException" } }, 400);
+        }
+        return body({ id: "c1", status: "FINISHED" });
+      }
+      if (u.includes("threads_publish")) return body({ id: "th-2" });
+      return body({ id: "c1" });
+    }) as unknown as typeof fetch;
+    const out = await threadsPoster.post({
+      platform: "threads", text: "Zwei Karten, ein Bild.", link: null, title: "", creds: { userId: "9", accessToken: "tok" }, fetchImpl: impl,
+      assets: [{ path: "x", url: "https://agi-empire.test/go/a/t", mime: "image/png", alt: "", kind: "image" as const }],
+    });
+    expect(statusAbfragen.length).toBeGreaterThan(0);
+    expect(statusAbfragen.some((f) => f.includes("status_code"))).toBe(false);
+    expect(out.ref).toBe("th-2");
+  });
+
   it("kürzt für Threads auf 500 Zeichen", async () => {
     const bodies: string[] = [];
     const impl = (async (url: string | URL, init: RequestInit = {}) => {

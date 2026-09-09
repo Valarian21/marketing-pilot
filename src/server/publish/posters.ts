@@ -177,28 +177,39 @@ export function aufLimit(assets: PostAsset[], limit: number, log?: (m: string) =
  * aussieht und keines ist. Deshalb wartet jetzt jeder Container, Bilder nur mit
  * kurzem Takt und kurzer Frist.
  *
- * `status_code` ist dabei nicht garantiert: liefert die Plattform das Feld
- * ueberhaupt nicht, ist nichts zu warten und der Container gilt als fertig.
- * Ohne diese Regel wuerde das Warten Bildbeitraege ausbremsen, die heute laufen.
+ * **Die beiden Plattformen nennen das Feld unterschiedlich.** Instagram
+ * antwortet mit `status_code`, Threads mit `status` — und Threads lehnt eine
+ * Abfrage, die `status_code` auch nur *nennt*, komplett mit 400 ab („Tried
+ * accessing nonexisting field"). Deshalb steht die Feldliste in `felder`; wer
+ * eine dritte Plattform anschliesst, misst zuerst, wie sie das Feld nennt.
+ * Genau daran scheiterte am 09.09. jeder Threads-Beitrag mit Bild.
+ *
+ * Fehlt das Feld in einer gueltigen Antwort, ist nichts zu warten und der
+ * Container gilt als fertig. Ohne diese Regel wuerde das Warten Bildbeitraege
+ * ausbremsen, die heute laufen.
  */
 async function warteAufFertig(
   f: typeof fetch, basis: string, containerId: string, token: string,
-  log?: (m: string) => void, opts: { maxMs?: number; intervalMs?: number; was?: string } = {},
+  log?: (m: string) => void,
+  opts: { maxMs?: number; intervalMs?: number; was?: string; felder?: string } = {},
 ): Promise<void> {
   const maxMs = opts.maxMs ?? 180_000;
   const intervalMs = opts.intervalMs ?? 5000;
   const was = opts.was ?? "Video";
+  const felder = opts.felder ?? "status_code,status";
   const bis = Date.now() + maxMs;
   let letzter = "";
   while (Date.now() < bis) {
-    const res = await json<{ status_code?: string; status?: string }>(
-      await call(f, `${basis}/${containerId}?fields=status_code,status&access_token=${encodeURIComponent(token)}`, {}, "Medien-Status"),
+    const res = await json<{ status_code?: string; status?: string; error_message?: string }>(
+      await call(f, `${basis}/${containerId}?fields=${encodeURIComponent(felder)}&access_token=${encodeURIComponent(token)}`, {}, "Medien-Status"),
     );
-    if (res.status_code === undefined) return;
-    letzter = res.status_code;
-    if (letzter === "FINISHED") return;
+    const stand = res.status_code ?? res.status;
+    if (stand === undefined) return;
+    letzter = stand;
+    if (letzter === "FINISHED" || letzter === "PUBLISHED") return;
     if (letzter === "ERROR" || letzter === "EXPIRED") {
-      throw new Error(`Die Plattform konnte ${was === "Video" ? "das Video" : "das Bild"} nicht verarbeiten (${letzter}${res.status ? `: ${res.status}` : ""}).`);
+      const grund = res.error_message ?? (res.status_code ? res.status : undefined);
+      throw new Error(`Die Plattform konnte ${was === "Video" ? "das Video" : "das Bild"} nicht verarbeiten (${letzter}${grund ? `: ${grund}` : ""}).`);
     }
     log?.(`${was} wird verarbeitet (${letzter || "IN_PROGRESS"}) …`);
     await new Promise((r) => setTimeout(r, intervalMs));
@@ -208,6 +219,10 @@ async function warteAufFertig(
 
 /** Bilder sind meist sofort fertig — kurzer Takt, kurze Frist, damit ein Post nicht minutenlang haengt. */
 const BILD_WARTEN = { maxMs: 45_000, intervalMs: 1500, was: "Bild" } as const;
+
+/** Threads nennt das Feld `status` und verweigert jede Abfrage, die `status_code` enthaelt. */
+const TH_WARTEN = { felder: "status,error_message" } as const;
+const TH_BILD_WARTEN = { ...BILD_WARTEN, ...TH_WARTEN } as const;
 
 /**
  * Instagram nimmt keine Dateien entgegen, sondern **öffentliche URLs**. Deshalb
@@ -394,20 +409,20 @@ export const threadsPoster: PlatformPoster = {
     const video = media.find((a) => a.kind === "video");
     if (video) {
       creationId = await container({ media_type: "VIDEO", video_url: video.url, text });
-      await warteAufFertig(f, THREADS, creationId, token, i.log);
+      await warteAufFertig(f, THREADS, creationId, token, i.log, TH_WARTEN);
     }
     else if (media.length === 1) {
       creationId = await container({ media_type: "IMAGE", image_url: media[0]!.url, text });
-      await warteAufFertig(f, THREADS, creationId, token, i.log, BILD_WARTEN);
+      await warteAufFertig(f, THREADS, creationId, token, i.log, TH_BILD_WARTEN);
     } else if (media.length > 1) {
       const children: string[] = [];
       for (const a of media) {
         const kind = await container({ media_type: "IMAGE", image_url: a.url, is_carousel_item: "true" });
-        await warteAufFertig(f, THREADS, kind, token, i.log, BILD_WARTEN);
+        await warteAufFertig(f, THREADS, kind, token, i.log, TH_BILD_WARTEN);
         children.push(kind);
       }
       creationId = await container({ media_type: "CAROUSEL", children: children.join(","), text });
-      await warteAufFertig(f, THREADS, creationId, token, i.log, BILD_WARTEN);
+      await warteAufFertig(f, THREADS, creationId, token, i.log, TH_BILD_WARTEN);
     } else creationId = await container({ media_type: "TEXT", text });
 
     const pub = await json<{ id: string }>(await call(f, `${THREADS}/${user}/threads_publish`, {
