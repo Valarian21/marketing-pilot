@@ -16,6 +16,7 @@ import { lastProject, rememberProject } from "./ProjectNav.js";
  */
 const NAV: { group: string; to: string; label: string; icon: IconName; end?: boolean; later?: boolean }[] = [
   { group: "Content Pilot", to: "/projects", label: "Projekte", icon: "projects", end: true },
+  { group: "Content Pilot", to: "/uebersicht", label: "Übersicht", icon: "insights" },
   { group: "Content Pilot", to: "/channels", label: "Kanäle", icon: "send" },
   { group: "Content Pilot", to: "/studio", label: "Erstellen", icon: "studio" },
   { group: "Content Pilot", to: "/series", label: "Serien", icon: "series" },

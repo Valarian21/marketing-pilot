@@ -7,7 +7,7 @@ import { newId, nowIso, parseJson, toJson, type Db } from "../../db/index.js";
 import { leseMetriken } from "../../publish/metrics.js";
 
 /** Plattformen, deren Zahlen der Pilot selbst abrufen kann. */
-const MESSBAR = new Set(["instagram", "facebook"]);
+const MESSBAR = new Set(["instagram", "facebook", "threads"]);
 
 export function weekStartOf(iso: string): string {
   const d = new Date(iso);

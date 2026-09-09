@@ -162,14 +162,15 @@ describe("events + insights + weekly loop", () => {
     expect((await built.app.inject({ method: "POST", url: `/api/mp/reports/${report.id}/adopt`, headers: auth })).statusCode).toBe(409);
   });
 
-  it("scheduler enqueues daily radar, weekly geo and the Sunday report once", () => {
+  it("scheduler enqueues daily radar, daily channel numbers, weekly geo and the Sunday report once", () => {
     const sunday = new Date("2026-08-30T19:00:00.000Z");
     const due = dueJobs(built.db, sunday);
-    expect(due.map((d) => d.kind).sort()).toEqual(["community.scan", "geo.measure", "weekly.report"]);
+    expect(due.map((d) => d.kind).sort()).toEqual(["community.scan", "geo.measure", "kanal.stats", "weekly.report"]);
     const first = enqueueDue(built.db, sunday);
-    expect(first).toHaveLength(3);
+    expect(first).toHaveLength(4);
     expect(enqueueDue(built.db, sunday)).toHaveLength(0);
     expect(dueJobs(built.db, new Date("2026-08-31T19:00:00.000Z"))).toHaveLength(0);
-    expect(dueJobs(built.db, new Date("2026-09-01T19:00:00.000Z")).map((d) => d.kind)).toEqual(["community.scan"]);
+    // Am naechsten Tag sind die taeglichen Laeufe wieder faellig - beide.
+    expect(dueJobs(built.db, new Date("2026-09-01T19:00:00.000Z")).map((d) => d.kind).sort()).toEqual(["community.scan", "kanal.stats"]);
   });
 });

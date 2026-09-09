@@ -1364,5 +1364,117 @@ export type CommunitySource = z.infer<typeof CommunitySource>;
 export type CommunityLeadPatch = z.infer<typeof CommunityLeadPatch>;
 export type CommunityView = z.infer<typeof CommunityView>;
 export type InboundEvent = z.infer<typeof InboundEvent>;
+// --- Übersicht (Cockpit) -------------------------------------------------------
+
+/**
+ * Ein Tag der Zeitreihe. Jede Zahl ist entweder ein Tageswert oder ein Bestand;
+ * welches von beidem, sagt der Feldname, und die Anzeige darf beides nicht
+ * summieren. `null` heißt „für diesen Tag liegt nichts vor" — ausdrücklich
+ * etwas anderes als `0`.
+ */
+export const CockpitTag = z.object({
+  tag: z.string(),
+  /** Tageswerte der Kanäle, über alle Plattformen summiert. */
+  aufrufe: z.number().nullable().default(null),
+  reichweite: z.number().nullable().default(null),
+  interaktionen: z.number().nullable().default(null),
+  profilaufrufe: z.number().nullable().default(null),
+  /** Bestand: Follower aller Kanäle zusammen, fortgeschrieben. */
+  follower: z.number().nullable().default(null),
+  /** Was der Pilot an dem Tag veröffentlicht hat. */
+  beitraege: z.number().int().default(0),
+  /** Klicks auf die Kurzlinks des Piloten. */
+  klicks: z.number().int().default(0),
+  /** Aus dem Produkt: Anmeldungen über den Webhook. */
+  anmeldungen: z.number().int().default(0),
+  /** Aus dem Produkt: neue Konten und Bestand laut Produktdatenbank. */
+  neueKonten: z.number().int().nullable().default(null),
+  konten: z.number().int().nullable().default(null),
+  kaeufe: z.number().int().nullable().default(null),
+  umsatz: z.number().nullable().default(null),
+});
+
+/** Ein Kanal im Zeitraum: Bestand, Summen und der eigene Verlauf. */
+export const CockpitKanal = z.object({
+  platform: z.string(),
+  label: z.string(),
+  /** Zugang hinterlegt und Zahlen abrufbar. */
+  eingerichtet: z.boolean(),
+  /** Kann der Pilot dort messen, oder gibt es die Zahlen nur von Hand? */
+  messbar: z.boolean(),
+  profilUrl: z.string().nullable().default(null),
+  follower: z.number().nullable().default(null),
+  followerDavor: z.number().nullable().default(null),
+  aufrufe: z.number().nullable().default(null),
+  reichweite: z.number().nullable().default(null),
+  interaktionen: z.number().nullable().default(null),
+  profilaufrufe: z.number().nullable().default(null),
+  /** Beiträge, die der Pilot im Zeitraum dort veröffentlicht hat. */
+  beitraege: z.number().int().default(0),
+  /** Aufrufe und Interaktionen genau dieser Beiträge (Lebenszeit, nicht Zeitraum). */
+  beitragsAufrufe: z.number().nullable().default(null),
+  beitragsInteraktionen: z.number().nullable().default(null),
+  letzterAbruf: Iso.nullable().default(null),
+  fehler: z.string().default(""),
+  verlauf: z.array(z.object({ tag: z.string(), aufrufe: z.number().nullable(), interaktionen: z.number().nullable(), follower: z.number().nullable() })).default([]),
+});
+
+/** Ein veröffentlichter Beitrag mit allem, was über ihn bekannt ist. */
+export const CockpitBeitrag = z.object({
+  id: z.string(), pieceId: z.string(), titel: z.string(), platform: z.string(), format: z.string(),
+  postedAt: Iso.nullable(), externalUrl: z.string().nullable(),
+  aufrufe: z.number().nullable(), reichweite: z.number().nullable(), likes: z.number().nullable(),
+  kommentare: z.number().nullable(), saves: z.number().nullable(), shares: z.number().nullable(),
+  klicks: z.number().int().default(0),
+  /** Likes + Kommentare + Saves + Shares geteilt durch Aufrufe. `null`, wenn eines davon fehlt. */
+  quote: z.number().nullable().default(null),
+  metricsAt: Iso.nullable().default(null),
+  fehler: z.string().default(""),
+});
+
+/**
+ * Eine Kennzahl mit Vergleich zur gleich langen Vorperiode.
+ *
+ * `davor` ist `null`, wenn für die Vorperiode nichts vorliegt — dann zeigt die
+ * Anzeige keinen Pfeil an, statt einen Anstieg aus dem Nichts zu behaupten.
+ */
+export const CockpitKennzahl = z.object({
+  id: z.string(), label: z.string(),
+  wert: z.number().nullable(), davor: z.number().nullable().default(null),
+  einheit: z.enum(["zahl", "euro", "prozent"]).default("zahl"),
+  /** Bestände vergleicht man nicht mit einer Summe: dieses Feld sagt, was die Zahl ist. */
+  art: z.enum(["summe", "bestand"]).default("summe"),
+  hinweis: z.string().default(""),
+});
+
+export const CockpitView = z.object({
+  zeitraum: z.object({ von: z.string(), bis: z.string(), tage: z.number().int() }),
+  kennzahlen: z.array(CockpitKennzahl),
+  verlauf: z.array(CockpitTag),
+  kanaele: z.array(CockpitKanal),
+  beitraege: z.array(CockpitBeitrag),
+  /** Der Weg vom Aufruf bis zum zahlenden Kunden, je Stufe die Zahl und was sie bedeutet. */
+  trichter: z.array(z.object({ id: z.string(), label: z.string(), wert: z.number().nullable(), erklaerung: z.string() })),
+  produkt: z.object({
+    verfuegbar: z.boolean(),
+    quelle: z.string().default(""),
+    stand: Iso.nullable().default(null),
+    konten: z.number().int().nullable().default(null),
+    zahlende: z.number().int().nullable().default(null),
+    mrr: z.number().nullable().default(null),
+    umsatzGesamt: z.number().nullable().default(null),
+    tarife: z.array(z.object({ tarif: z.string(), anzahl: z.number().int() })).default([]),
+    hinweis: z.string().default(""),
+  }),
+  /** Was gerade nicht gemessen werden kann und warum — steht wörtlich im UI. */
+  hinweise: z.array(z.string()).default([]),
+  kanalStatus: z.object({ letzterLauf: Iso.nullable(), laeuft: z.boolean().default(false) }),
+});
+
 export type InsightsView = z.infer<typeof InsightsView>;
 export type WeeklyReport = z.infer<typeof WeeklyReport>;
+export type CockpitView = z.infer<typeof CockpitView>;
+export type CockpitTag = z.infer<typeof CockpitTag>;
+export type CockpitKanal = z.infer<typeof CockpitKanal>;
+export type CockpitBeitrag = z.infer<typeof CockpitBeitrag>;
+export type CockpitKennzahl = z.infer<typeof CockpitKennzahl>;

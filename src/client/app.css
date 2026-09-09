@@ -470,3 +470,74 @@ button, input { font: inherit; color: inherit; }
 .mp-ampel--gruen { background: var(--mp-pill-done-fg); }
 .mp-ampel--fertig { background: var(--mp-accent); }
 .mp-ampel--fehler { background: var(--mp-bad); outline: 2px solid var(--mp-bad); outline-offset: 1px; }
+
+/* --- Übersicht: Kennzahlen, Diagramme, Kanäle ---------------------------------
+   Die Diagramme sind reines SVG. Alles Farbige kommt aus den Serien-Tokens,
+   alle Beschriftungen aus den Text-Tokens — eine Achsenbeschriftung in der
+   Seriefarbe wäre auf hellem Grund unlesbar. */
+.mp-kennzahlen { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: var(--mp-gap-sm); margin-bottom: var(--mp-gap); }
+.mp-kennzahl { display: flex; flex-direction: column; gap: 2px; text-align: left; background: var(--mp-surface); border: var(--mp-border); border-radius: var(--mp-radius); padding: var(--mp-pad-tile); font: inherit; color: inherit; }
+.mp-kennzahl--klick { cursor: pointer; transition: border-color .12s, background .12s; }
+.mp-kennzahl--klick:hover { border-color: var(--mp-ink-3); }
+.mp-kennzahl.is-aktiv { border-color: var(--mp-accent); background: var(--mp-accent-soft); }
+.mp-kennzahl-wert { font-size: var(--mp-text-num); line-height: 1.1; }
+.mp-kennzahl-fuss { font-size: var(--mp-text-sm); min-height: 18px; }
+.mp-delta { font-weight: 600; }
+.mp-delta.is-auf { color: var(--mp-pill-done-fg); }
+.mp-delta.is-ab { color: var(--mp-bad); }
+.mp-stand { margin: -14px 0 var(--mp-gap); }
+
+.mp-zeitraum { display: inline-flex; border: var(--mp-border); border-radius: var(--mp-radius-sm); overflow: hidden; }
+.mp-zeitraum-knopf { height: var(--mp-control-h); padding: 0 12px; border: 0; background: var(--mp-surface); color: var(--mp-ink-2); font: inherit; font-size: var(--mp-text-sm); font-weight: 600; cursor: pointer; }
+.mp-zeitraum-knopf + .mp-zeitraum-knopf { border-left: var(--mp-border); }
+.mp-zeitraum-knopf.is-aktiv { background: var(--mp-accent-soft); color: var(--mp-accent); }
+
+.mp-chart { position: relative; }
+.mp-chart-svg { width: 100%; height: auto; display: block; overflow: visible; }
+.mp-chart-grid { stroke: var(--mp-grid-line); stroke-width: 1; }
+.mp-chart-cross { stroke: var(--mp-ink-3); stroke-width: 1; }
+.mp-chart-tick { fill: var(--mp-ink-2); font-family: var(--mp-font-mono); font-size: 10px; }
+.mp-chart-endlabel { fill: var(--mp-ink-2); font-family: var(--mp-font-body); font-size: 11px; font-weight: 600; }
+.mp-chart-marker { fill: var(--mp-ink-3); }
+.mp-chart-marker-legende { display: inline-block; width: 6px; height: 6px; border-radius: 1px; background: var(--mp-ink-3); margin-right: 4px; vertical-align: middle; }
+.mp-chart-fuss { margin: 2px 0 0; }
+/* Der Tooltip folgt der Spalte; die Verschiebung um die halbe Breite hält ihn am Rand im Bild. */
+.mp-chart-tip { position: absolute; top: 4px; transform: translateX(-50%); pointer-events: none; background: var(--mp-surface); border: var(--mp-border); border-radius: var(--mp-radius-sm); box-shadow: var(--mp-shadow-float); padding: 8px 10px; min-width: 130px; z-index: 5; }
+.mp-chart-tip--balken { top: auto; bottom: 28px; }
+.mp-chart-tip-tag { font-size: var(--mp-text-xs); color: var(--mp-ink-2); margin-bottom: 4px; }
+.mp-chart-tip-zeile { display: flex; align-items: baseline; gap: 6px; }
+.mp-chart-tip-wert { font-family: var(--mp-font-display); font-weight: 700; font-variant-numeric: tabular-nums; }
+.mp-chart-tip-label { font-size: var(--mp-text-sm); color: var(--mp-ink-2); }
+.mp-chart-tip-zusatz { font-size: var(--mp-text-xs); color: var(--mp-ink-2); margin-top: 4px; }
+.mp-chart-key { display: inline-block; width: 10px; height: 3px; border-radius: 2px; vertical-align: middle; flex: 0 0 auto; }
+.mp-legende { list-style: none; display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 6px 0 0; padding: 0; font-size: var(--mp-text-sm); color: var(--mp-ink-2); }
+.mp-legende li { display: inline-flex; align-items: center; gap: 6px; }
+.mp-spark { width: 100%; height: 34px; display: block; margin-top: 6px; }
+.mp-spark--leer { height: 34px; }
+
+.mp-balken { list-style: none; margin: 8px 0 0; padding: 0; }
+.mp-balken li { display: grid; grid-template-columns: minmax(90px, 150px) 1fr auto; grid-template-areas: "label spur wert" ". zusatz zusatz"; gap: 4px 10px; align-items: center; padding: 5px 0; }
+.mp-balken-label { grid-area: label; font-size: var(--mp-text-sm); font-weight: 600; }
+.mp-balken-spur { grid-area: spur; background: var(--mp-track); border-radius: var(--mp-radius-pill); height: 14px; display: block; }
+.mp-balken-fuell { display: block; height: 100%; border-radius: var(--mp-radius-pill); min-width: 2px; }
+.mp-balken-wert { grid-area: wert; font-size: var(--mp-text-sm); }
+.mp-balken-zusatz { grid-area: zusatz; }
+
+.mp-kanal-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: var(--mp-gap-sm); }
+.mp-kanal { background: var(--mp-bg); border-radius: var(--mp-radius-sm); padding: 12px 14px; }
+.mp-kanal-kopf { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.mp-kanal-zahlen { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; margin: 0; }
+.mp-kanal-zahlen dt { font-size: var(--mp-text-xs); letter-spacing: var(--mp-tracking-label); text-transform: uppercase; color: var(--mp-ink-2); }
+.mp-kanal-zahlen dd { margin: 0; font-size: var(--mp-text-md); }
+.mp-kanal-fehler { color: var(--mp-bad); margin: 6px 0 0; }
+.mp-produkt-zahlen { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--mp-gap-sm); margin-bottom: var(--mp-gap); }
+.mp-produkt-diagramme { align-items: start; }
+.mp-root .mp-h3 { font-family: var(--mp-font-display); font-size: var(--mp-text-base); font-weight: 600; margin: 14px 0 4px; }
+.mp-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+@media (max-width: 720px) {
+  .mp-kennzahlen { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+  .mp-balken li { grid-template-columns: minmax(70px, 110px) 1fr auto; }
+}
+.mp-ohne-zahlen { margin-top: 10px; }
+.mp-ohne-zahlen summary { padding: 6px 0; }

@@ -4,7 +4,7 @@ import { NavLink } from "react-router";
 
 // Heute und Kanäle sind der Weg des Content-Piloten; der Produkt-Brief (Analyse) ist der einmalige Einrichtungsschritt davor.
 const TABS = [
-  { to: "", label: "Heute" }, { to: "/channels", label: "Kanäle" }, { to: "/analysis", label: "Produkt-Brief" },
+  { to: "", label: "Heute" }, { to: "/uebersicht", label: "Übersicht" }, { to: "/channels", label: "Kanäle" }, { to: "/analysis", label: "Produkt-Brief" },
 ];
 
 export function rememberProject(id: string): void { try { localStorage.setItem("mp_project", id); } catch { /* ignore */ } }

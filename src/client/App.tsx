@@ -10,6 +10,7 @@ import { ActivityPage } from "./pages/Activity.js";
 import { SettingsPage } from "./pages/Settings.js";
 import { CommunityPage } from "./pages/Community.js";
 import { InsightsPage } from "./pages/Insights.js";
+import { UebersichtPage } from "./pages/Uebersicht.js";
 import { StudioPage } from "./pages/Studio.js";
 import { SeriesPage } from "./pages/Series.js";
 import { ChannelsPage } from "./pages/Channels.js";
@@ -58,8 +59,10 @@ function Gate() {
           <Route path="studio" element={<ProjectScoped page="studio" title="Content Studio" />} />
           <Route path="review" element={<ProjectScoped page="review" title="Freigaben" />} />
           <Route path="projects/:id/community" element={<CommunityPage />} />
+          <Route path="projects/:id/uebersicht" element={<UebersichtPage />} />
           <Route path="projects/:id/insights" element={<InsightsPage />} />
           <Route path="community" element={<ProjectScoped page="community" title="Community" />} />
+          <Route path="uebersicht" element={<ProjectScoped page="uebersicht" title="Übersicht" />} />
           <Route path="insights" element={<ProjectScoped page="insights" title="Insights" />} />
           <Route path="activity" element={<ActivityPage />} />
           <Route path="storage" element={<StoragePage />} />

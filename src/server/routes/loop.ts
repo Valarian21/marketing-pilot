@@ -6,11 +6,14 @@ import * as s from "../../shared/schemas.js";
 import { type Db } from "../db/index.js";
 import { writeAudit } from "../audit.js";
 import { getProject } from "../repo/projects.js";
-import { enqueueJob, hasActiveJob, workerAlive } from "../jobs.js";
+import { enqueueJob, getJob, hasActiveJob, workerAlive } from "../jobs.js";
 import { isScanning, lastScanAt, listLeads, loadSources, saveSources, scanCommunity, updateLead, deriveSources } from "../agents/community/radar.js";
 import { listPersonas } from "../agents/analysis/personas.js";
 import { listChannels } from "../agents/analysis/attention.js";
 import { insightsView, landingSnippet, recordEvent } from "../agents/insights/insights.js";
+import { cockpitView } from "../agents/insights/cockpit.js";
+import { produktDbPfad } from "../data-source.js";
+import { KANAL_STEPS } from "../publish/job.js";
 import { adoptReport, dismissReport, listReports, runWeeklyReport } from "../agents/loop/weekly.js";
 import type { FullContext } from "../services.js";
 import type { Env } from "../env.js";
@@ -58,6 +61,27 @@ export function loopRoutes(app: FastifyInstance, db: Db, env: Env, getCtx: () =>
   r.get("/api/mp/projects/:projectId/insights", { schema: { params: P, response: { 200: s.InsightsView, 404: s.ErrorBody } } }, async (req, reply) => {
     if (!getProject(db, req.params.projectId)) return reply.code(404).send({ detail: "Projekt nicht gefunden." });
     return insightsView(db, req.params.projectId, Boolean(env.MP_EVENTS_TOKEN));
+  });
+
+  /**
+   * Die Übersicht: Kanalzahlen, Beiträge, Klicks, Konten und Umsatz auf einer
+   * Zeitachse. `tage` ist die Länge des Zeitraums; die gleich lange Vorperiode
+   * wird für den Vergleich mitgerechnet.
+   */
+  r.get("/api/mp/projects/:projectId/cockpit", {
+    schema: { params: P, querystring: z.object({ tage: z.coerce.number().int().min(7).max(365).default(30) }), response: { 200: s.CockpitView, 404: s.ErrorBody } },
+  }, async (req, reply) => {
+    if (!getProject(db, req.params.projectId)) return reply.code(404).send({ detail: "Projekt nicht gefunden." });
+    const view = cockpitView(db, req.params.projectId, { tage: req.query.tage, produktDbPfad: produktDbPfad(db, env, req.params.projectId) });
+    return { ...view, kanalStatus: { ...view.kanalStatus, laeuft: hasActiveJob(db, req.params.projectId, "kanal.stats") } };
+  });
+
+  /** Die Kanalzahlen jetzt holen, statt auf den Tagestakt zu warten. */
+  r.post("/api/mp/projects/:projectId/kanal-stats/run", { schema: { params: P, response: { 202: s.Job, 400: s.ErrorBody, 409: s.ErrorBody } } }, async (req, reply) => {
+    if (!workerAlive(db)) return reply.code(400).send({ detail: "Der Worker läuft nicht (app-marketing-pilot-worker)." });
+    if (hasActiveJob(db, req.params.projectId, "kanal.stats")) return reply.code(409).send({ detail: "Es läuft bereits ein Abruf." });
+    const job = enqueueJob(db, { projectId: req.params.projectId, kind: "kanal.stats", payload: { projectId: req.params.projectId }, steps: KANAL_STEPS });
+    return reply.code(202).send(getJob(db, job.id)!);
   });
 
   r.get("/api/mp/projects/:projectId/insights/snippet", { schema: { params: P, response: { 200: z.object({ snippet: z.string(), webhookUrl: z.string(), tokenConfigured: z.boolean() }) } } }, async (req) => {

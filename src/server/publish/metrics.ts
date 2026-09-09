@@ -19,7 +19,7 @@
  */
 import { and, eq } from "drizzle-orm";
 import * as t from "../db/schema.js";
-import { parseJson, toJson, type Db } from "../db/index.js";
+import { newId, parseJson, toJson, type Db } from "../db/index.js";
 
 const GRAPH = "https://graph.facebook.com/v21.0";
 const TIMEOUT = 30_000;
@@ -72,7 +72,7 @@ const IG_SPARSAM = ["reach", "likes", "comments"];
 // Mediums und Klicks; eine eindeutige Reichweite je Beitrag gibt es nicht mehr.
 const FB_METRIKEN = ["post_media_view", "post_clicks"];
 
-interface Graph { data?: { name?: string; values?: { value?: unknown }[] }[]; error?: { message?: string; code?: number } }
+interface Graph { data?: { name?: string; values?: { value?: unknown }[]; total_value?: { value?: unknown } }[]; error?: { message?: string; code?: number } }
 
 async function graph(f: typeof fetch, url: string): Promise<Graph> {
   const res = await f(url, { signal: AbortSignal.timeout(TIMEOUT) });
@@ -85,7 +85,8 @@ async function graph(f: typeof fetch, url: string): Promise<Graph> {
 export function flach(body: Graph): Record<string, number> {
   const out: Record<string, number> = {};
   for (const e of body.data ?? []) {
-    const wert = e.values?.[0]?.value;
+    // Instagram und Facebook antworten mit `values`, Threads mit `total_value`.
+    const wert = e.values?.[0]?.value ?? e.total_value?.value;
     if (e.name && typeof wert === "number") out[e.name] = wert;
   }
   return out;
@@ -138,6 +139,32 @@ export async function facebookMetriken(postId: string, token: string, fetchImpl:
   };
 }
 
+const THREADS = "https://graph.threads.net/v1.0";
+
+/**
+ * Threads-Beiträge.
+ *
+ * Eigener Host, eigenes Token, und die Zahlen kommen als `total_value` statt
+ * als Zeitreihe. „Views" ist hier die Wiedergabe des Beitrags — anders als auf
+ * Kontoebene, wo dasselbe Wort die Profilaufrufe meint. Eine Reichweite je
+ * Beitrag kennt Threads nicht.
+ */
+export async function threadsMetriken(mediaId: string, token: string, fetchImpl: typeof fetch = fetch): Promise<PostMetrics> {
+  const body = await graph(fetchImpl, `${THREADS}/${mediaId}/insights?metric=views,likes,replies,reposts,quotes,shares&access_token=${encodeURIComponent(token)}`);
+  const roh = flach(body);
+  return {
+    reichweite: null,
+    aufrufe: zahl(roh["views"]),
+    likes: zahl(roh["likes"]),
+    kommentare: zahl(roh["replies"]),
+    saves: null,
+    // Reposts und Zitate sind beides Weitergaben; getrennt anzuzeigen hilft
+    // niemandem, der drei Plattformen nebeneinander liest.
+    shares: [roh["reposts"], roh["quotes"], roh["shares"]].reduce<number | null>((s, v) => (typeof v === "number" ? (s ?? 0) + v : s), null),
+    roh, quelle: "api",
+  };
+}
+
 /**
  * Welche Einträge einen Abruf brauchen.
  *
@@ -160,11 +187,53 @@ export function faelligeMetriken(db: Db, projectId: string, now = new Date()): (
 export function schreibeMetriken(db: Db, id: string, m: PostMetrics, now = new Date()): void {
   db.update(t.mpScheduledPosts).set({ metrics: toJson(m), metricsAt: now.toISOString() })
     .where(eq(t.mpScheduledPosts.id, id)).run();
+  schreibeVerlauf(db, id, m, now);
+}
+
+/**
+ * Einen Punkt in den Verlauf legen — höchstens einen je Beitrag und Tag.
+ *
+ * Der Stand in `mp_scheduled_posts` wird bei jedem Abruf überschrieben; ohne
+ * diese Spur ließe sich nie sagen, ob ein Beitrag am ersten Tag lief oder erst
+ * eine Woche später. Gescheiterte Abrufe kommen nicht hinein: eine Lücke ist
+ * ehrlicher als eine Null.
+ */
+export function schreibeVerlauf(db: Db, postId: string, m: PostMetrics, now = new Date()): void {
+  if (m.fehler) return;
+  const werte = { reichweite: m.reichweite, aufrufe: m.aufrufe, likes: m.likes, kommentare: m.kommentare, saves: m.saves, shares: m.shares };
+  if (Object.values(werte).every((v) => v === null || v === undefined)) return;
+  const tag = now.toISOString().slice(0, 10);
+  const vorhanden = db.select().from(t.mpPostVerlauf).where(eq(t.mpPostVerlauf.postId, postId)).all()
+    .find((r) => r.gemessenAm.slice(0, 10) === tag);
+  if (vorhanden) db.update(t.mpPostVerlauf).set({ werte: toJson(werte), gemessenAm: now.toISOString() }).where(eq(t.mpPostVerlauf.id, vorhanden.id)).run();
+  else db.insert(t.mpPostVerlauf).values({ id: newId(), postId, gemessenAm: now.toISOString(), werte: toJson(werte) }).run();
+}
+
+/**
+ * Was Meta meldet, in einem Satz, der weiterhilft.
+ *
+ * Die Rohmeldungen sind für Entwickler geschrieben und stehen sonst in voller
+ * Länge in der Tabelle: „Unsupported get request. Object with ID '1784…' does
+ * not exist, cannot be loaded due to missing permissions…" — dahinter steckt
+ * fast immer eine Story, die nach 24 Stunden samt ihren Zahlen verschwunden
+ * ist. Übersetzt wird beim **Lesen**, damit auch alte Einträge davon
+ * profitieren; der Rohtext bleibt in der Datenbank.
+ */
+export function fehlerKlartext(text: string): string {
+  if (!text) return "";
+  if (/does not exist|cannot be loaded/i.test(text)) return "Nicht mehr abrufbar — Stories verschwinden nach 24 Stunden, ihre Zahlen mit ihnen.";
+  if (/not enough viewers/i.test(text)) return "Noch zu wenige Zuschauer — Meta zeigt Zahlen erst ab einer Mindestgröße.";
+  if (/instagram_manage_insights|read_insights|permission/i.test(text)) return "Dem Zugang fehlt ein Recht: Instagram braucht instagram_manage_insights, die Seite read_insights.";
+  if (/expired|session has been invalidated|access token/i.test(text)) return "Der Zugang ist abgelaufen — Token neu holen und auf der Kanäle-Seite eintragen.";
+  return text.length > 160 ? `${text.slice(0, 157)}…` : text;
 }
 
 export function leseMetriken(row: { metrics: string }): PostMetrics | null {
   const m = parseJson<Partial<PostMetrics>>(row.metrics, {});
-  return Object.keys(m).length ? { ...LEERE_METRIKEN, ...m } : null;
+  if (!Object.keys(m).length) return null;
+  const out: PostMetrics = { ...LEERE_METRIKEN, ...m };
+  if (out.fehler) out.fehler = fehlerKlartext(out.fehler);
+  return out;
 }
 
 export interface MetrikContext {
@@ -190,7 +259,8 @@ export async function holeMetriken(ctx: MetrikContext, projectId: string): Promi
     try {
       const m = row.platform === "instagram" ? await instagramMetriken(row.providerRef!, token, f)
         : row.platform === "facebook" ? await facebookMetriken(row.providerRef!, token, f)
-          : null;
+          : row.platform === "threads" ? await threadsMetriken(row.providerRef!, token, f)
+            : null;
       if (!m) continue;
       schreibeMetriken(ctx.db, row.id, m, now);
       geholt++;

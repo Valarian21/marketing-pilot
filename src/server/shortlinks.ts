@@ -1,9 +1,9 @@
 /** Short links: one per piece, created when the publish package is built. A post carries `https://…/go/ab12cd`
  *  instead of a 150-character UTM URL; the redirect keeps the UTM parameters and counts the click. */
 import crypto from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import * as t from "./db/schema.js";
-import { nowIso, type Db } from "./db/index.js";
+import { newId, nowIso, type Db } from "./db/index.js";
 
 const ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789";   // no 0/o/1/l/i - the code is read from a screen or typed from a video
 
@@ -32,7 +32,28 @@ export function resolveShortlink(db: Db, code: string): string | null {
   const row = db.select().from(t.mpShortlinks).where(eq(t.mpShortlinks.code, code)).get();
   if (!row) return null;
   db.update(t.mpShortlinks).set({ clicks: sql`${t.mpShortlinks.clicks} + 1`, lastClickAt: nowIso() }).where(eq(t.mpShortlinks.code, code)).run();
+  if (row.projectId) zaehleTagesklick(db, row.projectId, row.pieceId, code);
   return row.target;
+}
+
+/**
+ * Denselben Klick noch einmal zählen, diesmal mit Datum.
+ *
+ * `mp_shortlinks.clicks` ist ein Gesamtstand und beantwortet nicht die Frage,
+ * die in der Übersicht steht: an welchem Tag hat ein Beitrag Leute auf die
+ * Seite gebracht? Eine Zeile je Tag und Kurzlink genügt dafür.
+ */
+export function zaehleTagesklick(db: Db, projectId: string, pieceId: string | null, code: string, now = new Date()): void {
+  const tag = berlinTag(now);
+  const vorhanden = db.select().from(t.mpKlickTage)
+    .where(and(eq(t.mpKlickTage.code, code), eq(t.mpKlickTage.tag, tag))).get();
+  if (vorhanden) db.update(t.mpKlickTage).set({ klicks: vorhanden.klicks + 1 }).where(eq(t.mpKlickTage.id, vorhanden.id)).run();
+  else db.insert(t.mpKlickTage).values({ id: newId(), projectId, pieceId, code, tag, klicks: 1 }).run();
+}
+
+/** Kalendertag in Europe/Berlin — dieselbe Rechnung wie bei den Produktzahlen. */
+export function berlinTag(d: Date): string {
+  return new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Berlin", year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
 }
 
 export function clicksByPiece(db: Db, projectId: string): Map<string, number> {

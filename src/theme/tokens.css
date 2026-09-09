@@ -55,6 +55,22 @@
   --mp-pill-progress-bg: #E2EAF2; --mp-pill-progress-fg: #2E5170;
   --mp-pill-kind-bg: transparent; --mp-pill-kind-fg: #6B7079;
 
+  /* Diagrammfarben (Data-Viz-Regeln, Slots 1–3 gegen weiße und dunkle Fläche geprüft:
+     kategoriale Identität je Kanal, feste Reihenfolge, nie umsortiert — Instagram 1,
+     Facebook 2, Threads 3. Weitere Kanäle bekommen keine vierte Farbe, sondern Grau. */
+  --mp-serie-1: #2a78d6;
+  --mp-serie-2: #eb6834;
+  --mp-serie-3: #1baf7a;
+  --mp-serie-rest: #8C9098;
+  /* Ordinale Rampe (eine Farbfamilie, hell → dunkel) für Stufen: Trichter, Ränge. */
+  --mp-stufe-1: #86b6ef;
+  --mp-stufe-2: #5598e7;
+  --mp-stufe-3: #2a78d6;
+  --mp-stufe-4: #256abf;
+  --mp-stufe-5: #184f95;
+  /* Fläche unter einer Linie: ein Hauch, kein Block. */
+  --mp-flaeche: 0.12;
+
   /* Form */
   --mp-radius: 8px;
   --mp-radius-sm: 6px;
@@ -107,6 +123,17 @@
     --mp-pill-progress-bg: #1D2C3B; --mp-pill-progress-fg: #8FB4D8;
     --mp-pill-kind-bg: transparent; --mp-pill-kind-fg: #A3A7AD;
 
+    --mp-serie-1: #3987e5;
+    --mp-serie-2: #d95926;
+    --mp-serie-3: #199e70;
+    --mp-serie-rest: #7C8087;
+    --mp-stufe-1: #86b6ef;
+    --mp-stufe-2: #5598e7;
+    --mp-stufe-3: #3987e5;
+    --mp-stufe-4: #256abf;
+    --mp-stufe-5: #184f95;
+    --mp-flaeche: 0.18;
+
     --mp-shadow-float: 0 4px 16px rgba(0, 0, 0, 0.45), 0 1px 3px rgba(0, 0, 0, 0.35);
   }
 }
@@ -142,6 +169,17 @@
   --mp-pill-todo-bg: #262A2F;   --mp-pill-todo-fg: #B5B9BF;
   --mp-pill-progress-bg: #1D2C3B; --mp-pill-progress-fg: #8FB4D8;
   --mp-pill-kind-bg: transparent; --mp-pill-kind-fg: #A3A7AD;
+
+  --mp-serie-1: #3987e5;
+  --mp-serie-2: #d95926;
+  --mp-serie-3: #199e70;
+  --mp-serie-rest: #7C8087;
+  --mp-stufe-1: #86b6ef;
+  --mp-stufe-2: #5598e7;
+  --mp-stufe-3: #3987e5;
+  --mp-stufe-4: #256abf;
+  --mp-stufe-5: #184f95;
+  --mp-flaeche: 0.18;
 
   --mp-shadow-float: 0 4px 16px rgba(0, 0, 0, 0.45), 0 1px 3px rgba(0, 0, 0, 0.35);
 }

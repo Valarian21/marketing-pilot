@@ -363,3 +363,65 @@ export const mpScheduledPosts = sqliteTable("mp_scheduled_posts", {
   metricsAt: text("metrics_at"),
   createdAt: createdAt(),
 }, (t) => [index("mp_scheduled_status").on(t.status, t.scheduledAt), index("mp_scheduled_project").on(t.projectId)]);
+
+// --- Zahlen im Zeitverlauf (Übersicht) -----------------------------------------
+
+/**
+ * Konto-Zahlen je Kanal und Tag — Follower, Aufrufe, Reichweite, Profilaufrufe.
+ *
+ * Der Unterschied zu `mp_scheduled_posts.metrics`: dort steht, wie ein
+ * **einzelner Beitrag** lief, hier, wie der **Kanal** läuft. Beides zusammen
+ * beantwortet erst die Frage „wächst der Kanal?" — ein Konto kann Aufrufe
+ * bekommen, ohne dass der Pilot an dem Tag etwas gepostet hat (Suche, Profil,
+ * alte Beiträge), und ein starker Beitrag zeigt sich hier als Ausschlag.
+ *
+ * Warum eigene Tabelle statt eines API-Aufrufs beim Anzeigen: Meta gibt
+ * Tageswerte nur rückwirkend etwa 30 Tage heraus und `views`/`profile_views`
+ * nur als Summe über ein Zeitfenster. Wer den Verlauf über Monate sehen will,
+ * muss ihn selbst mitschreiben. `tag` ist der Tag im Raster der Plattform
+ * (Meta rechnet in der Zeitzone des Kontos), `werte` ein flaches JSON mit den
+ * Feldern aus `KanalWerte` — je Plattform sind andere davon gefüllt.
+ */
+export const mpKanalStats = sqliteTable("mp_kanal_stats", {
+  id: id(),
+  projectId: projectRef(),
+  platform: text("platform").notNull(),
+  /** YYYY-MM-DD */
+  tag: text("tag").notNull(),
+  werte: text("werte").notNull().default("{}"),
+  /** api | hand */
+  quelle: text("quelle").notNull().default("api"),
+  abgerufenAt: text("abgerufen_at").notNull(),
+}, (t) => [index("mp_kanal_stats_key").on(t.projectId, t.platform, t.tag), index("mp_kanal_stats_tag").on(t.tag)]);
+
+/**
+ * Der Verlauf eines Beitrags: jeder Metrik-Abruf legt hier einen Punkt ab.
+ *
+ * `mp_scheduled_posts.metrics` hält nur den letzten Stand — damit lässt sich
+ * nicht sagen, ob ein Reel am ersten Tag 200 Aufrufe hatte und dann stehen
+ * blieb oder erst nach einer Woche zu laufen begann. Die Zeile ist winzig und
+ * entsteht höchstens einmal am Tag je Beitrag.
+ */
+export const mpPostVerlauf = sqliteTable("mp_post_verlauf", {
+  id: id(),
+  postId: text("post_id").notNull().references(() => mpScheduledPosts.id, { onDelete: "cascade" }),
+  gemessenAm: text("gemessen_am").notNull(),
+  werte: text("werte").notNull().default("{}"),
+}, (t) => [index("mp_post_verlauf_post").on(t.postId, t.gemessenAm)]);
+
+/**
+ * Kurzlink-Klicks je Tag.
+ *
+ * `mp_shortlinks.clicks` zählt nur nach oben; wann geklickt wurde, ging bisher
+ * verloren. Für die Übersicht ist genau das die interessante Zahl: Aufrufe auf
+ * der Plattform gegen Klicks auf die Seite, Tag für Tag.
+ */
+export const mpKlickTage = sqliteTable("mp_klick_tage", {
+  id: id(),
+  projectId: text("project_id").notNull(),
+  pieceId: text("piece_id"),
+  code: text("code").notNull(),
+  /** YYYY-MM-DD in Europe/Berlin — dieselbe Rechnung wie bei den Produktzahlen. */
+  tag: text("tag").notNull(),
+  klicks: integer("klicks").notNull().default(0),
+}, (t) => [index("mp_klick_tage_key").on(t.projectId, t.tag), index("mp_klick_tage_code").on(t.code, t.tag)]);

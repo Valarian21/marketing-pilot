@@ -70,3 +70,14 @@ export function unavailableStatus(db: Db, env: Env, projectId: string): ProductD
     sourceLastPriceRun: null, imageCacheFiles: 0, imageCacheBytes: 0,
   };
 }
+
+/**
+ * Pfad zum Schnappschuss der Produktdatenbank — oder `undefined`, wenn das
+ * Projekt keine Datenquelle hat oder die Datei fehlt. Die Übersicht liest die
+ * Geschäftszahlen daraus; ohne sie zeigt sie nur die Kanalseite und sagt warum.
+ */
+export function produktDbPfad(db: Db, env: Env, projectId: string): string | undefined {
+  if (loadDataSource(db, projectId).provider !== "binderplan") return undefined;
+  const p = path.resolve(ROOT, env.MP_BINDERPLAN_DB);
+  return fs.existsSync(p) ? p : undefined;
+}
