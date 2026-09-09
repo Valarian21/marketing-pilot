@@ -56,6 +56,12 @@ export function kurzerGrund(fehler: string): string {
   return m?.[1] ?? fehler.slice(0, 120);
 }
 
+/** Ein Stück auf das reduzieren, was eine Liste zeigt — siehe `StueckKurz`. */
+const kurz = (p: s.ContentPiece): s.StueckKurz => ({
+  id: p.id, title: p.title, format: p.format, channel: p.channel, status: p.status,
+  hatDateien: p.assets.length > 0, updatedAt: p.updatedAt,
+});
+
 export function todayView(db: Db, projectId: string, opts?: { now?: Date }): s.TodayView {
   const plan = currentVersion(db, projectId);
   const project = db.select({ createdAt: t.mpProjects.createdAt }).from(t.mpProjects).where(eq(t.mpProjects.id, projectId)).get();
@@ -106,14 +112,14 @@ export function todayView(db: Db, projectId: string, opts?: { now?: Date }): s.T
     const platform = String(p.meta["platform"] ?? platformKey(p.channel) ?? "other");
     const link = channelLink(p.channel || platform, profiles);
     const compose = deepLinkFor(platform);
-    return { piece: p, platform, composeLink: compose?.url ?? null, composeLabel: compose?.label ?? null, profileLink: link.url, appOnly: link.appOnly };
+    return { piece: kurz(p), platform, composeLink: compose?.url ?? null, composeLabel: compose?.label ?? null, profileLink: link.url, appOnly: link.appOnly };
   });
   const leads = listLeads(db, projectId).filter((l) => l.status === "new" || l.status === "drafted");
   const weekTasks = tasks.filter((x) => weekOfTask(x) === thisWeek);
   const kit = loadBrandKit(db, projectId);
   return {
     startDate, week: thisWeek, weekPlanned: week !== null && week >= 1,
-    review: pieces.filter((p) => p.status === "review"),
+    review: pieces.filter((p) => p.status === "review").map(kurz),
     toPost, eingeplant, gescheitert,
     leads: { count: leads.length, top: leads.slice(0, 5) },
     myTasks: tasks.filter((x) => x.assignedTo === "human" && due(x) && x.status !== "review"),

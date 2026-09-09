@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 import type { ContentPiece, Job, VideoAction, VideoScript, VideoView } from "../../shared/schemas.js";
 import { api } from "../api.js";
+import { jobName } from "../../shared/labels.js";
 import { Button, Card, Notice, PageHeader, Pill, fmtDateTime, type PillKind } from "../components/ui.js";
 import { ProjectNav } from "../components/ProjectNav.js";
 import { ReviseBox, fmtUsd } from "../components/Revise.js";
@@ -140,9 +141,9 @@ export function VideoPage() {
 function JobCard({ job }: { job: Job }) {
   return (
     <Card className="mp-steps">
-      <div className="mp-card-head"><h2>Render-Job</h2><Pill kind={job.status === "done" ? "done" : job.status === "failed" ? "review" : job.status === "running" ? "progress" : "todo"}>{job.status}</Pill></div>
+      <div className="mp-card-head"><h2>Render-Job</h2><Pill kind={job.status === "done" ? "done" : job.status === "failed" ? "review" : job.status === "running" ? "progress" : "todo"}>{jobName(job.status)}</Pill></div>
       <ol className="mp-step-list">{job.steps.map((st) => (
-        <li key={st.name} className={`mp-step mp-step--${st.status}`}><div className="mp-step-main"><Pill kind={STEP_PILL[st.status] ?? "todo"}>{st.status}</Pill><span className="mp-step-name">{STEP_LABEL[st.name] ?? st.name}</span><span className="mp-muted mp-step-summary">{st.detail}</span></div></li>
+        <li key={st.name} className={`mp-step mp-step--${st.status}`}><div className="mp-step-main"><Pill kind={STEP_PILL[st.status] ?? "todo"}>{jobName(st.status)}</Pill><span className="mp-step-name">{STEP_LABEL[st.name] ?? st.name}</span><span className="mp-muted mp-step-summary">{st.detail}</span></div></li>
       ))}</ol>
       {job.error && <Notice kind="bad">{job.error}</Notice>}
     </Card>

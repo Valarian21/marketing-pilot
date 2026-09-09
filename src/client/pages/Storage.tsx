@@ -2,6 +2,7 @@
 import { Fragment, useCallback, useEffect, useState } from "react";
 import { Link } from "react-router";
 import { api } from "../api.js";
+import { formatName, statusName } from "../../shared/labels.js";
 import { Blaettern, Button, Card, Notice, PageHeader, Pill, Stat, useSeiten } from "../components/ui.js";
 
 interface StorageFile { path: string; bytes: number; kind: string; assetId: string | null; mtime: string }
@@ -9,9 +10,6 @@ interface StoragePiece { pieceId: string; title: string; format: string; status:
 interface StorageProject { projectId: string; name: string; bytes: number; pieces: StoragePiece[]; otherBytes: number }
 interface StorageView { disk: { totalBytes: number; freeBytes: number; usedBytes: number; path: string }; dataDirBytes: number; dbBytes: number; projects: StorageProject[]; orphanBytes: number }
 
-/** Status auf Deutsch — „rejected" ist eine Datenbankkennung, kein Wort für ein UI. */
-const STATUS_LABEL: Record<string, string> = { draft: "Entwurf", review: "in Freigabe", approved: "freigegeben", published: "veröffentlicht", rejected: "abgelehnt" };
-const FORMAT_LABEL: Record<string, string> = { text: "Text", carousel: "Carousel", pin: "Pin", image: "Bild", directory_entry: "Verzeichnis", article: "Artikel", video: "Video" };
 export const fmtBytes = (b: number): string => (b >= 1e9 ? `${(b / 1e9).toFixed(2)} GB` : b >= 1e6 ? `${(b / 1e6).toFixed(1)} MB` : b >= 1e3 ? `${Math.round(b / 1e3)} KB` : `${b} B`);
 
 export function StoragePage() {
@@ -74,7 +72,7 @@ function ProjektSpeicher({ p, busy, loeschen, run }: {
               <Fragment key={pc.pieceId}>
                 <tr>
                   <td><button type="button" className="mp-linkbtn" onClick={() => setOpen(open === pc.pieceId ? null : pc.pieceId)}>{pc.title}</button> <Link className="mp-small" to={`/projects/${p.projectId}/review?piece=${pc.pieceId}`}>öffnen</Link></td>
-                  <td><Pill kind="kind">{FORMAT_LABEL[pc.format] ?? pc.format}</Pill></td><td className="mp-small">{STATUS_LABEL[pc.status] ?? pc.status}</td>
+                  <td><Pill kind="kind">{formatName(pc.format)}</Pill></td><td className="mp-small">{statusName(pc.status)}</td>
                   <td className="mp-num-cell">{fmtBytes(pc.bytes)}</td>
                   <td className="mp-inline">{pc.format === "video" && <><Button disabled={busy !== null} onClick={() => loeschen(pc, "intermediates")}>Zwischendateien</Button><Button disabled={busy !== null} onClick={() => loeschen(pc, "recordings")}>Aufnahmen</Button></>}<Button variant="danger" disabled={busy !== null} onClick={() => loeschen(pc, "all")}>Alles</Button></td>
                 </tr>

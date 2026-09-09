@@ -5,13 +5,28 @@ import { api } from "../api.js";
 import { channelLink, type ChannelProfile } from "../../shared/channels.js";
 
 const cache = new Map<string, ChannelProfile[]>();
+/**
+ * Die **laufende** Anfrage, nicht nur ihr Ergebnis.
+ *
+ * Der Zwischenspeicher griff erst, wenn die erste Antwort da war. Auf der alten
+ * Startseite wurden 118 Kanalnamen gleichzeitig gezeichnet — und stellten 118
+ * identische Anfragen, weil keine davon fertig war, als die nächste startete
+ * (gemessen am 09.09.2026: 155 API-Aufrufe für eine Seite).
+ */
+const laufend = new Map<string, Promise<ChannelProfile[]>>();
 const listeners = new Set<() => void>();
 
 export async function loadProfiles(projectId: string, force = false): Promise<ChannelProfile[]> {
   if (!force && cache.has(projectId)) return cache.get(projectId)!;
-  const p = await api<ChannelProfile[]>(`/projects/${projectId}/profiles`).catch(() => [] as ChannelProfile[]);
-  cache.set(projectId, p);
-  listeners.forEach((l) => l());
+  if (!force) { const offen = laufend.get(projectId); if (offen) return offen; }
+  const p = api<ChannelProfile[]>(`/projects/${projectId}/profiles`).catch(() => [] as ChannelProfile[])
+    .then((profile) => {
+      cache.set(projectId, profile);
+      laufend.delete(projectId);
+      listeners.forEach((l) => l());
+      return profile;
+    });
+  laufend.set(projectId, p);
   return p;
 }
 

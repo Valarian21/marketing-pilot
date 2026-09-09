@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router";
 import type { PipelineSlot, PipelineView } from "../../shared/schemas.js";
 import { api } from "../api.js";
+import { formatName } from "../../shared/labels.js";
 import { Button, Card, Notice, PageHeader } from "../components/ui.js";
 import { ProjectNav } from "../components/ProjectNav.js";
 import { ChannelTag } from "../components/ChannelLink.js";
@@ -24,10 +25,6 @@ const STATE: Record<PipelineSlot["state"], { label: string; kind: string }> = {
   failed: { label: "fehlgeschlagen", kind: "fehler" },
 };
 
-const FORMAT: Record<string, string> = {
-  data_carousel: "Carousel", data_reel: "Reel", carousel: "Carousel", story: "Story",
-  showcase_carousel: "Showcase", text: "Text", pin: "Pin", video: "Video",
-};
 
 const tagLabel = (date: string): string => new Date(`${date}T12:00:00Z`).toLocaleDateString("de-DE", { weekday: "short", day: "2-digit", month: "2-digit" });
 
@@ -102,7 +99,7 @@ export function PipelinePage() {
                             className={`mp-chip mp-chip--${STATE[s.state].kind}${s.missed && s.state === "empty" ? " is-verpasst" : ""}`}
                             onClick={() => setSel({ slot: s, platform: row.platform })}>
                             <span className="mp-chip-zeit">{String(s.hour).padStart(2, "0")}</span>
-                            <span className="mp-chip-text">{s.pieceId ? (FORMAT[s.format] ?? s.format) : (s.missed ? "verpasst" : "offen")}</span>
+                            <span className="mp-chip-text">{s.pieceId ? (formatName(s.format)) : (s.missed ? "verpasst" : "offen")}</span>
                           </button>
                         ))}
                       </div>
@@ -125,7 +122,7 @@ export function PipelinePage() {
                 <dt>Kanal</dt><dd><ChannelTag name={sel.platform} projectId={id} className="" /></dd>
                 <dt>Slot</dt><dd>{tagLabel(sel.slot.date)}, {String(sel.slot.hour).padStart(2, "0")}:00 Uhr</dd>
                 {sel.slot.title && <><dt>Stück</dt><dd>{sel.slot.title}</dd></>}
-                {sel.slot.format && <><dt>Format</dt><dd>{FORMAT[sel.slot.format] ?? sel.slot.format}</dd></>}
+                {sel.slot.format && <><dt>Format</dt><dd>{formatName(sel.slot.format)}</dd></>}
                 {sel.slot.error && <><dt>Fehler</dt><dd className="mp-bad">{sel.slot.error}</dd></>}
               </dl>
               <div className="mp-form-actions">

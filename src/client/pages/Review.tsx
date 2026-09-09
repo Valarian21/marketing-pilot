@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import type { ContentPiece } from "../../shared/schemas.js";
 import { api } from "../api.js";
+import { formatName } from "../../shared/labels.js";
 import { Button, Card, Notice, PageHeader, Pill, fmtDateTime, type PillKind } from "../components/ui.js";
 import { ProjectNav } from "../components/ProjectNav.js";
 import { markdownToHtml } from "../../shared/markdown.js";
@@ -17,7 +18,6 @@ import { STAGES, stageAtLeast } from "../../shared/channels.js";
  * Kurzes Format-Etikett vor dem Titel in der Schlange. Ohne das war ein Reel
  * von einem Carousel nicht zu unterscheiden — die Titel sind dieselben.
  */
-const FORMAT_KURZ: Record<string, string> = { data_reel: "Reel", artwork_reel: "Reel", artwork_carousel: "Kunstseite", data_carousel: "Rangliste", showcase_carousel: "Binder", story: "Story" };
 
 const STATUS: Record<ContentPiece["status"], { label: string; kind: PillKind }> = { draft: { label: "Entwurf", kind: "todo" }, review: { label: "in Freigabe", kind: "review" }, approved: { label: "freigegeben", kind: "done" }, published: { label: "veröffentlicht", kind: "done" }, rejected: { label: "abgelehnt", kind: "kind" } };
 
@@ -31,8 +31,32 @@ export function ReviewPage() {
   const [busy, setBusy] = useState(false);
   const [showAll, setShowAll] = useState(false);
 
-  const load = useCallback(async () => { try { setPieces(await api<ContentPiece[]>(`/projects/${id}/content`)); } catch (e) { setError(e instanceof Error ? e.message : "Fehler"); } }, [id]);
+  /**
+   * Geladen wird, was zur Prüfung ansteht — nicht das ganze Archiv.
+   *
+   * Vorher holte diese Seite alle Stücke des Projekts (2,4 MB, 3,5 s) und
+   * suchte im Browser die sechs offenen heraus. „Alle anzeigen" lädt den Rest
+   * nach, und ein per Adresse angesteuertes Stück (`?piece=`) wird einzeln
+   * geholt, falls es nicht in der Warteschlange steht.
+   */
+  const load = useCallback(async () => {
+    try {
+      const offene = await api<ContentPiece[]>(`/projects/${id}/content?status=review`);
+      setPieces((vorher) => {
+        const behalten = vorher.filter((p) => p.status !== "review" && !offene.some((o) => o.id === p.id));
+        return [...offene, ...behalten];
+      });
+    } catch (e) { setError(e instanceof Error ? e.message : "Fehler"); }
+  }, [id]);
   useEffect(() => { void load(); }, [load]);
+
+  // „Alle anzeigen": einmalig das Archiv nachladen.
+  const [archivGeladen, setArchivGeladen] = useState(false);
+  useEffect(() => {
+    if (!showAll || archivGeladen) return;
+    setArchivGeladen(true);
+    api<ContentPiece[]>(`/projects/${id}/content`).then((alle) => setPieces((v) => [...v, ...alle.filter((a) => !v.some((x) => x.id === a.id))])).catch(() => setArchivGeladen(false));
+  }, [showAll, archivGeladen, id]);
   // Die Stufe des Kanals entscheidet, was „Freigeben" hier heißt: selbst posten oder einplanen lassen.
   const profiles = useProfiles(id);
   const stageFor = (p: ContentPiece) => profiles.find((x) => x.platform === String(p.meta["platform"] ?? p.channel).toLowerCase())?.stage ?? "off";
@@ -51,7 +75,21 @@ export function ReviewPage() {
   }, [pieces]);
   const focusId = params.get("piece");
   const current = pieces.find((p) => p.id === focusId) ?? queue[0] ?? null;
+
+  // Ein Stück, das über die Adresse angesteuert wurde (aus Medien, Speicher,
+  // einer Aufgabe), steht nicht zwingend in der Warteschlange — dann einzeln holen.
+  useEffect(() => {
+    if (!focusId || pieces.some((p) => p.id === focusId)) return;
+    api<ContentPiece>(`/content/${focusId}`).then((p) => setPieces((v) => v.some((x) => x.id === p.id) ? v : [...v, p])).catch(() => undefined);
+  }, [focusId, pieces]);
   const bundleId = current ? bundleIdOf(current) : null;
+  // Die Geschwister eines Bündels können bereits einen anderen Status haben
+  // (teilweise freigegeben) und fehlen dann in der schlanken Liste.
+  useEffect(() => {
+    if (!bundleId) return;
+    api<ContentPiece[]>(`/content/${bundleId}/bundle`).then((gruppe) => setPieces((v) => [...v, ...gruppe.filter((g) => !v.some((x) => x.id === g.id))])).catch(() => undefined);
+  }, [bundleId]);
+
   const siblings = useMemo(() => (bundleId ? pieces.filter((p) => bundleIdOf(p) === bundleId).sort((a, b) => (a.id === bundleId ? -1 : b.id === bundleId ? 1 : a.channel.localeCompare(b.channel))) : []), [pieces, bundleId]);
   const idx = current ? queue.findIndex((p) => p.id === current.id || (bundleId !== null && bundleIdOf(p) === bundleId)) : -1;
   useEffect(() => setDraft(null), [current?.id]);
@@ -107,7 +145,7 @@ export function ReviewPage() {
       <ProjectNav id={id} />
       <PageHeader label="Inhalte" title="Freigaben" actions={<span className="mp-label">{queue.length} in der Warteschlange</span>} />
       {error && <Notice kind="bad">{error}</Notice>}
-      {!current && <Card className="mp-empty"><h2>Nichts zu prüfen</h2><p>Entwürfe aus dem Content Studio und aus Agent-Aufgaben landen hier.</p><Link className="mp-btn mp-btn--primary" to={`/projects/${id}/studio`}>Zum Content Studio</Link></Card>}
+      {!current && <Card className="mp-empty"><h2>Nichts zu prüfen</h2><p>Entwürfe aus „Erstellen" und aus Agent-Aufgaben landen hier.</p><Link className="mp-btn mp-btn--primary" to={`/projects/${id}/studio`}>Zum Erstellen</Link></Card>}
       {current && (
         <div className="mp-review">
           <Card className="mp-review-main">
@@ -155,7 +193,7 @@ export function ReviewPage() {
           <aside>
             <Card>
               <div className="mp-card-head"><h2>Warteschlange</h2><button type="button" className="mp-linkbtn mp-small" onClick={() => setShowAll((v) => !v)}>{showAll ? "nur offene" : "alle anzeigen"}</button></div>
-              <ul className="mp-queue">{(showAll ? pieces : queue).map((p) => <li key={p.id} className={p.id === current.id ? "is-current" : ""}><button type="button" className="mp-linkbtn" onClick={() => go(p)}>{FORMAT_KURZ[p.format] && <span className="mp-format-tag">{FORMAT_KURZ[p.format]}</span>}{p.title || p.format}</button><Pill kind={STATUS[p.status].kind}>{STATUS[p.status].label}</Pill></li>)}</ul>
+              <ul className="mp-queue">{(showAll ? pieces : queue).map((p) => <li key={p.id} className={p.id === current.id ? "is-current" : ""}><button type="button" className="mp-linkbtn" onClick={() => go(p)}>{formatName(p.format) && <span className="mp-format-tag">{formatName(p.format)}</span>}{p.title || p.format}</button><Pill kind={STATUS[p.status].kind}>{STATUS[p.status].label}</Pill></li>)}</ul>
             </Card>
           </aside>
         </div>

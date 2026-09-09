@@ -336,10 +336,25 @@ export const PipelineRow = z.object({
 export const PipelineView = z.object({ from: z.string(), days: z.number().int(), today: z.string(), rows: z.array(PipelineRow), withoutSlots: z.array(z.string()) });
 export const AutoScheduled = z.object({ pieceId: z.string(), platform: z.string(), at: z.string().nullable(), note: z.string() });
 
-export const TodayPost = z.object({ piece: ContentPiece, platform: z.string(), composeLink: z.string().nullable(), composeLabel: z.string().nullable(), profileLink: z.string().nullable(), appOnly: z.boolean() });
+/**
+ * Ein Stück, so wie eine Liste es braucht: Name, Art, Kanal, Zustand.
+ *
+ * Ohne Textkörper, ohne Anhänge, ohne `meta` — die Startseite zeigt von jedem
+ * Stück eine Zeile und einen Knopf, holte dafür aber das ganze Stück
+ * (612 KB für eine Seite). Den Text gibt es beim Öffnen: über `/content/:id`
+ * oder das Veröffentlichungs-Paket.
+ */
+export const StueckKurz = z.object({
+  id: Id, title: z.string(), format: ContentFormat, channel: z.string(), status: ContentStatus,
+  /** Ob überhaupt Dateien dranhängen — entscheidet, ob ein Video schon ein Skript hat. */
+  hatDateien: z.boolean().default(false),
+  updatedAt: Iso,
+});
+
+export const TodayPost = z.object({ piece: StueckKurz, platform: z.string(), composeLink: z.string().nullable(), composeLabel: z.string().nullable(), profileLink: z.string().nullable(), appOnly: z.boolean() });
 export const TodayView = z.object({
   startDate: z.string(), week: z.number().int(), weekPlanned: z.boolean(),
-  review: z.array(ContentPiece),
+  review: z.array(StueckKurz),
   /**
    * Was **von Hand** gepostet werden muss: freigegebene Stücke ohne Termin.
    *
@@ -1494,6 +1509,7 @@ export const CockpitView = z.object({
   kanalStatus: z.object({ letzterLauf: Iso.nullable(), laeuft: z.boolean().default(false) }),
 });
 
+export type StueckKurz = z.infer<typeof StueckKurz>;
 export type InsightsView = z.infer<typeof InsightsView>;
 export type WeeklyReport = z.infer<typeof WeeklyReport>;
 export type CockpitView = z.infer<typeof CockpitView>;

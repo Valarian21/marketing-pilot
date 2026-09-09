@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router";
 
 import { api } from "../api.js";
+import { FORMAT_NAMEN, STATUS_NAMEN, formatName, statusName } from "../../shared/labels.js";
 import { Blaettern, Button, Card, EmptyState, Notice, PageHeader, Pill, fmtDateTime, useSeiten } from "../components/ui.js";
 import { PLATFORMS } from "../../shared/channels.js";
 import { fmtUsd } from "../components/Revise.js";
@@ -16,15 +17,9 @@ interface MediaItem { id: string; projectId: string; projectName: string; title:
  * kannte weder Reel noch Story noch Datenrangliste. Wer nach „Reels" filtern
  * wollte, fand nichts, obwohl die Hälfte der Mediathek daraus besteht.
  */
-const FORMAT_LABEL: Record<string, string> = {
-  data_reel: "Reel", artwork_reel: "Kunstseiten-Reel", data_carousel: "Datenrangliste", showcase_carousel: "Binderseiten", artwork_carousel: "Kunstseite", story: "Story",
-  carousel: "Carousel", video: "Video", image: "Bild", pin: "Pin", text: "Text",
-  article: "Artikel", directory_entry: "Verzeichnis", community_reply: "Community-Antwort", ad_creative: "Anzeige",
-};
 
 /** Nur die bewegten Formate — der häufigste Griff und deshalb ein eigener Knopf. */
 const BEWEGT = ["data_reel", "artwork_reel", "video"];
-const STATUS_LABEL: Record<string, string> = { draft: "Entwurf", review: "In Prüfung", approved: "Freigegeben", published: "Veröffentlicht", rejected: "Abgelehnt" };
 const RANGES: { key: string; label: string; ms: number | null }[] = [{ key: "all", label: "Gesamter Zeitraum", ms: null }, { key: "day", label: "Heute", ms: 864e5 }, { key: "week", label: "Letzte 7 Tage", ms: 7 * 864e5 }, { key: "month", label: "Letzte 30 Tage", ms: 30 * 864e5 }];
 
 export function MediaPage() {
@@ -62,10 +57,10 @@ export function MediaPage() {
       <PageHeader label="Inhalte" title="Medien" actions={<span className="mp-label">{sorted.length} Stücke · {fmtUsd(total)} · {fmtBytes(bytes)}</span>} />
       {error && <Notice kind="bad">{error}</Notice>}
       <Card className="mp-form-card"><div className="mp-filters">
-        <label className="mp-field"><span>Art</span><select value={format} onChange={(e) => { setFormat(e.target.value); setNurBewegt(false); }}><option value="">Alle</option>{Object.entries(FORMAT_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></label>
+        <label className="mp-field"><span>Art</span><select value={format} onChange={(e) => { setFormat(e.target.value); setNurBewegt(false); }}><option value="">Alle</option>{Object.entries(FORMAT_NAMEN).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></label>
         <label className="mp-field"><span>Kanal</span><select value={platform} onChange={(e) => setPlatform(e.target.value)}><option value="">Alle</option>{platforms.map((k) => <option key={k} value={k}>{PLATFORMS[k]?.label ?? k}</option>)}</select></label>
         <label className="mp-field"><span>Projekt</span><select value={project} onChange={(e) => setProject(e.target.value)}><option value="">Alle</option>{projects.map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select></label>
-        <label className="mp-field"><span>Status</span><select value={status} onChange={(e) => setStatus(e.target.value)}><option value="">Alle</option>{Object.entries(STATUS_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></label>
+        <label className="mp-field"><span>Status</span><select value={status} onChange={(e) => setStatus(e.target.value)}><option value="">Alle</option>{Object.entries(STATUS_NAMEN).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></label>
         <label className="mp-field"><span>Erstellt</span><select value={range} onChange={(e) => setRange(e.target.value)}>{RANGES.map((r) => <option key={r.key} value={r.key}>{r.label}</option>)}</select></label>
         <label className="mp-field"><span>Sortierung</span><select value={sort} onChange={(e) => setSort(e.target.value as typeof sort)}><option value="created">Neueste zuerst</option><option value="updated">Zuletzt bearbeitet</option><option value="cost">Teuerste zuerst</option><option value="bytes">Größte zuerst</option></select></label>
         <label className="mp-field mp-field--grow"><span>Suche im Titel</span><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="z. B. Onboarding" /></label>
@@ -81,10 +76,10 @@ export function MediaPage() {
         {seiten.aktuell.map((i) => (
           <Card key={i.id} className="mp-media-card">
             <Link to={linkFor(i)} className="mp-media-thumb" aria-label={i.title}>
-              {i.thumbUrl ? <img src={i.thumbUrl} alt="" loading="lazy" /> : <span className="mp-media-thumb-fallback">{FORMAT_LABEL[i.format] ?? i.format}</span>}
+              {i.thumbUrl ? <img src={i.thumbUrl} alt="" loading="lazy" /> : <span className="mp-media-thumb-fallback">{formatName(i.format)}</span>}
             </Link>
             <div className="mp-media-body">
-              <div className="mp-inline"><Pill kind="kind">{FORMAT_LABEL[i.format] ?? i.format}</Pill><span className="mp-small mp-muted">{STATUS_LABEL[i.status] ?? i.status}{i.humanEdited ? " · bearbeitet" : ""}</span></div>
+              <div className="mp-inline"><Pill kind="kind">{formatName(i.format)}</Pill><span className="mp-small mp-muted">{statusName(i.status)}{i.humanEdited ? " · bearbeitet" : ""}</span></div>
               <Link to={linkFor(i)} className="mp-media-title">{i.title || "(ohne Titel)"}</Link>
               <div className="mp-small mp-muted">{i.projectName} · {i.platform ? <ChannelTag name={i.platform} projectId={i.projectId} className="" /> : "–"}</div>
               <div className="mp-small mp-muted">Erstellt {fmtDateTime(i.createdAt)}<br />Bearbeitet {fmtDateTime(i.updatedAt)}{i.renderedAt && <><br />Gerendert {fmtDateTime(i.renderedAt)}</>}</div>

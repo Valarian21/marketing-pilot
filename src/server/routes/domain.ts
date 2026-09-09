@@ -4,7 +4,7 @@
  * API surface, its Zod contracts and the client typing are fixed from Shot 0.
  */
 import { z } from "zod";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import type { Db } from "../db/index.js";
@@ -35,9 +35,19 @@ export function domainRoutes(app: FastifyInstance, db: Db): void {
   r.get("/api/mp/projects/:projectId/today", { schema: { params: P, response: { 200: s.TodayView } } },
     async (req) => todayView(db, req.params.projectId));
 
-  r.get("/api/mp/projects/:projectId/content", { schema: { params: P, response: { 200: z.array(s.ContentPiece) } } },
-    async (req) => db.select().from(t.mpContentPieces).where(eq(t.mpContentPieces.projectId, req.params.projectId))
-      .orderBy(desc(t.mpContentPieces.createdAt)).all()
+  /**
+   * Die Stücke eines Projekts.
+   *
+   * `status` und `limit` sind nicht Kosmetik: ohne Filter lieferte diese Route
+   * am 09.09.2026 alle 553 Stücke mit Volltext und Anhängen — 2,4 MB in 3,5 s,
+   * und die Freigabe-Seite lud das, um daraus die sechs offenen herauszusuchen.
+   */
+  r.get("/api/mp/projects/:projectId/content", {
+    schema: { params: P, querystring: z.object({ status: s.ContentStatus.optional(), limit: z.coerce.number().int().min(1).max(1000).default(500) }), response: { 200: z.array(s.ContentPiece) } },
+  },
+    async (req) => db.select().from(t.mpContentPieces)
+      .where(req.query.status ? and(eq(t.mpContentPieces.projectId, req.params.projectId), eq(t.mpContentPieces.status, req.query.status)) : eq(t.mpContentPieces.projectId, req.params.projectId))
+      .orderBy(desc(t.mpContentPieces.createdAt)).limit(req.query.limit).all()
       .map((x) => ({ ...x, format: x.format as s.ContentPiece["format"], status: x.status as s.ContentPiece["status"],
         assets: arr(x.assets), utm: obj(x.utm), meta: obj(x.meta), costUsd: 0 }))
       .map((x, _i, all) => { const c = pieceCosts(db, all.map((y) => y.id)); return { ...x, costUsd: Math.round((c.get(x.id) ?? 0) * 10000) / 10000 }; }));

@@ -10,15 +10,14 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router";
-import type { ContentPiece, Project, PublishView, Task, TodayView } from "../../shared/schemas.js";
+import type { Project, PublishView, StueckKurz, Task, TodayView } from "../../shared/schemas.js";
 import { api } from "../api.js";
 import { Button, Card, Notice, PageHeader, Pill, type PillKind } from "../components/ui.js";
 import { ProjectNav } from "../components/ProjectNav.js";
 import { ChannelTag } from "../components/ChannelLink.js";
 import { PLATFORMS, STAGES, STAGE_ORDER, type ChannelStage } from "../../shared/channels.js";
+import { aufgabenName, formatName, statusName } from "../../shared/labels.js";
 
-const FORMAT_LABEL: Record<string, string> = { text: "Text-Post", carousel: "Carousel", pin: "Pin", image: "Bild", ad_creative: "Ad", article: "Artikel", directory_entry: "Verzeichnis", video: "Video", community_reply: "Antwort" };
-const TYPE_LABEL: Record<Task["type"], string> = { research: "Recherche", strategy: "Strategie", content: "Content", publish: "Posten", community: "Community", ads: "Ads", measure: "Messen" , setup: "Einrichtung" };
 /** Höchstens so viele Zeilen je Liste — der Rest hat seine eigene Seite. */
 const MAX = 5;
 const PIECE_PILL: Record<string, PillKind> = { draft: "todo", review: "review", approved: "done", published: "done", rejected: "kind" };
@@ -93,7 +92,7 @@ export function TodayPage() {
     } catch (e) { setError(e instanceof Error ? e.message : "Fehler"); }
     await load();
   };
-  const copyAndOpen = async (p: ContentPiece, url: string | null) => {
+  const copyAndOpen = async (p: StueckKurz, url: string | null) => {
     try { const pkg = await api<{ text: string }>(`/content/${p.id}/package`); await navigator.clipboard.writeText(pkg.text); setCopied(p.id); setTimeout(() => setCopied(null), 2000); } catch { /* clipboard blocked - the package page still has the text */ }
     if (url) window.open(url, "_blank", "noopener");
   };
@@ -130,7 +129,7 @@ export function TodayPage() {
             <div className="mp-today-teil-kopf"><h3>Freigeben <span className="mp-today-count">{v.review.length}</span></h3>{v.review.length > MAX && <Link className="mp-small" to={`/projects/${id}/review`}>alle {v.review.length} ansehen</Link>}</div>
             {v.review.length === 0 ? <p className="mp-muted mp-small">Nichts wartet auf Freigabe.</p> : (
               <ul className="mp-today-list">{v.review.slice(0, MAX).map((p) => (
-                <li key={p.id}><div className="mp-today-main"><span className="mp-today-title">{p.title || FORMAT_LABEL[p.format]}</span><span className="mp-small mp-muted">{FORMAT_LABEL[p.format] ?? p.format} · <ChannelTag name={p.channel} projectId={id} className="" /></span></div><Link className="mp-btn mp-btn--primary" to={p.format === "video" && !p.assets.length ? `/projects/${id}/studio/video?piece=${p.id}` : `/projects/${id}/review?piece=${p.id}`}>Prüfen</Link></li>
+                <li key={p.id}><div className="mp-today-main"><span className="mp-today-title">{p.title || formatName(p.format)}</span><span className="mp-small mp-muted">{formatName(p.format)} · <ChannelTag name={p.channel} projectId={id} className="" /></span></div><Link className="mp-btn mp-btn--primary" to={p.format === "video" && !p.hatDateien ? `/projects/${id}/studio/video?piece=${p.id}` : `/projects/${id}/review?piece=${p.id}`}>Prüfen</Link></li>
               ))}</ul>
             )}
           </div>
@@ -140,7 +139,7 @@ export function TodayPage() {
             {v.toPost.length === 0 ? <p className="mp-muted mp-small">{v.eingeplant.anzahl > 0 ? "Nichts, was von Hand gepostet werden müsste." : "Nichts freigegeben, das noch zu posten wäre."}</p> : (
               <ul className="mp-today-list">{v.toPost.slice(0, MAX).map(({ piece: p, composeLink, profileLink, appOnly, platform }) => (
                 <li key={p.id}>
-                  <div className="mp-today-main"><span className="mp-today-title">{p.title || FORMAT_LABEL[p.format]}</span><span className="mp-small mp-muted">{FORMAT_LABEL[p.format] ?? p.format} · <ChannelTag name={p.channel || platform} projectId={id} className="" />{appOnly ? " · Upload per App" : ""}</span></div>
+                  <div className="mp-today-main"><span className="mp-today-title">{p.title || formatName(p.format)}</span><span className="mp-small mp-muted">{formatName(p.format)} · <ChannelTag name={p.channel || platform} projectId={id} className="" />{appOnly ? " · Upload per App" : ""}</span></div>
                   <div className="mp-inline">
                     <Button variant="primary" onClick={() => void copyAndOpen(p, composeLink ?? profileLink)}>{copied === p.id ? "Text kopiert" : `Kopieren & ${PLATFORMS[platform]?.label ?? platform}`}</Button>
                     <Link className="mp-btn" to={`/projects/${id}/publish/${p.id}`}>Paket</Link>
@@ -156,7 +155,7 @@ export function TodayPage() {
               <ul className="mp-today-list">{v.myTasks.slice(0, MAX).map((t) => { const tgt = taskTarget(t); return (
                 <li key={t.id}>
                   <button type="button" className="mp-check" aria-label="Als erledigt markieren" onClick={() => void doneTask(t)} />
-                  <div className="mp-today-main"><span className="mp-today-title">{t.title}</span><span className="mp-small mp-muted">{TYPE_LABEL[t.type]}{t.channel && <> · <ChannelTag name={t.channel} projectId={id} className="" /></>}{t.week < v.week && <> · <span className="mp-over">aus Woche {t.week}</span></>}{t.link && <> · <Pill kind={PIECE_PILL[t.link.status] ?? "todo"}>{t.link.status === "approved" ? "freigegeben" : t.link.status === "review" ? "in Freigabe" : t.link.status === "published" ? "veröffentlicht" : t.link.status}</Pill></>}</span></div>
+                  <div className="mp-today-main"><span className="mp-today-title">{t.title}</span><span className="mp-small mp-muted">{aufgabenName(t.type)}{t.channel && <> · <ChannelTag name={t.channel} projectId={id} className="" /></>}{t.week < v.week && <> · <span className="mp-over">aus Woche {t.week}</span></>}{t.link && <> · <Pill kind={PIECE_PILL[t.link.status] ?? "todo"}>{statusName(t.link.status)}</Pill></>}</span></div>
                   {tgt && <Link className={`mp-btn${t.link ? " mp-btn--primary" : ""}`} to={tgt.to}>{tgt.label}</Link>}
                 </li>
               ); })}</ul>
@@ -210,7 +209,7 @@ export function TodayPage() {
       {v.agentTasks.length > 0 && <Card className="mp-today-agent">
         <div className="mp-card-head"><h2>Der Agent kann jetzt <span className="mp-today-count">{v.agentTasks.length}</span></h2>{v.agentTasks.length > 1 && <Button variant="primary" disabled={busy !== null} onClick={() => void runAll(v.agentTasks)}>{busy === "all" ? "läuft …" : `Alle ${v.agentTasks.length} ausführen`}</Button>}</div>
         <ul className="mp-today-list mp-today-list--compact">{v.agentTasks.slice(0, MAX).map((t) => (
-          <li key={t.id}><div className="mp-today-main"><span className="mp-today-title">{t.title}</span><span className="mp-small mp-muted">{TYPE_LABEL[t.type]}{t.channel && <> · <ChannelTag name={t.channel} projectId={id} className="" /></>} · Ergebnis landet in der Freigabe</span></div><Button disabled={busy !== null} onClick={() => void runOne(t)}>{busy === t.id ? "läuft …" : "Ausführen"}</Button></li>
+          <li key={t.id}><div className="mp-today-main"><span className="mp-today-title">{t.title}</span><span className="mp-small mp-muted">{aufgabenName(t.type)}{t.channel && <> · <ChannelTag name={t.channel} projectId={id} className="" /></>} · Ergebnis landet in der Freigabe</span></div><Button disabled={busy !== null} onClick={() => void runOne(t)}>{busy === t.id ? "läuft …" : "Ausführen"}</Button></li>
         ))}</ul>
         {v.agentTasks.length > MAX && <p className="mp-small mp-muted"><Link to={`/projects/${id}/tasks`}>alle {v.agentTasks.length} ansehen</Link></p>}
       </Card>}

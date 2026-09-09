@@ -1,30 +1,37 @@
 import { Route, Routes } from "react-router";
+import { lazy, Suspense } from "react";
 import { HostProvider, useHost } from "./host.js";
 import { Shell } from "./components/Shell.js";
-import { Notice } from "./components/ui.js";
+
+/**
+ * Nur Anmeldung, Projektliste und Startseite liegen im Hauptbündel; alles
+ * andere wird geholt, wenn es gebraucht wird. Vorher lagen zwanzig Seiten
+ * samt Diagrammen in einer Datei (478 KB).
+ */
 import { LoginPage } from "./pages/Login.js";
 import { ProjectsPage } from "./pages/Projects.js";
 import { TodayPage } from "./pages/Today.js";
-import { AnalysisPage } from "./pages/Analysis.js";
-import { ActivityPage } from "./pages/Activity.js";
-import { SettingsPage } from "./pages/Settings.js";
-import { CommunityPage } from "./pages/Community.js";
-import { InsightsPage } from "./pages/Insights.js";
-import { UebersichtPage } from "./pages/Uebersicht.js";
-import { StudioPage } from "./pages/Studio.js";
-import { SeriesPage } from "./pages/Series.js";
-import { ChannelsPage } from "./pages/Channels.js";
-import { PublishPage } from "./pages/Publish.js";
-import { VideoPage } from "./pages/Video.js";
-import { MusicPage } from "./pages/Music.js";
-import { StrategyPage } from "./pages/Strategy.js";
-import { TasksPage } from "./pages/Tasks.js";
-import { TimelinePage } from "./pages/Timeline.js";
-import { PipelinePage } from "./pages/Pipeline.js";
-import { ReviewPage } from "./pages/Review.js";
+const AnalysisPage = lazy(() => import("./pages/Analysis.js").then((m) => ({ default: m.AnalysisPage })));
+const ActivityPage = lazy(() => import("./pages/Activity.js").then((m) => ({ default: m.ActivityPage })));
+const SettingsPage = lazy(() => import("./pages/Settings.js").then((m) => ({ default: m.SettingsPage })));
+const CommunityPage = lazy(() => import("./pages/Community.js").then((m) => ({ default: m.CommunityPage })));
+const InsightsPage = lazy(() => import("./pages/Insights.js").then((m) => ({ default: m.InsightsPage })));
+const UebersichtPage = lazy(() => import("./pages/Uebersicht.js").then((m) => ({ default: m.UebersichtPage })));
+const StudioPage = lazy(() => import("./pages/Studio.js").then((m) => ({ default: m.StudioPage })));
+const SeriesPage = lazy(() => import("./pages/Series.js").then((m) => ({ default: m.SeriesPage })));
+const ChannelsPage = lazy(() => import("./pages/Channels.js").then((m) => ({ default: m.ChannelsPage })));
+const PublishPage = lazy(() => import("./pages/Publish.js").then((m) => ({ default: m.PublishPage })));
+const VideoPage = lazy(() => import("./pages/Video.js").then((m) => ({ default: m.VideoPage })));
+const MusicPage = lazy(() => import("./pages/Music.js").then((m) => ({ default: m.MusicPage })));
+const StrategyPage = lazy(() => import("./pages/Strategy.js").then((m) => ({ default: m.StrategyPage })));
+const TasksPage = lazy(() => import("./pages/Tasks.js").then((m) => ({ default: m.TasksPage })));
+const TimelinePage = lazy(() => import("./pages/Timeline.js").then((m) => ({ default: m.TimelinePage })));
+const PipelinePage = lazy(() => import("./pages/Pipeline.js").then((m) => ({ default: m.PipelinePage })));
+const ReviewPage = lazy(() => import("./pages/Review.js").then((m) => ({ default: m.ReviewPage })));
+const StoragePage = lazy(() => import("./pages/Storage.js").then((m) => ({ default: m.StoragePage })));
+const MediaPage = lazy(() => import("./pages/Media.js").then((m) => ({ default: m.MediaPage })));
+import { Notice } from "./components/ui.js";
 import { ProjectScoped } from "./pages/ProjectScoped.js";
-import { StoragePage } from "./pages/Storage.js";
-import { MediaPage } from "./pages/Media.js";
 
 function Gate() {
   const { info, loading, error } = useHost();
@@ -33,6 +40,7 @@ function Gate() {
   if (!info.user) return <div className="mp-root"><LoginPage /></div>;
   return (
     <div className="mp-root">
+      <Suspense fallback={<div className="mp-main"><span className="mp-label">Lade…</span></div>}>
       <Routes>
         <Route element={<Shell />}>
           <Route index element={<ProjectsPage autoOpen />} />
@@ -56,7 +64,7 @@ function Gate() {
           <Route path="series" element={<ProjectScoped page="series" title="Serien" />} />
           <Route path="channels" element={<ProjectScoped page="channels" title="Kanäle" />} />
           <Route path="publishing" element={<ProjectScoped page="channels" title="Kanäle" />} />
-          <Route path="studio" element={<ProjectScoped page="studio" title="Content Studio" />} />
+          <Route path="studio" element={<ProjectScoped page="studio" title="Erstellen" />} />
           <Route path="review" element={<ProjectScoped page="review" title="Freigaben" />} />
           <Route path="projects/:id/community" element={<CommunityPage />} />
           <Route path="projects/:id/uebersicht" element={<UebersichtPage />} />
@@ -72,6 +80,7 @@ function Gate() {
           <Route path="*" element={<Notice kind="info">Seite nicht gefunden.</Notice>} />
         </Route>
       </Routes>
+      </Suspense>
     </div>
   );
 }

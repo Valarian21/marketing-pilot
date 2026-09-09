@@ -2,13 +2,13 @@ import { useCallback, useEffect, useMemo, useState, type DragEvent, type FormEve
 import { Link, useParams } from "react-router";
 import type { ContentPiece, Task } from "../../shared/schemas.js";
 import { api } from "../api.js";
+import { AUFGABEN_NAMEN, aufgabenName } from "../../shared/labels.js";
 import { Button, Card, Notice, PageHeader, Pill, type PillKind } from "../components/ui.js";
 import { ProjectNav } from "../components/ProjectNav.js";
 import { ChannelTag } from "../components/ChannelLink.js";
 import { markdownToHtml } from "../../shared/markdown.js";
 import { taskTarget } from "./Today.js";
 
-const TYPE_LABEL: Record<Task["type"], string> = { research: "Recherche", strategy: "Strategie", content: "Content", publish: "Veröffentlichen", community: "Community", ads: "Ads", measure: "Messen", setup: "Einrichtung" };
 const APPROVAL: Record<Task["approvalLevel"], { label: string; kind: PillKind }> = { auto: { label: "auto", kind: "done" }, review: { label: "review", kind: "review" }, human_only: { label: "nur Mensch", kind: "kind" } };
 const fmtDate = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString("de-DE", { weekday: "short", day: "2-digit", month: "2-digit" }) : "");
 
@@ -91,7 +91,7 @@ export function TasksPage() {
       {showForm && (
         <Card className="mp-form-card"><form className="mp-form mp-form--row" onSubmit={(e) => void create(e)}>
           <label className="mp-field"><span>Titel</span><input required value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} /></label>
-          <label className="mp-field mp-field--short"><span>Typ</span><select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>{Object.entries(TYPE_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></label>
+          <label className="mp-field mp-field--short"><span>Typ</span><select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>{Object.entries(AUFGABEN_NAMEN).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></label>
           <label className="mp-field mp-field--short"><span>Woche</span><input type="number" min={1} max={52} value={form.week} onChange={(e) => setForm({ ...form, week: Number(e.target.value) })} /></label>
           <label className="mp-field mp-field--short"><span>Kanal</span><input value={form.channel} onChange={(e) => setForm({ ...form, channel: e.target.value })} /></label>
           <label className="mp-field mp-field--short"><span>Wer</span><select value={form.assignedTo} onChange={(e) => setForm({ ...form, assignedTo: e.target.value })}><option value="human">Ich</option><option value="agent">Agent</option></select></label>
@@ -99,7 +99,7 @@ export function TasksPage() {
         </form></Card>
       )}
       <Card className="mp-form-card"><div className="mp-form mp-form--row">
-        <label className="mp-field mp-field--inline"><span>Typ</span><select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}><option value="alle">alle</option>{Object.entries(TYPE_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></label>
+        <label className="mp-field mp-field--inline"><span>Typ</span><select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}><option value="alle">alle</option>{Object.entries(AUFGABEN_NAMEN).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></label>
         <label className="mp-field mp-field--inline"><span>Zuständig</span><select value={whoFilter} onChange={(e) => setWhoFilter(e.target.value)}><option value="alle">alle</option><option value="agent">Agent</option><option value="human">Ich</option></select></label>
         <span className="mp-muted mp-small">{filtered.length} Aufgaben · Reihenfolge per Ziehen innerhalb einer Woche</span>
         <span style={{ flex: 1 }} />
@@ -139,7 +139,7 @@ export function TasksPage() {
                         </details>
                       : <div className="mp-small mp-muted">{t.description}</div>)}
                     <div className="mp-task-meta">
-                      <Pill kind="kind">{TYPE_LABEL[t.type]}</Pill>
+                      <Pill kind="kind">{aufgabenName(t.type)}</Pill>
                       <Pill kind={t.assignedTo === "agent" ? "progress" : "todo"}>{t.assignedTo === "agent" ? "Agent" : "Ich"}</Pill>
                       {/* Die Freigabe-Stufe sagt, wie viel der Agent allein darf - bei Einrichtungsschritten gibt es keinen Agenten. */}
                       {t.type !== "setup" && <Pill kind={APPROVAL[t.approvalLevel].kind}>{APPROVAL[t.approvalLevel].label}</Pill>}

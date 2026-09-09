@@ -2,15 +2,14 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 import type { BrandKit, ContentPiece, DirectoryStatus, HashtagPools, Job, ProductDataView, SocialKitTexts, SocialKitView, StudioView, VideoView } from "../../shared/schemas.js";
 import { api } from "../api.js";
+import { formatName, jobName } from "../../shared/labels.js";
 import { Blaettern, Button, Card, Notice, PageHeader, Pill, fmtDateTime, type PillKind, useSeiten } from "../components/ui.js";
 import { ProjectNav } from "../components/ProjectNav.js";
-import { fmtUsd } from "../components/Revise.js";
 import { ChannelTag, useProfiles } from "../components/ChannelLink.js";
 import { STAGES } from "../../shared/channels.js";
 
 const TABS = [{ id: "erstellen", label: "Erstellen" }, { id: "brand", label: "Brand-Kit & Stimme" }, { id: "hashtags", label: "Hashtags" }, { id: "verzeichnisse", label: "Verzeichnisse" }, { id: "geo", label: "GEO-Artikel" }] as const;
 type Tab = (typeof TABS)[number]["id"];
-const FORMAT_LABEL: Record<string, string> = { text: "Text-Post", carousel: "Carousel", pin: "Pinterest-Pin", image: "Bild (KI)", ad_creative: "Ad-Hintergrund (KI)", article: "GEO-Artikel", directory_entry: "Directory-Eintrag", video: "Video", community_reply: "Community-Antwort", data_carousel: "Daten-Carousel", data_reel: "Daten-Reel", showcase_carousel: "Binderseiten", artwork_carousel: "Kunstseite", artwork_reel: "Kunstseiten-Reel", story: "Story (24 h)" };
 /** Plattformen, die ein Daten-Bündel bedienen kann - Reihenfolge = Vorschlag im Formular. */
 const BUNDLE_PLATFORMS = ["instagram", "tiktok", "pinterest", "facebook", "bluesky", "x"] as const;
 const STATUS: Record<ContentPiece["status"], { label: string; kind: PillKind }> = { draft: { label: "Entwurf", kind: "todo" }, review: { label: "in Freigabe", kind: "review" }, approved: { label: "freigegeben", kind: "done" }, published: { label: "veröffentlicht", kind: "done" }, rejected: { label: "abgelehnt", kind: "kind" } };
@@ -37,7 +36,7 @@ export function StudioPage() {
   return (
     <>
       <ProjectNav id={id} />
-      <PageHeader label="Inhalte" title="Content Studio" />
+      <PageHeader label="Inhalte" title="Erstellen" />
       {error && <Notice kind="bad">{error}</Notice>}
       {!view.hasBrief && <Notice kind="warn">Ohne Brief kein Content – <Link to={`/projects/${id}/analysis`}>Analyse ausführen</Link>.</Notice>}
       {noVoice && view.hasBrief && <Notice kind="warn">Kein Voice-Profil: Texte klingen dann generisch. Lade unter „Brand-Kit &amp; Stimme“ 5–20 eigene Texte hoch und leite das Profil ab.</Notice>}
@@ -239,11 +238,12 @@ function ReelJobs({ id }: { id: string }) {
   const STEP: Record<string, string> = { voice: "Stimme", overlays: "Overlays", video: "Video bauen", assets: "Speichern" };
   return (
     <Card>
-      <h2>Reel-Renders</h2>
+      <h2>Reels im Bau</h2>
       <ul className="mp-plain-list">{jobs.map((j) => (
         <li key={j.id} className="mp-small">
-          <Pill kind={j.status === "done" ? "done" : j.status === "failed" ? "review" : j.status === "running" ? "progress" : "todo"}>{j.status}</Pill>{" "}
-          {j.steps.map((st) => `${STEP[st.name] ?? st.name}: ${st.status}`).join(" · ")}
+          <Pill kind={j.status === "done" ? "done" : j.status === "failed" ? "review" : j.status === "running" ? "progress" : "todo"}>{jobName(j.status)}</Pill>{" "}
+          {j.steps.filter((st) => st.status === "running").map((st) => STEP[st.name] ?? st.name).join(", ") || (j.status === "queued" ? "wartet auf den Worker" : "")}
+          <details className="mp-details"><summary className="mp-label">Schritte</summary>{j.steps.map((st) => `${STEP[st.name] ?? st.name}: ${jobName(st.status)}`).join(" · ")}</details>
           {j.error && <span className="mp-over"> — {j.error}</span>}
         </li>
       ))}</ul>
@@ -265,15 +265,16 @@ export function PieceList({ id, pieces: all }: { id: string; pieces: ContentPiec
     <Card>
       <h2>Zuletzt erzeugt</h2>
       <div className="mp-table-wrap"><table className="mp-table">
-        <thead><tr><th>Stück</th><th>Format</th><th>Kanal</th><th>Erstellt</th><th>AI-Tell</th><th>Kosten</th><th>Status</th><th></th></tr></thead>
+        {/* AI-Tell-Wert und Modellkosten standen hier je Zeile — Zahlen aus dem
+            Maschinenraum, die bei einer Entscheidung („prüfen oder posten?")
+            nicht helfen. Beides steht vollständig auf der Aktivitätsseite. */}
+        <thead><tr><th>Stück</th><th>Format</th><th>Kanal</th><th>Erstellt</th><th>Status</th><th></th></tr></thead>
         <tbody>{seiten.aktuell.map((p) => { const st = STATUS[p.status]; return (
           <tr key={p.id}>
             <td>{p.title || "(ohne Titel)"}</td>
-            <td><Pill kind="kind">{FORMAT_LABEL[p.format] ?? p.format}</Pill></td>
+            <td><Pill kind="kind">{formatName(p.format)}</Pill></td>
             <td className="mp-small"><ChannelTag name={p.channel} projectId={id} className="" />{(members.get(p.id) ?? 0) > 1 && <span className="mp-muted"> +{members.get(p.id)! - 1}</span>}</td>
             <td className="mp-small" title={`Zuletzt bearbeitet ${fmtDateTime(p.updatedAt)}`}>{fmtDateTime(p.createdAt)}</td>
-            <td className="mp-num-cell">{p.aiTellScore === null ? "–" : `${p.aiTellScore}/10`}</td>
-            <td className="mp-num-cell">{fmtUsd(p.costUsd)}</td>
             <td><Pill kind={st.kind}>{st.label}</Pill></td>
             <td><Link className="mp-btn" to={p.status === "approved" || p.status === "published" ? `/projects/${id}/publish/${p.id}` : `/projects/${id}/review?piece=${p.id}`}>{p.status === "approved" || p.status === "published" ? "Paket" : "Prüfen"}</Link></td>
           </tr>); })}</tbody>
