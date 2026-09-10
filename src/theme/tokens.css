@@ -61,6 +61,7 @@
   --mp-serie-1: #2a78d6;
   --mp-serie-2: #eb6834;
   --mp-serie-3: #1baf7a;
+  --mp-serie-4: #a8328f;
   --mp-serie-rest: #8C9098;
   /* Ordinale Rampe (eine Farbfamilie, hell → dunkel) für Stufen: Trichter, Ränge. */
   --mp-stufe-1: #86b6ef;
@@ -126,6 +127,7 @@
     --mp-serie-1: #3987e5;
     --mp-serie-2: #d95926;
     --mp-serie-3: #199e70;
+    --mp-serie-4: #c94ba8;
     --mp-serie-rest: #7C8087;
     --mp-stufe-1: #86b6ef;
     --mp-stufe-2: #5598e7;
@@ -173,6 +175,7 @@
   --mp-serie-1: #3987e5;
   --mp-serie-2: #d95926;
   --mp-serie-3: #199e70;
+  --mp-serie-4: #c94ba8;
   --mp-serie-rest: #7C8087;
   --mp-stufe-1: #86b6ef;
   --mp-stufe-2: #5598e7;

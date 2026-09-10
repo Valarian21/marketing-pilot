@@ -20,9 +20,9 @@
  */
 import { useId, useState, type ReactNode } from "react";
 
-export const SERIEN_FARBE = ["var(--mp-serie-1)", "var(--mp-serie-2)", "var(--mp-serie-3)"] as const;
+export const SERIEN_FARBE = ["var(--mp-serie-1)", "var(--mp-serie-2)", "var(--mp-serie-3)", "var(--mp-serie-4)"] as const;
 /** Kanal → Farbslot. Fest verdrahtet, damit ein Kanal seine Farbe nie wechselt. */
-export const KANAL_SLOT: Record<string, number> = { instagram: 0, facebook: 1, threads: 2 };
+export const KANAL_SLOT: Record<string, number> = { instagram: 0, facebook: 1, threads: 2, tiktok: 3 };
 export const kanalFarbe = (platform: string): string => SERIEN_FARBE[KANAL_SLOT[platform] ?? -1] ?? "var(--mp-serie-rest)";
 
 export const zahl = (x: number | null | undefined, stellen = 0): string =>
