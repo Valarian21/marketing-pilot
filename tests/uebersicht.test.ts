@@ -304,3 +304,81 @@ describe("Aufräumen", () => {
     expect(da(jung)).toBe(true);
   });
 });
+
+describe("Export einspielen (TikTok)", () => {
+  const heute = "2026-09-10";
+  const fixture = fs.readFileSync(path.join(import.meta.dirname, "fixtures", "tiktok-overview.xlsx"));
+
+  /**
+   * TikTok schreibt „2. September" ohne Jahr. Ein Export kennt keine Zukunft:
+   * liegt der Tag nach heute, gehört er ins Vorjahr — sonst würde ein Export
+   * vom Januar die Dezembertage ein Jahr zu spät einsortieren.
+   */
+  it("deutet Datumsformen mit und ohne Jahr", async () => {
+    const { deuteDatum } = await import("../src/server/publish/kanal-import.js");
+    expect(deuteDatum("2. September", heute)).toBe("2026-09-02");
+    expect(deuteDatum("Sep 2", heute)).toBe("2026-09-02");
+    expect(deuteDatum("September 2, 2025", heute)).toBe("2025-09-02");
+    expect(deuteDatum("28. Dezember", "2027-01-03")).toBe("2026-12-28");
+    expect(deuteDatum("2026-09-02", heute)).toBe("2026-09-02");
+    expect(deuteDatum("02.09.2026", heute)).toBe("2026-09-02");
+    expect(deuteDatum("9/2/2026", heute)).toBe("2026-09-02");
+    expect(deuteDatum("31. Februar", heute)).toBeNull();
+    expect(deuteDatum("Gesamt", heute)).toBeNull();
+  });
+
+  it("liest die echte TikTok-XLSX ohne Bibliothek", async () => {
+    const { liesXlsx, deuteExport } = await import("../src/server/publish/kanal-import.js");
+    const zeilen = liesXlsx(fixture);
+    expect(zeilen[0]).toEqual(["Date", "Video Views", "Profile Views", "Likes", "Comments", "Shares"]);
+    const d = deuteExport(zeilen, heute);
+    expect(d.tage.map((t) => t.tag)).toEqual(["2026-09-02", "2026-09-03", "2026-09-04", "2026-09-05", "2026-09-06", "2026-09-07", "2026-09-08"]);
+    expect(d.tage.at(-1)?.werte).toEqual({ aufrufe: 783, profilaufrufe: 1, likes: 7, kommentare: 0, geteilt: 0, interaktionen: 7 });
+    expect(d.unbekannt).toEqual([]);
+    expect(d.erkannt["Video Views"]).toBe("aufrufe");
+  });
+
+  it("liest CSV mit deutschen Spalten und Tausenderpunkten", async () => {
+    const { liesCsv, deuteExport } = await import("../src/server/publish/kanal-import.js");
+    const csv = "﻿Datum;Videoaufrufe;Profilaufrufe;Gefällt mir;Kommentare;Geteilt;Unbekanntes\n7. September;\"1.351\";1;2;0;0;x\n8. September;783;1;7;0;0;y\n";
+    const d = deuteExport(liesCsv(csv), heute);
+    expect(d.tage[0]).toEqual({ tag: "2026-09-07", werte: { aufrufe: 1351, profilaufrufe: 1, likes: 2, kommentare: 0, geteilt: 0, interaktionen: 2 } });
+    expect(d.unbekannt).toEqual(["Unbekanntes"]);
+  });
+
+  it("zeigt erst die Vorschau und speichert erst auf Wunsch — dann zählt TikTok in der Übersicht mit", async () => {
+    const xlsxType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+    const vorschau = await built.app.inject({ method: "POST", url: `/api/mp/projects/${pid}/kanal-stats/import?platform=tiktok&name=Overview.xlsx`, headers: { ...auth, "content-type": xlsxType }, payload: fixture });
+    expect(vorschau.statusCode).toBe(200);
+    expect(vorschau.json().gespeichert).toBe(0);
+    expect(vorschau.json().tage).toHaveLength(7);
+    expect(leseKanalTage(built.db, pid, "2026-09-01").filter((r) => r.platform === "tiktok")).toHaveLength(0);
+
+    const speichern = await built.app.inject({ method: "POST", url: `/api/mp/projects/${pid}/kanal-stats/import?platform=tiktok&name=Overview.xlsx&speichern=true`, headers: { ...auth, "content-type": xlsxType }, payload: fixture });
+    expect(speichern.json().gespeichert).toBe(7);
+    const rows = leseKanalTage(built.db, pid, "2026-09-01").filter((r) => r.platform === "tiktok");
+    expect(rows).toHaveLength(7);
+    expect(rows.every((r) => r.quelle === "hand")).toBe(true);
+
+    const view = cockpitView(built.db, pid, { tage: 7, now: new Date("2026-09-10T12:00:00Z") });
+    const tiktok = view.kanaele.find((k) => k.platform === "tiktok");
+    expect(tiktok?.vonHand).toBe(true);
+    expect(tiktok?.standBis).toBe("2026-09-08");
+    expect(tiktok?.aufrufe).toBe(351 + 783);
+    // Die Tage 09. und 10.09. fehlen im Export: null, nicht 0.
+    expect(view.verlauf.find((v) => v.tag === "2026-09-09")?.aufrufe ?? "leer").toBe("leer");
+    // Ein Export ohne Follower-Spalte macht den Follower-Bestand nicht kaputt.
+    expect(view.kennzahlen.find((k) => k.id === "follower")?.wert).toBeNull();
+    expect(view.hinweise.some((h) => /TikTok: Zahlen aus dem Export reichen bis 08\.09\./.test(h))).toBe(true);
+  });
+
+  it("weist Exporte für API-Kanäle und unbekannte Plattformen ab", async () => {
+    const r1 = await built.app.inject({ method: "POST", url: `/api/mp/projects/${pid}/kanal-stats/import?platform=instagram&name=x.csv`, headers: { ...auth, "content-type": "text/csv" }, payload: "Date,Video Views\n1. September,5\n" });
+    expect(r1.statusCode).toBe(400);
+    const r2 = await built.app.inject({ method: "POST", url: `/api/mp/projects/${pid}/kanal-stats/import?platform=myspace&name=x.csv`, headers: { ...auth, "content-type": "text/csv" }, payload: "Date,Video Views\n1. September,5\n" });
+    expect(r2.statusCode).toBe(400);
+    const r3 = await built.app.inject({ method: "POST", url: `/api/mp/projects/${pid}/kanal-stats/import?platform=tiktok&name=x.csv`, headers: { ...auth, "content-type": "text/csv" }, payload: "Name,Views\nfoo,5\n" });
+    expect(r3.statusCode).toBe(400);
+    expect(r3.json().detail).toMatch(/Datumsspalte/);
+  });
+});

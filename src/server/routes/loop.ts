@@ -14,11 +14,19 @@ import { insightsView, landingSnippet, recordEvent } from "../agents/insights/in
 import { cockpitView } from "../agents/insights/cockpit.js";
 import { produktDbPfad } from "../data-source.js";
 import { KANAL_STEPS } from "../publish/job.js";
+import { liesExport, speichereExport } from "../publish/kanal-import.js";
+import { MESSBARE_KANAELE } from "../publish/kanal-metriken.js";
+import { PLATFORMS } from "../../shared/channels.js";
+import { berlinTag } from "../shortlinks.js";
 import { adoptReport, dismissReport, listReports, runWeeklyReport } from "../agents/loop/weekly.js";
 import type { FullContext } from "../services.js";
 import type { Env } from "../env.js";
 
 export const EVENTS_PUBLIC_PATH = "/api/mp/events";
+
+/** Was ein Analytics-Export als Inhaltstyp mitbringt — XLSX, CSV oder roh. */
+const EXPORT_TYPES = ["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "text/csv", "application/vnd.ms-excel"];
+const EXPORT_MAX_BYTES = 8 * 1024 * 1024;
 
 export function loopRoutes(app: FastifyInstance, db: Db, env: Env, getCtx: () => FullContext | null): void {
   const r = app.withTypeProvider<ZodTypeProvider>();
@@ -74,6 +82,36 @@ export function loopRoutes(app: FastifyInstance, db: Db, env: Env, getCtx: () =>
     if (!getProject(db, req.params.projectId)) return reply.code(404).send({ detail: "Projekt nicht gefunden." });
     const view = cockpitView(db, req.params.projectId, { tage: req.query.tage, produktDbPfad: produktDbPfad(db, env, req.params.projectId) });
     return { ...view, kanalStatus: { ...view.kanalStatus, laeuft: hasActiveJob(db, req.params.projectId, "kanal.stats") } };
+  });
+
+  /**
+   * Kanalzahlen aus einem Analytics-Export einspielen — für Plattformen ohne
+   * Lese-API (TikTok). Ohne `speichern` nur deuten und zurückgeben, damit die
+   * Oberfläche zeigen kann, was gespeichert würde; erst der zweite Aufruf
+   * schreibt. Die Datei kommt roh im Body, der Name in der Query.
+   */
+  app.addContentTypeParser(EXPORT_TYPES, { parseAs: "buffer", bodyLimit: EXPORT_MAX_BYTES }, (_req, body, done) => done(null, body));
+  r.post("/api/mp/projects/:projectId/kanal-stats/import", {
+    bodyLimit: EXPORT_MAX_BYTES,
+    schema: {
+      params: P,
+      querystring: z.object({ platform: z.string().min(1), name: z.string().min(1).max(200), speichern: z.coerce.boolean().default(false) }),
+      response: { 200: s.KanalImportErgebnis, 400: s.ErrorBody, 404: s.ErrorBody, 415: s.ErrorBody },
+    },
+  }, async (req, reply) => {
+    if (!getProject(db, req.params.projectId)) return reply.code(404).send({ detail: "Projekt nicht gefunden." });
+    const { platform, name, speichern } = req.query;
+    if (!PLATFORMS[platform]) return reply.code(400).send({ detail: `Unbekannte Plattform: ${platform}` });
+    if (MESSBARE_KANAELE.includes(platform)) return reply.code(400).send({ detail: `${PLATFORMS[platform]?.label} holt der Pilot selbst — ein Export würde die API-Zahlen überschreiben.` });
+    const body = req.body;
+    if (!Buffer.isBuffer(body)) return reply.code(415).send({ detail: "Die Datei muss roh gesendet werden (text/csv oder XLSX)." });
+    if (!body.length) return reply.code(400).send({ detail: "Die Datei ist leer." });
+    let deutung;
+    try { deutung = liesExport(body, name, berlinTag(new Date())); }
+    catch (e) { return reply.code(400).send({ detail: e instanceof Error ? e.message : String(e) }); }
+    const gespeichert = speichern && deutung.tage.length ? speichereExport(db, req.params.projectId, platform, deutung.tage) : 0;
+    if (gespeichert) writeAudit(db, { user: req.user, action: "kanal.import", entityType: "project", entityId: req.params.projectId, projectId: req.params.projectId, content: { platform, name, tage: gespeichert, von: deutung.tage[0]?.tag, bis: deutung.tage.at(-1)?.tag } });
+    return { platform, tage: deutung.tage, erkannt: deutung.erkannt, unbekannt: deutung.unbekannt, hinweise: deutung.hinweise, gespeichert };
   });
 
   /** Die Kanalzahlen jetzt holen, statt auf den Tagestakt zu warten. */

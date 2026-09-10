@@ -20,6 +20,7 @@ import type { CockpitView } from "../../shared/schemas.js";
 import { api } from "../api.js";
 import { Button, Card, Notice, PageHeader, Pill } from "../components/ui.js";
 import { ProjectNav } from "../components/ProjectNav.js";
+import { KanalImport } from "../components/KanalImport.js";
 import { Balken, Kennzahl, Sparkline, Tagesbalken, Zeitreihe, euro, kanalFarbe, prozent, tagKurz, tagLang, zahl, type Punkt, type Serie } from "../components/charts.js";
 
 const ZEITRAEUME = [7, 30, 90] as const;
@@ -186,7 +187,7 @@ export function UebersichtPage() {
                 <span className="mp-chart-key" style={{ background: kanalFarbe(kn.platform) }} aria-hidden="true" />
                 <strong>{kn.label}</strong>
                 {!kn.eingerichtet && <Pill kind="todo">kein Zugang</Pill>}
-                {!kn.messbar && kn.eingerichtet && <Pill kind="review">nur von Hand</Pill>}
+                {kn.vonHand && <Pill kind="review">Export{kn.standBis ? ` bis ${tagKurz(kn.standBis)}` : ""}</Pill>}
               </div>
               <dl className="mp-kanal-zahlen">
                 <div><dt>Follower</dt><dd className="mp-num">{zahl(kn.follower)}</dd></div>
@@ -200,6 +201,7 @@ export function UebersichtPage() {
             </div>
           ))}
         </div>
+        <KanalImport projectId={id} vorhanden={view.kanaele.filter((kn) => kn.vonHand).map((kn) => kn.platform)} onGespeichert={() => void laden()} />
         {view.kanaele.filter((kn) => kn.verlauf.some((v) => v.aufrufe !== null)).length > 1 && (
           <>
             <h3 className="mp-h3">Aufrufe je Kanal</h3>

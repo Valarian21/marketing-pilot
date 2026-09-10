@@ -27,7 +27,7 @@ import { parseJson, type Db } from "../../db/index.js";
 import { PLATFORMS } from "../../../shared/channels.js";
 import { loadProfiles } from "../../channels.js";
 import { leseMetriken } from "../../publish/metrics.js";
-import { leseKanalStatus, leseKanalTage, MESSBARE_KANAELE, type KanalWerte } from "../../publish/kanal-metriken.js";
+import { leseHandStand, leseKanalStatus, leseKanalTage, MESSBARE_KANAELE, type KanalWerte } from "../../publish/kanal-metriken.js";
 import { loadCredentials } from "../../publish/index.js";
 import { BIO_CODE, berlinTag } from "../../shortlinks.js";
 import { geschaeftsZahlen, tageZwischen, type GeschaeftsTag } from "../../providers/geschaeft.binderplan.js";
@@ -72,6 +72,14 @@ export function cockpitView(db: Db, projectId: string, opts: CockpitOptions): s.
     m.set(r.tag, r.parsed);
     jeKanal.set(r.platform, m);
   }
+  /**
+   * Kanäle, deren Zahlen zählen: die API-Kanäle plus alle, für die ein Export
+   * eingespielt wurde (TikTok). Ein Export-Kanal folgt denselben Regeln — ein
+   * Tageswert ist ein Tageswert, egal ob Meta ihn geschickt oder Marcel ihn
+   * hochgeladen hat.
+   */
+  const handStand = leseHandStand(db, projectId);
+  const zaehlKanaele = [...new Set([...MESSBARE_KANAELE, ...handStand.keys()])];
 
   // --- Beiträge ---------------------------------------------------------------
   const stuecke = new Map(db.select({ id: t.mpContentPieces.id, title: t.mpContentPieces.title, format: t.mpContentPieces.format })
@@ -151,15 +159,20 @@ export function cockpitView(db: Db, projectId: string, opts: CockpitOptions): s.
    * eigenen Abruf — die Summe spränge dann von 0 auf 7, ohne dass jemand
    * gefolgt ist.
    */
-  const eingerichteteKanaele = MESSBARE_KANAELE.filter((p) => creds[p]?.["accessToken"]);
+  const eingerichteteKanaele = [
+    ...MESSBARE_KANAELE.filter((p) => creds[p]?.["accessToken"]),
+    // Ein Export-Kanal zählt beim Follower-Bestand nur mit, wenn der Export
+    // überhaupt Follower nennt — TikToks Übersicht tut das nicht.
+    ...[...handStand.keys()].filter((p) => !MESSBARE_KANAELE.includes(p) && [...(jeKanal.get(p)?.values() ?? [])].some((w) => typeof w.follower === "number")),
+  ];
   const followerStand = new Map<string, number>();
   const followerSumme = (): number | null =>
     eingerichteteKanaele.length && eingerichteteKanaele.every((p) => followerStand.has(p))
       ? eingerichteteKanaele.reduce((n, p) => n + (followerStand.get(p) ?? 0), 0)
       : null;
   const verlauf: s.CockpitTag[] = tage.map((tag) => {
-    const werte = MESSBARE_KANAELE.map((p) => jeKanal.get(p)?.get(tag));
-    for (const p of MESSBARE_KANAELE) {
+    const werte = zaehlKanaele.map((p) => jeKanal.get(p)?.get(tag));
+    for (const p of zaehlKanaele) {
       const f = jeKanal.get(p)?.get(tag)?.follower;
       if (typeof f === "number") followerStand.set(p, f);
     }
@@ -182,7 +195,7 @@ export function cockpitView(db: Db, projectId: string, opts: CockpitOptions): s.
   });
 
   // --- Kanäle -----------------------------------------------------------------
-  const kanalNamen = [...new Set([...MESSBARE_KANAELE, ...profile.filter((p) => p.stage !== "off").map((p) => p.platform), ...posts.map((p) => p.platform)])];
+  const kanalNamen = [...new Set([...zaehlKanaele, ...profile.filter((p) => p.stage !== "off").map((p) => p.platform), ...posts.map((p) => p.platform)])];
   const kanaele: s.CockpitKanal[] = kanalNamen.map((platform) => {
     const tageDesKanals = jeKanal.get(platform);
     const imRaum = tage.map((tag) => ({ tag, w: tageDesKanals?.get(tag) }));
@@ -193,11 +206,14 @@ export function cockpitView(db: Db, projectId: string, opts: CockpitOptions): s.
     for (const { w } of imRaum) if (typeof w?.follower === "number") letzterFollower = w.follower;
     let followerDavor: number | null = null;
     for (const tag of tageZwischen(vorherVon, von)) { const f = tageDesKanals?.get(tag)?.follower; if (typeof f === "number") followerDavor = f; }
+    const hand = handStand.get(platform);
     return {
       platform,
       label: PLATFORMS[platform]?.label ?? platform,
-      eingerichtet: Boolean(creds[platform]?.["accessToken"]),
+      eingerichtet: Boolean(creds[platform]?.["accessToken"]) || Boolean(hand),
       messbar: MESSBARE_KANAELE.includes(platform),
+      vonHand: Boolean(hand),
+      standBis: hand?.bisTag ?? null,
       profilUrl: profil?.url || null,
       follower: letzterFollower,
       followerDavor,
@@ -208,19 +224,19 @@ export function cockpitView(db: Db, projectId: string, opts: CockpitOptions): s.
       beitraege: eigenePosts.length,
       beitragsAufrufe: summe(metriken.map((m) => m?.aufrufe)),
       beitragsInteraktionen: summe(metriken.flatMap((m) => [m?.likes, m?.kommentare, m?.saves, m?.shares])),
-      letzterAbruf: status.letzterLauf,
+      letzterAbruf: hand?.eingespieltAt ?? status.letzterLauf,
       fehler: status.fehler[platform] ?? "",
       verlauf: imRaum.map(({ tag, w }) => ({ tag, aufrufe: w?.aufrufe ?? null, interaktionen: w?.interaktionen ?? null, follower: w?.follower ?? null })),
     };
   })
     // Ein Kanal ohne Zahlen und ohne Beitrag ist eine leere Zeile, die nur
     // Platz kostet — er steht auf der Kanäle-Seite, nicht in der Übersicht.
-    .filter((k) => k.messbar || k.beitraege > 0)
+    .filter((k) => k.messbar || k.vonHand || k.beitraege > 0)
     .sort((a, b) => (b.aufrufe ?? -1) - (a.aufrufe ?? -1) || b.beitraege - a.beitraege);
 
   // --- Kennzahlen mit Vorperiode ----------------------------------------------
   const zeitraumSumme = (feld: keyof KanalWerte, vonTag: string, bisTag: string): number | null =>
-    summe(tageZwischen(vonTag, bisTag).flatMap((tag) => MESSBARE_KANAELE.map((p) => jeKanal.get(p)?.get(tag)?.[feld])));
+    summe(tageZwischen(vonTag, bisTag).flatMap((tag) => zaehlKanaele.map((p) => jeKanal.get(p)?.get(tag)?.[feld])));
   const klicksIn = (vonTag: string, bisTag: string): number =>
     klickTage.filter((k) => k.code !== BIO_CODE && k.tag >= vonTag && k.tag <= bisTag).reduce((s2, k) => s2 + k.klicks, 0);
   const anmeldungenIn = (vonTag: string, bisTag: string): number =>
@@ -262,8 +278,13 @@ export function cockpitView(db: Db, projectId: string, opts: CockpitOptions): s.
   // --- Hinweise ---------------------------------------------------------------
   const ohneZugang = kanaele.filter((k) => k.messbar && !k.eingerichtet).map((k) => k.label);
   if (ohneZugang.length) hinweise.push(`Ohne hinterlegten Zugang keine Zahlen: ${ohneZugang.join(", ")}. Auf der Kanäle-Seite eintragen.`);
-  const nichtMessbar = kanaele.filter((k) => !k.messbar && k.beitraege > 0).map((k) => k.label);
-  if (nichtMessbar.length) hinweise.push(`Zahlen nur von Hand einzutragen: ${nichtMessbar.join(", ")} — dort gibt es keine Lese-API.`);
+  const nichtMessbar = kanaele.filter((k) => !k.messbar && !k.vonHand && k.beitraege > 0).map((k) => k.label);
+  if (nichtMessbar.length) hinweise.push(`Zahlen nur über einen Export: ${nichtMessbar.join(", ")} — dort gibt es keine Lese-API. Den Analytics-Export unten bei „Kanäle" einspielen.`);
+  // „gestern" oben ist der Tag vor dem Zeitraum; hier zählt der Tag vor heute.
+  const vortag = berlinTag(new Date(now.getTime() - TAG_MS));
+  for (const k of kanaele.filter((x) => x.vonHand && x.standBis && x.standBis < vortag)) {
+    hinweise.push(`${k.label}: Zahlen aus dem Export reichen bis ${k.standBis!.slice(8, 10)}.${k.standBis!.slice(5, 7)}. — neuere Tage fehlen, bis der nächste Export eingespielt ist.`);
+  }
   if (!status.letzterLauf) hinweise.push("Die Kanalzahlen wurden noch nie abgerufen. Der Sammler läuft täglich, oder oben von Hand starten.");
   if (kanaele.some((k) => k.platform === "facebook" && k.beitraege > 0)) hinweise.push("Facebook nennt seit Graph v21 keine Aufrufe je Seite mehr (nur Videoaufrufe). Für die Facebook-Seite stehen deshalb Interaktionen und Seitenaufrufe, aber keine Reichweite.");
   const verschwunden = beitraege.filter((b) => /Nicht mehr abrufbar/.test(b.fehler)).length;

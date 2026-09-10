@@ -1444,6 +1444,9 @@ export const CockpitKanal = z.object({
   eingerichtet: z.boolean(),
   /** Kann der Pilot dort messen, oder gibt es die Zahlen nur von Hand? */
   messbar: z.boolean(),
+  /** Zahlen stammen aus einem eingespielten Export (TikTok) — bis `standBis`. */
+  vonHand: z.boolean().default(false),
+  standBis: z.string().nullable().default(null),
   profilUrl: z.string().nullable().default(null),
   follower: z.number().nullable().default(null),
   followerDavor: z.number().nullable().default(null),
@@ -1460,6 +1463,27 @@ export const CockpitKanal = z.object({
   fehler: z.string().default(""),
   verlauf: z.array(z.object({ tag: z.string(), aufrufe: z.number().nullable(), interaktionen: z.number().nullable(), follower: z.number().nullable() })).default([]),
 });
+
+/** Ergebnis eines eingespielten Exports — erst zur Ansicht, dann gespeichert. */
+export const KanalImportTag = z.object({
+  tag: z.string(),
+  werte: z.object({
+    aufrufe: z.number().optional(), profilaufrufe: z.number().optional(), reichweite: z.number().optional(),
+    interaktionen: z.number().optional(), likes: z.number().optional(), kommentare: z.number().optional(), geteilt: z.number().optional(),
+    follower: z.number().optional(), neueFollower: z.number().optional(),
+  }),
+});
+export const KanalImportErgebnis = z.object({
+  platform: z.string(),
+  tage: z.array(KanalImportTag),
+  /** Spaltenname im Export → Feld im Piloten. */
+  erkannt: z.record(z.string(), z.string()),
+  unbekannt: z.array(z.string()),
+  hinweise: z.array(z.string()),
+  /** Anzahl gespeicherter Tage; 0 bei der Vorschau. */
+  gespeichert: z.number().int(),
+});
+export type KanalImportErgebnis = z.infer<typeof KanalImportErgebnis>;
 
 /** Ein veröffentlichter Beitrag mit allem, was über ihn bekannt ist. */
 export const CockpitBeitrag = z.object({

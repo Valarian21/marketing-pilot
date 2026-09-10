@@ -616,3 +616,13 @@ button, input { font: inherit; color: inherit; }
 .mp-channel-zahlen { white-space: nowrap; }
 .mp-stage-legend-box { margin-bottom: var(--mp-gap); }
 .mp-stage-legend-box .mp-stage-legend { margin-top: 10px; }
+
+/* Export einspielen (Übersicht → Kanäle) */
+.mp-kanal-import { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--mp-line); }
+.mp-kanal-import-kopf { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; flex-wrap: wrap; }
+.mp-kanal-import-kopf .mp-linkbtn { color: var(--mp-accent); font-weight: 600; white-space: nowrap; }
+.mp-kanal-import-form { margin-top: 10px; display: grid; gap: 10px; }
+.mp-kanal-import-form .mp-form-row { display: flex; gap: 12px; flex-wrap: wrap; }
+.mp-kanal-import-form .mp-form-row .mp-field { min-width: 0; flex: 1 1 220px; }
+.mp-kanal-import-form .mp-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.mp-table--zahlen td.mp-num, .mp-table--zahlen th.mp-num { text-align: right; font-variant-numeric: tabular-nums; }

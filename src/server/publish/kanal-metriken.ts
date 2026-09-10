@@ -75,6 +75,10 @@ export interface KanalWerte {
   videoAufrufe?: number | undefined;
   /** Anzahl Beiträge auf dem Konto (Bestand). */
   beitraege?: number | undefined;
+  /** Einzelne Interaktionsarten, wo ein Export sie nennt (TikTok). */
+  likes?: number | undefined;
+  kommentare?: number | undefined;
+  geteilt?: number | undefined;
 }
 
 export interface KanalTag { tag: string; werte: KanalWerte }
@@ -252,12 +256,32 @@ export function leseKanalTage(db: Db, projectId: string, seitTag: string): (type
  * sie nicht kennt — sonst würde der Nachlauf der Reichweite die Aufrufe des
  * Vortags löschen.
  */
-export function schreibeKanalTag(db: Db, projectId: string, platform: string, tag: string, werte: KanalWerte, now = new Date()): void {
+export function schreibeKanalTag(db: Db, projectId: string, platform: string, tag: string, werte: KanalWerte, now = new Date(), quelle: "api" | "hand" = "api"): void {
   const alt = db.select().from(t.mpKanalStats)
     .where(and(eq(t.mpKanalStats.projectId, projectId), eq(t.mpKanalStats.platform, platform), eq(t.mpKanalStats.tag, tag))).get();
   const neu = misch(alt ? parseJson<KanalWerte>(alt.werte, {}) : {}, werte);
-  if (alt) db.update(t.mpKanalStats).set({ werte: toJson(neu), abgerufenAt: now.toISOString() }).where(eq(t.mpKanalStats.id, alt.id)).run();
-  else db.insert(t.mpKanalStats).values({ id: newId(), projectId, platform, tag, werte: toJson(neu), quelle: "api", abgerufenAt: now.toISOString() }).run();
+  if (alt) db.update(t.mpKanalStats).set({ werte: toJson(neu), quelle, abgerufenAt: now.toISOString() }).where(eq(t.mpKanalStats.id, alt.id)).run();
+  else db.insert(t.mpKanalStats).values({ id: newId(), projectId, platform, tag, werte: toJson(neu), quelle, abgerufenAt: now.toISOString() }).run();
+}
+
+/**
+ * Plattformen, deren Zahlen von Hand eingespielt wurden, mit dem jüngsten Tag
+ * und dem Zeitpunkt des Einspielens.
+ *
+ * Die Übersicht braucht das, um einen Export-Kanal wie einen API-Kanal zu
+ * behandeln — und um zu sagen, bis wann die Zahlen reichen: ein Export altert,
+ * ein API-Abruf holt sich selbst nach.
+ */
+export interface HandStand { bisTag: string; eingespieltAt: string }
+export function leseHandStand(db: Db, projectId: string): Map<string, HandStand> {
+  const out = new Map<string, HandStand>();
+  const rows = db.select({ platform: t.mpKanalStats.platform, tag: t.mpKanalStats.tag, abgerufenAt: t.mpKanalStats.abgerufenAt })
+    .from(t.mpKanalStats).where(and(eq(t.mpKanalStats.projectId, projectId), eq(t.mpKanalStats.quelle, "hand"))).all();
+  for (const r of rows) {
+    const alt = out.get(r.platform);
+    if (!alt || r.tag > alt.bisTag) out.set(r.platform, { bisTag: r.tag, eingespieltAt: alt && alt.eingespieltAt > r.abgerufenAt ? alt.eingespieltAt : r.abgerufenAt });
+  }
+  return out;
 }
 
 /** Letzter Lauf und letzter Fehler je Plattform — steht wörtlich im UI. */
