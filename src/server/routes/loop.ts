@@ -7,7 +7,9 @@ import { type Db } from "../db/index.js";
 import { writeAudit } from "../audit.js";
 import { getProject } from "../repo/projects.js";
 import { enqueueJob, getJob, hasActiveJob, workerAlive } from "../jobs.js";
-import { isScanning, lastScanAt, listLeads, loadSources, saveSources, scanCommunity, updateLead, deriveSources } from "../agents/community/radar.js";
+import { getLead, isScanning, lastScanAt, listLeads, loadSources, saveSources, scanCommunity, updateLead, deriveSources } from "../agents/community/radar.js";
+import { antwortBudget, antworteAufThread, kannSelbstAntworten, rechteHinweis } from "../agents/community/social.js";
+import { credentialsFor } from "../publish/index.js";
 import { listPersonas } from "../agents/analysis/personas.js";
 import { listChannels } from "../agents/analysis/attention.js";
 import { insightsView, landingSnippet, recordEvent } from "../agents/insights/insights.js";
@@ -38,7 +40,48 @@ export function loopRoutes(app: FastifyInstance, db: Db, env: Env, getCtx: () =>
     if (!getProject(db, req.params.projectId)) return reply.code(404).send({ detail: "Projekt nicht gefunden." });
     let sources = loadSources(db, req.params.projectId);
     if (!sources.length) sources = deriveSources(listPersonas({ db } as never, req.params.projectId), listChannels({ db } as never, req.params.projectId));
-    return { leads: listLeads(db, req.params.projectId), sources, lastScanAt: lastScanAt(db, req.params.projectId), scanning: isScanning(db, req.params.projectId), redditAuth: Boolean(env.REDDIT_CLIENT_ID && env.REDDIT_CLIENT_SECRET) };
+    const th = credentialsFor(db, req.params.projectId, "threads");
+    const ig = credentialsFor(db, req.params.projectId, "instagram");
+    const threadsBereit = Boolean(th["accessToken"] && th["userId"]);
+    return {
+      leads: listLeads(db, req.params.projectId), sources,
+      lastScanAt: lastScanAt(db, req.params.projectId), scanning: isScanning(db, req.params.projectId),
+      redditAuth: Boolean(env.REDDIT_CLIENT_ID && env.REDDIT_CLIENT_SECRET),
+      threadsBereit, instagramBereit: Boolean(ig["accessToken"] && ig["igUserId"]),
+      // Das Budget kostet einen Aufruf und ist die einzige Zahl, die vor dem
+      // Senden zählt — ohne sie merkt man das Limit erst am Fehlschlag.
+      antwortBudget: threadsBereit ? await antwortBudget(fetch, th["userId"]!, th["accessToken"]!) : null,
+      llmGesperrt: env.MP_LLM_PAUSED && !env.MP_LLM_KOMMENTARE,
+    };
+  });
+
+  /**
+   * Einen freigegebenen Entwurf tatsächlich senden.
+   *
+   * Nur dort, wo die Plattform es zulässt (zurzeit Threads). Der Text kommt aus
+   * dem Rumpf, nicht aus der Datenbank: was in der Freigabe steht, kann gerade
+   * bearbeitet worden sein, und gesendet wird, was man gesehen hat.
+   */
+  r.post("/api/mp/community/:id/post", {
+    schema: { params: s.IdParams, body: z.object({ text: z.string().min(1).max(500) }), response: { 200: s.CommunityPostErgebnis, 400: s.ErrorBody, 404: s.ErrorBody, 409: s.ErrorBody } },
+  }, async (req, reply) => {
+    const lead = getLead(db, req.params.id);
+    if (!lead) return reply.code(404).send({ detail: "Eintrag nicht gefunden." });
+    if (lead.status === "answered") return reply.code(409).send({ detail: "Diese Antwort wurde schon gesendet." });
+    if (!kannSelbstAntworten(lead.platform)) return reply.code(400).send({ detail: `Auf ${lead.platform} kann der Pilot nicht selbst kommentieren — Text kopieren und von Hand posten.` });
+    const replyToId = String((lead.meta as { externalId?: string }).externalId ?? "");
+    if (!replyToId) return reply.code(400).send({ detail: "Zu diesem Eintrag fehlt die Beitrags-Kennung — er stammt aus einem Lauf vor dem Kommentar-Umbau." });
+    const c = credentialsFor(db, lead.projectId, "threads");
+    if (!c["accessToken"] || !c["userId"]) return reply.code(400).send({ detail: "Threads-Zugang fehlt (Kanäle → Threads)." });
+    try {
+      const out = await antworteAufThread({ f: fetch, userId: c["userId"], token: c["accessToken"], replyToId, text: req.body.text });
+      const aktualisiert = updateLead(db, lead.id, { draftReply: req.body.text, status: "answered", externalUrl: out.permalink ?? "" })!;
+      writeAudit(db, { user: req.user, action: "community.posted", entityType: "community_lead", entityId: lead.id, projectId: lead.projectId, content: { url: lead.url, antwort: req.body.text.slice(0, 500), permalink: out.permalink } });
+      return { lead: aktualisiert, externalUrl: out.permalink };
+    } catch (e) {
+      const text = e instanceof Error ? e.message : String(e);
+      return reply.code(400).send({ detail: rechteHinweis(text) ?? text });
+    }
   });
 
   r.put("/api/mp/projects/:projectId/community/sources", { schema: { params: P, body: z.array(s.CommunitySource), response: { 200: z.array(s.CommunitySource) } } }, async (req) => {

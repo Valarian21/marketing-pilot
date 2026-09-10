@@ -1,4 +1,13 @@
-/** Community radar: leads by score, editable draft, "copy and open thread", mark as answered. No auto-posting - not built on purpose. */
+/**
+ * Community-Radar: Beiträge finden, Antwort entwerfen, senden.
+ *
+ * Zwei Sorten Eintrag, und der Unterschied steht auf dem Knopf: auf **Threads**
+ * kann der Pilot die Antwort selbst absetzen (`reply_to_id`), überall sonst —
+ * Instagram, Reddit, Foren — gibt es keinen Schreib-Endpunkt für fremde
+ * Beiträge, dort bleibt es beim Kopieren und Öffnen. Ein Knopf, der so aussieht,
+ * als würde er senden, aber nur die Zwischenablage füllt, wäre die schlimmere
+ * Lösung als zwei ehrliche Knöpfe.
+ */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useSearchParams } from "react-router";
 import type { CommunityLead, CommunitySource, CommunityView } from "../../shared/schemas.js";
@@ -6,7 +15,16 @@ import { api } from "../api.js";
 import { Button, Card, Notice, PageHeader, Pill, type PillKind } from "../components/ui.js";
 import { ProjectNav } from "../components/ProjectNav.js";
 
-const STATUS: Record<CommunityLead["status"], { label: string; kind: PillKind }> = { new: { label: "neu", kind: "todo" }, drafted: { label: "Entwurf", kind: "review" }, answered: { label: "beantwortet", kind: "done" }, dismissed: { label: "verworfen", kind: "kind" } };
+const STATUS: Record<CommunityLead["status"], { label: string; kind: PillKind }> = { new: { label: "neu", kind: "todo" }, drafted: { label: "Entwurf", kind: "review" }, answered: { label: "gesendet", kind: "done" }, dismissed: { label: "verworfen", kind: "kind" } };
+
+/** Beschriftung, Eingabehilfe und Link je Quellenart. */
+const QUELLEN: Record<CommunitySource["type"], { option: string; platzhalter: string; anzeige: (v: string) => string; link: (v: string) => string | null }> = {
+  reddit: { option: "Subreddit", platzhalter: "PokemonTCG", anzeige: (v) => `r/${v}`, link: (v) => `https://www.reddit.com/r/${v}/` },
+  hn: { option: "Hacker News (Suchbegriff)", platzhalter: "collection tracker", anzeige: (v) => `HN: ${v || "Kategorie"}`, link: () => null },
+  rss: { option: "RSS/Atom-Feed", platzhalter: "https://forum.example/feed.rss", anzeige: (v) => v, link: (v) => v },
+  threads: { option: "Threads-Stichwort", platzhalter: "Pokemon Sammlung", anzeige: (v) => `Threads: „${v}“`, link: (v) => `https://www.threads.net/search?q=${encodeURIComponent(v)}` },
+  instagram: { option: "Instagram-Konto (Reels)", platzhalter: "pokemon_sammler", anzeige: (v) => `@${v}`, link: (v) => `https://www.instagram.com/${v}/` },
+};
 
 export function CommunityPage() {
   const { id = "" } = useParams();
@@ -41,6 +59,13 @@ export function CommunityPage() {
     window.open(lead.url, "_blank", "noopener");
   };
   const markAnswered = (lead: CommunityLead) => { const url = window.prompt("URL deiner Antwort (optional):") ?? ""; void patch(lead, { status: "answered", externalUrl: url }); };
+  /** Threads: der Pilot setzt die Antwort selbst ab — gesendet wird der Text, der im Feld steht. */
+  const senden = (lead: CommunityLead) => {
+    const text = (drafts[lead.id] ?? lead.draftReply).trim();
+    if (!text) return;
+    if (!window.confirm(`Diesen Kommentar jetzt öffentlich unter den Beitrag setzen?\n\n${text}`)) return;
+    void run(() => api(`/community/${lead.id}/post`, { method: "POST", json: { text } }));
+  };
 
   if (!view) return <><ProjectNav id={id} />{error && <Notice kind="bad">{error}</Notice>}</>;
   const leads = view.leads.filter((l) => showDone || (l.status !== "answered" && l.status !== "dismissed"));
@@ -55,18 +80,27 @@ export function CommunityPage() {
         </div>
       } />
       {error && <Notice kind="bad">{error}</Notice>}
-      <Notice kind="info">Nur lesen und entwerfen: Antworten postest du selbst. Ein automatisches Posten ist bewusst nicht eingebaut. {!view.redditAuth && "Reddit läuft ohne OAuth-App über die öffentlichen Endpunkte (langsam, gedrosselt) – REDDIT_CLIENT_ID/SECRET in der .env beschleunigen das."}</Notice>
+      {view.llmGesperrt && <Notice kind="warn">Entwürfe brauchen ein Modell, OpenRouter ist aber pausiert. Zum Einschalten <code>MP_LLM_KOMMENTARE=true</code> in die <code>.env</code> und beide Dienste neu starten — das erlaubt nur diesen einen Agenten, auf dem billigen Modell.</Notice>}
+      <Notice kind="info">
+        Auf <strong>Threads</strong> sendet der Pilot die freigegebene Antwort selbst.
+        {view.antwortBudget && ` Heute ${view.antwortBudget.genutzt} von ${view.antwortBudget.grenze} Antworten verbraucht.`}
+        {" "}Auf <strong>Instagram</strong>, Reddit und in Foren gibt es keinen Endpunkt für fremde Beiträge — dort Text kopieren und von Hand posten. TikTok hat gar keine Kommentar-API.
+        {!view.threadsBereit && " Threads-Zugang fehlt noch (Kanäle → Threads)."}
+        {!view.redditAuth && " Reddit läuft ohne OAuth-App über die öffentlichen Endpunkte (langsam, gedrosselt)."}
+      </Notice>
 
       <Card className="mp-form-card">
         <div className="mp-card-head"><h2>Quellen <span className="mp-muted mp-small">täglich gescannt</span></h2><Button onClick={() => setEditSources((v) => !v)}>{editSources ? "Abbrechen" : "Bearbeiten"}</Button></div>
         {!editSources ? (
-          <div className="mp-inline mp-wrap">{view.sources.map((sx, i) => { const label = sx.type === "reddit" ? `r/${sx.value}` : sx.type === "hn" ? `HN: ${sx.value || "Kategorie"}` : sx.label || sx.value; const url = sx.type === "reddit" ? `https://www.reddit.com/r/${sx.value}/` : sx.type === "rss" ? sx.value : null; return <Pill key={i} kind={sx.enabled ? "done" : "kind"}>{url ? <a href={url} target="_blank" rel="noreferrer" style={{ color: "inherit", textDecoration: "none" }} title="Öffnen (neuer Tab)">{label} ↗</a> : label}</Pill>; })}{view.sources.length === 0 && <span className="mp-muted">Keine Quellen aus der Analyse ableitbar – bitte anlegen.</span>}</div>
+          <div className="mp-inline mp-wrap">{view.sources.map((sx, i) => { const q = QUELLEN[sx.type]; const label = q ? q.anzeige(sx.value) : sx.label || sx.value; const url = q?.link(sx.value) ?? null; return <Pill key={i} kind={sx.enabled ? "done" : "kind"}>{url ? <a href={url} target="_blank" rel="noreferrer" style={{ color: "inherit", textDecoration: "none" }} title="Öffnen (neuer Tab)">{label} ↗</a> : label}</Pill>; })}{view.sources.length === 0 && <span className="mp-muted">Keine Quellen aus der Analyse ableitbar – bitte anlegen.</span>}</div>
         ) : (
           <div className="mp-form">
             {sources.map((sx, i) => (
               <div key={i} className="mp-action-row">
-                <select value={sx.type} onChange={(e) => setSources(sources.map((x, j) => (j === i ? { ...x, type: e.target.value as CommunitySource["type"] } : x)))}><option value="reddit">Subreddit</option><option value="hn">Hacker News (Suchbegriff)</option><option value="rss">RSS/Atom-Feed</option></select>
-                <input value={sx.value} placeholder={sx.type === "reddit" ? "lehrerzimmer" : sx.type === "hn" ? "worksheet generator" : "https://forum.example/feed.rss"} onChange={(e) => setSources(sources.map((x, j) => (j === i ? { ...x, value: e.target.value, label: "" } : x)))} />
+                <select value={sx.type} onChange={(e) => setSources(sources.map((x, j) => (j === i ? { ...x, type: e.target.value as CommunitySource["type"] } : x)))}>
+                  {(Object.keys(QUELLEN) as CommunitySource["type"][]).map((k) => <option key={k} value={k}>{QUELLEN[k].option}</option>)}
+                </select>
+                <input value={sx.value} placeholder={QUELLEN[sx.type]?.platzhalter ?? ""} onChange={(e) => setSources(sources.map((x, j) => (j === i ? { ...x, value: e.target.value, label: "" } : x)))} />
                 <label className="mp-inline mp-small"><input type="checkbox" checked={sx.enabled} onChange={(e) => setSources(sources.map((x, j) => (j === i ? { ...x, enabled: e.target.checked } : x)))} /> aktiv</label>
                 <Button variant="danger" onClick={() => setSources(sources.filter((_, j) => j !== i))}>×</Button>
               </div>
@@ -79,7 +113,9 @@ export function CommunityPage() {
       <div className="mp-card-head"><h2>Leads <span className="mp-muted mp-small">Score ≥ 60 aus Persona-Schmerzpunkten</span></h2><button type="button" className="mp-linkbtn mp-small" onClick={() => setShowDone((v) => !v)}>{showDone ? "nur offene" : "auch erledigte"}</button></div>
       {leads.length === 0 && <Card className="mp-empty"><h2>Noch keine Leads</h2><p>Der nächste Scan läuft automatisch (täglich) – oder jetzt per Knopf.</p></Card>}
       {leads.map((l) => {
-        const st = STATUS[l.status]; const isOpen = open === l.id; const meta = l.meta as { community?: string; reason?: string; rulesNote?: string; askingForTools?: boolean; linksAllowed?: boolean; answeredUrl?: string };
+        const st = STATUS[l.status]; const isOpen = open === l.id; const meta = l.meta as { community?: string; reason?: string; rulesNote?: string; askingForTools?: boolean; linksAllowed?: boolean; answeredUrl?: string; kommentar?: boolean; selbstSenden?: boolean };
+        const text = drafts[l.id] ?? l.draftReply;
+        const sendbar = Boolean(meta.selbstSenden) && view.threadsBereit && l.status !== "answered";
         return (
           <Card key={l.id} className="mp-lead">
             <div className="mp-card-head">
@@ -87,7 +123,7 @@ export function CommunityPage() {
                 <span className="mp-num mp-rank-no">{l.score}</span>
                 <div><strong>{l.title}</strong><div className="mp-small mp-muted">{meta.community ?? l.platform} · {meta.reason}</div></div>
               </button>
-              <div className="mp-inline">{meta.askingForTools && <Pill kind="done">fragt nach Tools</Pill>}{meta.linksAllowed === false && <Pill kind="review">keine Links</Pill>}<Pill kind={st.kind}>{st.label}</Pill></div>
+              <div className="mp-inline">{meta.kommentar && <Pill kind="kind">{text.length} Zeichen</Pill>}{meta.askingForTools && <Pill kind="done">fragt nach Tools</Pill>}{meta.linksAllowed === false && !meta.kommentar && <Pill kind="review">keine Links</Pill>}<Pill kind={st.kind}>{st.label}</Pill></div>
             </div>
             {isOpen && (
               <>
@@ -95,8 +131,11 @@ export function CommunityPage() {
                 {meta.rulesNote && <p className="mp-small"><span className="mp-label">Regeln</span> {meta.rulesNote}</p>}
                 <label className="mp-field"><span>Antwortentwurf</span><textarea className="mp-piece-body" rows={Math.min(18, Math.max(5, (drafts[l.id] ?? l.draftReply).split("\n").length + 2))} value={drafts[l.id] ?? l.draftReply} onChange={(e) => setDrafts({ ...drafts, [l.id]: e.target.value })} disabled={l.status === "answered"} /></label>
                 <div className="mp-form-actions">
-                  <Button variant="primary" onClick={() => void copyAndOpen(l)}>Kopieren und Thread öffnen</Button>
-                  {l.status !== "answered" && <Button onClick={() => markAnswered(l)}>Als beantwortet markieren</Button>}
+                  {sendbar
+                    ? <Button variant="primary" disabled={busy || !text.trim()} onClick={() => senden(l)}>Antwort senden</Button>
+                    : <Button variant="primary" onClick={() => void copyAndOpen(l)}>Kopieren und Beitrag öffnen</Button>}
+                  {sendbar && <Button onClick={() => void copyAndOpen(l)}>Nur kopieren</Button>}
+                  {l.status !== "answered" && !sendbar && <Button onClick={() => markAnswered(l)}>Als beantwortet markieren</Button>}
                   {l.status !== "answered" && l.status !== "dismissed" && <Button variant="danger" onClick={() => void patch(l, { status: "dismissed" })}>Verwerfen</Button>}
                   {meta.answeredUrl && <a className="mp-small" href={meta.answeredUrl} target="_blank" rel="noreferrer">deine Antwort</a>}
                   <a className="mp-small" href={l.url} target="_blank" rel="noreferrer">Thread</a>

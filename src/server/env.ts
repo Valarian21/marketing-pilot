@@ -72,6 +72,17 @@ const EnvSchema = z.object({
    * Ein entfernter Key wäre der falsche Weg: ohne ihn beendet sich der Worker.
    */
   MP_LLM_PAUSED: bool.default(false),
+  /**
+   * Schmale Ausnahme von `MP_LLM_PAUSED` für Kommentar-Entwürfe.
+   *
+   * Ein Kommentar muss innerhalb einer Stunde stehen — das kann eine
+   * Claude-Sitzung nicht leisten, die Serientexte aber schon. Deshalb darf
+   * genau dieser eine Agent weiterlaufen, auf dem billigen Modell und
+   * gedeckelt durch `MP_KOMMENTARE_PRO_LAUF`. Alles andere bleibt pausiert.
+   */
+  MP_LLM_KOMMENTARE: bool.default(false),
+  /** Wie viele Kommentar-Entwürfe ein Lauf höchstens erzeugt. */
+  MP_KOMMENTARE_PRO_LAUF: z.coerce.number().int().min(1).max(100).default(20),
   /** Schnappschuss von Binderplans app.db, relativ zum Paket-Wurzelverzeichnis.
    *  Erzeugt vom root-eigenen systemd-Timer `binderplan-snapshot.timer` - /root ist
    *  fuer den `developer`-Prozess nicht durchquerbar, die Live-Datei also unerreichbar. */

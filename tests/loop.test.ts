@@ -5,7 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { loadEnv } from "../src/server/env.js";
 import { buildApp } from "../src/server/app.js";
 import type { LlmMessage, LlmProvider, LlmResult } from "../src/server/providers/index.js";
-import { deriveSources, parseFeed, parseRedditFeed, scanCommunity, type Fetcher } from "../src/server/agents/community/radar.js";
+import { deriveSources, parseFeed, parseRedditFeed, scanCommunity, type Fetcher, type Thread } from "../src/server/agents/community/radar.js";
 import { landingSnippet, weekStartOf } from "../src/server/agents/insights/insights.js";
 import { dueJobs, enqueueDue } from "../src/server/scheduler.js";
 import { scoreThreadsPrompt, replyDraftPrompt, weeklyReportPrompt } from "../src/server/agents/prompts/community.js";
@@ -30,6 +30,14 @@ const fakeLlm: LlmProvider = {
         return json({ scores: ids.map((id, i) => ({ id, score: i === 0 ? 85 : i === 1 ? 62 : 20, reason: "passt", askingForTools: i === 0 })) });
       }
       case "reply-draft": return json({ reply: "Kurz: ich hatte das gleiche Problem. Was mir half: … Ich bau das Tool selbst.", rulesNote: "Regel 3: keine Links - Entwurf enthält keinen.", mentionsProduct: true });
+      // Der Kommentar-Agent lehnt ab, wenn der Beitrag nichts Konkretes hergibt —
+      // die Attrappe bildet beide Fälle ab, sonst prüft der Test nur den guten.
+      case "comment-draft": {
+        const werbung = /Kauft jetzt/.test(messages[1]?.content ?? "");
+        return werbung
+          ? json({ kommentar: "", passt: false, grund: "Reiner Werbebeitrag", nenntProdukt: false })
+          : json({ kommentar: "Nach Set sortiert findest du Lücken schneller als nach Nummer.", passt: true, grund: "greift die Binder-Frage auf", nenntProdukt: false });
+      }
       case "weekly-report": return json({ report: "Was lief\n3 Signups über Reddit.\n\nWas nicht\nLinkedIn 0.\n\nNächste Woche anders\nMehr Reddit-Antworten, LinkedIn pausieren.", plan: { ...plan, summary: "Plan v2: Reddit-Fokus", budget: { ...plan.budget, monthlyEur: 30 } }, nextWeekFocus: ["5 Reddit-Antworten", "LinkedIn pausieren"] });
       default: return { text: "{}", model: "fake", usage };
     }
@@ -107,8 +115,12 @@ describe("community radar", () => {
     const edited = (await built.app.inject({ method: "PATCH", url: `/api/mp/community/${lead.id}`, headers: auth, payload: { draftReply: "Meine eigene Antwort.", status: "answered", externalUrl: "https://www.reddit.com/r/lehrerzimmer/comments/a1/c1" } })).json();
     expect(edited).toMatchObject({ status: "answered", draftReply: "Meine eigene Antwort." });
     expect(edited.meta.answeredUrl).toBe("https://www.reddit.com/r/lehrerzimmer/comments/a1/c1");
-    const routes = built.app.printRoutes();
-    expect(routes).not.toMatch(/community\/[^\n]*post/i);
+    // Senden gibt es nur, wo die Plattform einen Schreib-Endpunkt für fremde
+    // Beiträge hat. Reddit hat keinen — der Versuch muss abgewiesen werden,
+    // statt still zu scheitern oder nur die Zwischenablage zu füllen.
+    const versuch = await built.app.inject({ method: "POST", url: `/api/mp/community/${view.leads[1].id}/post`, headers: auth, payload: { text: "Hallo" } });
+    expect(versuch.statusCode).toBe(400);
+    expect(versuch.json().detail).toMatch(/reddit.*nicht selbst kommentieren|nicht selbst kommentieren/i);
   });
   it("sources can be edited and a scan job is queued for the worker", async () => {
     const put = await built.app.inject({ method: "PUT", url: `/api/mp/projects/${pid}/community/sources`, headers: auth, payload: [{ type: "reddit", value: "Teachers", label: "", enabled: true }] });
@@ -172,5 +184,114 @@ describe("events + insights + weekly loop", () => {
     expect(dueJobs(built.db, new Date("2026-08-31T19:00:00.000Z"))).toHaveLength(0);
     // Am naechsten Tag sind die taeglichen Laeufe wieder faellig - beide.
     expect(dueJobs(built.db, new Date("2026-09-01T19:00:00.000Z")).map((d) => d.kind).sort()).toEqual(["community.scan", "kanal.stats"]);
+  });
+});
+
+/**
+ * Kommentare unter fremden Beiträgen.
+ *
+ * Der Kern dieser Tests ist nicht, dass die Zahlen stimmen, sondern dass die
+ * Grenze zwischen den Plattformen hält: Threads darf der Pilot selbst
+ * beantworten, Instagram nur lesen. Geprüft wird gegen Attrappen in den Formen,
+ * die Meta wirklich liefert.
+ */
+describe("Kommentare auf Threads und Instagram", () => {
+  const ok = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
+
+  it("holt öffentliche Threads und lässt eigene Beiträge, Antworten und Zitate liegen", async () => {
+    const { sucheThreads } = await import("../src/server/agents/community/social.js");
+    let gefragt = "";
+    const impl = (async (url: string | URL) => {
+      gefragt = String(url);
+      return ok({ data: [
+        { id: "1", text: "Wie ordnet ihr eure Karten im Binder?", username: "sammler_max", permalink: "https://www.threads.net/@sammler_max/post/1", timestamp: "2026-09-10T08:00:00+0000" },
+        { id: "2", text: "Antwort auf etwas", username: "wer_auch_immer", is_reply: true },
+        { id: "3", text: "Zitat", username: "jemand", is_quote_post: true },
+        { id: "4", text: "Eigener Beitrag", username: "binderplan" },
+        { id: "5", text: "", username: "leer" },
+      ] });
+    }) as unknown as typeof fetch;
+    const treffer = await sucheThreads({ f: impl, token: "tok", stichwort: "Pokemon Binder", eigenerName: "binderplan", jetzt: Date.parse("2026-09-10T12:00:00Z") });
+    expect(treffer).toHaveLength(1);
+    expect(treffer[0]).toMatchObject({ platform: "threads", community: "@sammler_max", externalId: "1", url: "https://www.threads.net/@sammler_max/post/1" });
+    // RECENT statt TOP und ein Zeitfenster: unter einem alten Beitrag zu
+    // kommentieren bringt nichts.
+    expect(gefragt).toContain("search_type=RECENT");
+    expect(gefragt).toContain(`since=${Math.floor(Date.parse("2026-09-08T12:00:00Z") / 1000)}`);
+  });
+
+  it("liest Reels und Feed-Beiträge fremder Konten und erklärt ein privates Konto in Klartext", async () => {
+    const { holeFremdeReels } = await import("../src/server/agents/community/social.js");
+    const impl = (async (url: string | URL) => {
+      if (String(url).includes("privat")) return ok({ error: { message: "Unsupported get request. Object with ID 'x' does not exist", code: 100 } });
+      return ok({ business_discovery: { followers_count: 12000, media: { data: [
+        { id: "m1", caption: "Mein Glurak kam heute an", media_product_type: "REELS", permalink: "https://www.instagram.com/reel/m1/", like_count: 400, comments_count: 20 },
+        { id: "m2", caption: "Foto im Feed", media_product_type: "FEED", permalink: "https://www.instagram.com/p/m2/" },
+        { id: "m3", caption: "", media_product_type: "REELS" },
+        { id: "m4", caption: "Story", media_product_type: "STORY" },
+        { id: "m5", caption: "Anzeige", media_product_type: "AD" },
+      ] } } });
+    }) as unknown as typeof fetch;
+    const reels = await holeFremdeReels({ f: impl, igUserId: "ig1", token: "tok", konto: "@sammler" });
+    // Reel und Feed-Beitrag ja, Story und Anzeige nein, ohne Text nein.
+    expect(reels.map((x) => x.externalId)).toEqual(["m1", "m2"]);
+    expect(reels[0]).toMatchObject({ platform: "instagram", community: "@sammler" });
+    expect(reels[0]!.excerpt).toContain("Reel, 400 Likes");
+    expect(reels[1]!.excerpt).toContain("Beitrag,");
+    expect((await holeFremdeReels({ f: impl, igUserId: "ig1", token: "tok", konto: "sammler", nurReels: true })).map((x) => x.externalId)).toEqual(["m1"]);
+    await expect(holeFremdeReels({ f: impl, igUserId: "privat", token: "tok", konto: "wer" })).rejects.toThrow(/Business-\/Creator-Konto/);
+    await expect(holeFremdeReels({ f: impl, igUserId: "ig1", token: "tok", konto: "kein name!" })).rejects.toThrow(/kein Instagram-Nutzername/);
+  });
+
+  it("antwortet zweistufig per POST mit reply_to_id", async () => {
+    const { antworteAufThread } = await import("../src/server/agents/community/social.js");
+    const rufe: { url: string; method: string; body: string }[] = [];
+    const impl = (async (url: string | URL, init?: RequestInit) => {
+      const u = String(url);
+      rufe.push({ url: u, method: init?.method ?? "GET", body: String(init?.body ?? "") });
+      if (u.includes("threads_publish")) return ok({ id: "reply-1" });
+      if (u.includes("permalink")) return ok({ permalink: "https://www.threads.net/@binderplan/post/reply-1" });
+      return ok({ id: "container-1" });
+    }) as unknown as typeof fetch;
+    const out = await antworteAufThread({ f: impl, userId: "th1", token: "tok", replyToId: "1", text: "  Sortiere nach Set, nicht nach Nummer.  " });
+    expect(out).toEqual({ id: "reply-1", permalink: "https://www.threads.net/@binderplan/post/reply-1" });
+    // Ein Container per GET anzulegen scheitert stillschweigend — der Aufruf
+    // muss ein POST mit den Feldern im Rumpf sein.
+    expect(rufe[0]!.method).toBe("POST");
+    expect(rufe[0]!.body).toContain("reply_to_id=1");
+    expect(rufe[0]!.body).toContain("media_type=TEXT");
+    expect(rufe[0]!.body).toContain("Sortiere+nach+Set");
+    expect(rufe[1]!.method).toBe("POST");
+    expect(rufe[1]!.body).toContain("creation_id=container-1");
+  });
+
+  it("macht aus einem fehlenden Recht eine Anweisung", async () => {
+    const { rechteHinweis } = await import("../src/server/agents/community/social.js");
+    expect(rechteHinweis("Threads-Suche: (#200) Requires threads_keyword_search permission")).toMatch(/threads_keyword_search.*Tester-Token-Generator/s);
+    // Der nackte 500er ist bei genau diesem Endpunkt das Zeichen für das
+    // fehlende Recht — gemessen, nicht vermutet.
+    expect(rechteHinweis("Threads-Suche: HTTP 500")).toMatch(/threads_keyword_search/);
+    expect(rechteHinweis("Threads-Antwort: HTTP 500")).toBeNull();
+  });
+
+  it("entwirft Kommentare, überspringt was nicht passt, und sendet nur auf Threads", async () => {
+    const { scanCommunity } = await import("../src/server/agents/community/radar.js");
+    const treffer: Thread[] = [
+      { platform: "threads", community: "@sammler_max", url: "https://www.threads.net/@sammler_max/post/1", title: "Binder-Frage", excerpt: "Wie ordnet ihr eure Karten?", externalId: "1", createdAt: "2026-09-10T08:00:00.000Z" },
+      { platform: "threads", community: "@spam", url: "https://www.threads.net/@spam/post/2", title: "Werbung", excerpt: "Kauft jetzt!", externalId: "2", createdAt: "2026-09-10T08:00:00.000Z" },
+    ];
+    const ctx = {
+      ...built.ctx!,
+      fetchers: { reddit: async () => [], rss: async () => [], hn: async () => [], instagram: async () => [], threads: async () => treffer },
+      rulesFetcher: async () => ({ text: "", linksAllowed: true }),
+    };
+    await built.app.inject({ method: "PUT", url: `/api/mp/projects/${pid}/community/sources`, headers: auth, payload: [{ type: "threads", value: "Pokemon Binder", label: "", enabled: true }] });
+    const r = await scanCommunity(ctx, pid);
+    // Der zweite Beitrag kommt als „passt: false" zurück und wird nicht zum Lead.
+    expect(r.leads).toBe(1);
+    const view = (await built.app.inject({ url: `/api/mp/projects/${pid}/community`, headers: auth })).json();
+    const lead = view.leads.find((l: { platform: string }) => l.platform === "threads");
+    expect(lead.meta).toMatchObject({ kommentar: true, selbstSenden: true, externalId: "1" });
+    expect(lead.meta.linksAllowed).toBe(false);
   });
 });

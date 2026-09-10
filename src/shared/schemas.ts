@@ -1224,7 +1224,7 @@ export const VideoView = z.object({
 
 // --- Community radar, insights, weekly loop (Shot 5) -------------------------
 
-export const CommunitySourceType = z.enum(["reddit", "hn", "rss"]);
+export const CommunitySourceType = z.enum(["reddit", "hn", "rss", "threads", "instagram"]);
 export const CommunitySource = z.object({ type: CommunitySourceType, value: z.string().default(""), label: z.string().default(""), enabled: z.boolean().default(true) });
 export const CommunityLeadPatch = z.object({ draftReply: z.string().optional(), status: LeadStatus.optional(), externalUrl: z.string().optional() });
 export const CommunityView = z.object({
@@ -1233,6 +1233,20 @@ export const CommunityView = z.object({
   lastScanAt: Iso.nullable(),
   scanning: z.boolean(),
   redditAuth: z.boolean(),
+  /** Threads-Zugang steht — nur dann kann der Pilot selbst antworten. */
+  threadsBereit: z.boolean().default(false),
+  /** Instagram-Zugang steht — Reels fremder Konten lesbar (Posten bleibt Handarbeit). */
+  instagramBereit: z.boolean().default(false),
+  /** Antworten, die das Threads-Konto heute noch senden darf. */
+  antwortBudget: z.object({ genutzt: z.number().int(), grenze: z.number().int() }).nullable().default(null),
+  /** Ist die Entwurfserzeugung durch MP_LLM_PAUSED gesperrt? */
+  llmGesperrt: z.boolean().default(false),
+});
+
+/** Ergebnis einer selbst gesendeten Antwort. */
+export const CommunityPostErgebnis = z.object({
+  lead: CommunityLead,
+  externalUrl: z.string().nullable(),
 });
 
 export const EventName = z.enum(["signup", "activated", "paid"]);

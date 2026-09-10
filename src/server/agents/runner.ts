@@ -18,6 +18,12 @@ export interface AgentContext {
   db: Db;
   env: Env;
   llm: LlmProvider;
+  /**
+   * Derselbe Anbieter wie `llm`, außer bei aktiver Pause mit gesetzter
+   * Kommentar-Ausnahme — dann der echte statt des ablehnenden. Nur der
+   * Kommentar-Agent greift hier zu.
+   */
+  llmKommentare?: LlmProvider;
   search: SearchProvider;
   dataDir: string;
   log: (msg: string) => void;

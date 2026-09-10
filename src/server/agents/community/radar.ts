@@ -13,7 +13,10 @@ import { newId, nowIso, parseJson, toJson, type Db } from "../../db/index.js";
 import type { Env } from "../../env.js";
 import { modelFor } from "../../../../config/models.js";
 import { chatJson, withRun, type AgentContext } from "../runner.js";
-import { replyDraftPrompt, scoreThreadsPrompt, type ThreadCandidate } from "../prompts/community.js";
+import { commentDraftPrompt, replyDraftPrompt, scoreThreadsPrompt, type ThreadCandidate } from "../prompts/community.js";
+import { fetchInstagramQuelle, fetchThreadsQuelle, kannSelbstAntworten, rechteHinweis, type CredsLeser } from "./social.js";
+import { credentialsFor } from "../../publish/index.js";
+import { KOMMENTARE_PAUSIERT } from "../../services.js";
 import { getProject } from "../../repo/projects.js";
 import { listPersonas } from "../analysis/personas.js";
 import { listChannels } from "../analysis/attention.js";
@@ -68,7 +71,7 @@ export function lastScanAt(db: Db, projectId: string): string | null {
 // --- fetchers ------------------------------------------------------------------
 
 export interface Thread { platform: string; community: string; url: string; title: string; excerpt: string; externalId: string; createdAt: string }
-export type Fetcher = (source: s.CommunitySource, env: Env, log: (m: string) => void) => Promise<Thread[]>;
+export type Fetcher = (source: s.CommunitySource, env: Env, log: (m: string) => void, creds: CredsLeser) => Promise<Thread[]>;
 
 let redditToken: { token: string; exp: number } | null = null;
 async function redditAuthHeader(env: Env): Promise<Record<string, string>> {
@@ -167,7 +170,20 @@ export const fetchRss: Fetcher = async (source, _env, log) => {
   return parseFeed(await res.text(), source.value);
 };
 
-export const FETCHERS: Record<s.CommunitySource["type"], Fetcher> = { reddit: fetchReddit, hn: fetchHackerNews, rss: fetchRss };
+export const FETCHERS: Record<s.CommunitySource["type"], Fetcher> = {
+  reddit: fetchReddit, hn: fetchHackerNews, rss: fetchRss,
+  threads: fetchThreadsQuelle, instagram: fetchInstagramQuelle,
+};
+
+/**
+ * Quellen, deren Beiträge Kommentare sind und keine Forenbeiträge.
+ *
+ * Sie bekommen einen anderen Entwurfs-Prompt (kurz, kein Link) und, wo die
+ * Plattform es zulässt, den Weg zum Selbst-Senden.
+ */
+const SOZIAL = new Set(["threads", "instagram"]);
+/** Längengrenze je Kanal — Threads kappt bei 500, unter Reels liest niemand mehr. */
+const MAX_ZEICHEN: Record<string, number> = { threads: 280, instagram: 200 };
 
 // --- scan job ------------------------------------------------------------------
 
@@ -175,6 +191,7 @@ export interface CommunityContext extends AgentContext { fetchers?: Partial<Reco
 
 const Scores = z.object({ scores: z.array(z.object({ id: z.string(), score: z.number().min(0).max(100), reason: z.string().default(""), askingForTools: z.boolean().default(false) })) });
 const Reply = z.object({ reply: z.string().min(1), rulesNote: z.string().default(""), mentionsProduct: z.boolean().default(false) });
+const Kommentar = z.object({ kommentar: z.string().default(""), passt: z.boolean().default(true), grund: z.string().default(""), nenntProdukt: z.boolean().default(false) });
 
 export function listLeads(db: Db, projectId: string): s.CommunityLead[] {
   return db.select().from(t.mpCommunityLeads).where(eq(t.mpCommunityLeads.projectId, projectId)).orderBy(desc(t.mpCommunityLeads.score), desc(t.mpCommunityLeads.createdAt)).all()
@@ -192,53 +209,101 @@ export async function scanCommunity(ctx: CommunityContext, projectId: string, op
   const warnings: string[] = [];
   const known = loadSeen(ctx.db, projectId);
   for (const r of ctx.db.select({ url: t.mpCommunityLeads.url }).from(t.mpCommunityLeads).where(eq(t.mpCommunityLeads.projectId, projectId)).all()) known.add(r.url);
+  const creds: CredsLeser = (platform) => credentialsFor(ctx.db, projectId, platform);
   const threads: Thread[] = [];
   for (const src of sources.filter((x) => x.enabled)) {
     const fetcher = ctx.fetchers?.[src.type] ?? FETCHERS[src.type];
     try {
-      const got = await fetcher(src, ctx.env, ctx.log);
+      const got = await fetcher(src, ctx.env, ctx.log, creds);
       threads.push(...got.filter((x) => !known.has(x.url)));
       ctx.log(`community ${src.label || src.value}: ${got.length} Threads`);
-    } catch (e) { warnings.push(`${src.label || src.value}: ${e instanceof Error ? e.message : String(e)}`); }
+    } catch (e) {
+      const text = e instanceof Error ? e.message : String(e);
+      // Ein fehlendes Recht sieht im Log wie ein Netzfehler aus — hier wird der
+      // Satz daraus, der wirklich weiterhilft.
+      warnings.push(`${src.label || src.value}: ${rechteHinweis(text) ?? text}`);
+    }
   }
   const fresh = threads.filter((x, i, arr) => arr.findIndex((y) => y.url === x.url) === i).slice(0, opts.maxThreads ?? 120);
   for (const x of fresh) known.add(x.url);
   saveSeen(ctx.db, projectId, known);
   if (!fresh.length) { ctx.db.insert(t.mpSettings).values({ key: LAST_SCAN_KEY(projectId), value: nowIso(), updatedAt: nowIso() }).onConflictDoUpdate({ target: t.mpSettings.key, set: { value: nowIso(), updatedAt: nowIso() } }).run(); return { scanned: 0, scored: 0, leads: 0, warnings }; }
 
+  // Der ganze Radar ist der Kommentar-Agent: läuft er unter der Ausnahme von
+  // `MP_LLM_PAUSED`, gilt das für Bewertung und Entwurf gleichermaßen. Ohne
+  // Ausnahme ist es der ablehnende Anbieter und alles scheitert mit Ansage.
+  const llm = ctx.llmKommentare ?? ctx.llm;
   const cheap = modelFor("scoring");
-  const candidates: ThreadCandidate[] = fresh.map((x, i) => ({ id: `t${i}`, platform: x.platform, url: x.url, title: x.title, excerpt: x.excerpt, community: x.community }));
+  const candidates: ThreadCandidate[] = fresh.map((x, i) => ({ id: `t${i}`, platform: x.platform, url: x.url, title: x.title, excerpt: x.excerpt, community: x.community, externalId: x.externalId }));
   const scored: { c: ThreadCandidate; score: number; reason: string; asking: boolean }[] = [];
   const { result } = await withRun(ctx.db, { task: "community.score", model: cheap, projectId }, async (usage) => {
     for (let i = 0; i < candidates.length; i += 25) {
       const batch = candidates.slice(i, i + 25);
-      const out = await chatJson(ctx.llm, cheap, Scores, scoreThreadsPrompt({ brief: brief.data, personas, threads: batch }), usage, { maxTokens: 3000 });
+      const out = await chatJson(llm, cheap, Scores, scoreThreadsPrompt({ brief: brief.data, personas, threads: batch }), usage, { maxTokens: 3000 });
       for (const sc of out.scores) { const c = batch.find((x) => x.id === sc.id); if (c) scored.push({ c, score: Math.round(sc.score), reason: sc.reason, asking: sc.askingForTools }); }
     }
     return scored.length;
   });
-  const hits = scored.filter((x) => x.score >= LEAD_THRESHOLD).sort((a, b) => b.score - a.score).slice(0, opts.maxLeads ?? 15);
+  const grenze = Math.min(opts.maxLeads ?? ctx.env.MP_KOMMENTARE_PRO_LAUF, ctx.env.MP_KOMMENTARE_PRO_LAUF);
+  const hits = scored.filter((x) => x.score >= LEAD_THRESHOLD).sort((a, b) => b.score - a.score).slice(0, grenze);
   const voice = voiceBlock(loadBrandKit(ctx.db, projectId));
   const rulesCache = new Map<string, { text: string; linksAllowed: boolean }>();
   let created = 0;
+  let verworfen = 0;
   if (hits.length) {
     await withRun(ctx.db, { task: "community.reply-drafts", model: modelFor("community"), projectId }, async (usage) => {
       for (const h of hits) {
+        const sozial = SOZIAL.has(h.c.platform);
         let rules = { text: "", linksAllowed: true };
         if (h.c.platform === "reddit") {
           const sub = h.c.community.replace(/^r\//, "");
           if (!rulesCache.has(sub)) rulesCache.set(sub, await (ctx.rulesFetcher ?? fetchRedditRules)(sub, ctx.env));
           rules = rulesCache.get(sub)!;
         }
+        const gemeinsam = {
+          id: newId(), projectId, platform: h.c.platform, url: h.c.url, title: h.c.title,
+          excerpt: h.c.excerpt.slice(0, 600), score: h.score, status: "drafted" as const, createdAt: nowIso(),
+        };
         try {
-          const draft = await chatJson(ctx.llm, modelFor("community"), Reply, replyDraftPrompt({ brief: brief.data, ...(personas[0] ? { persona: personas[0] } : {}), thread: h.c, rules: rules.text, linksAllowed: rules.linksAllowed, voiceProfile: voice, productUrl: project.url }), usage, { maxTokens: 1500, temperature: 0.5 });
-          ctx.db.insert(t.mpCommunityLeads).values({ id: newId(), projectId, platform: h.c.platform, url: h.c.url, title: h.c.title, excerpt: h.c.excerpt.slice(0, 600), score: h.score, draftReply: draft.reply, status: "drafted", meta: toJson({ community: h.c.community, reason: h.reason, askingForTools: h.asking, rulesNote: draft.rulesNote, mentionsProduct: draft.mentionsProduct, linksAllowed: rules.linksAllowed, rules: rules.text.slice(0, 1500) }), createdAt: nowIso() }).run();
+          if (sozial) {
+            const draft = await chatJson(llm, modelFor("community"), Kommentar, commentDraftPrompt({
+              brief: brief.data, ...(personas[0] ? { persona: personas[0] } : {}), thread: h.c,
+              maxZeichen: MAX_ZEICHEN[h.c.platform] ?? 200, voiceProfile: voice,
+              // Unter einem fremden Reel ist eine Produktnennung nur dann keine
+              // Werbung, wenn der Beitrag ausdrücklich nach einem Werkzeug fragt.
+              produktErlaubt: h.asking,
+            }), usage, { maxTokens: 500, temperature: 0.7 });
+            // Das Modell darf ablehnen — ein ausgelassener Kommentar kostet
+            // nichts, ein schlechter kostet den Account.
+            if (!draft.passt || !draft.kommentar.trim()) { verworfen++; continue; }
+            ctx.db.insert(t.mpCommunityLeads).values({
+              ...gemeinsam, draftReply: draft.kommentar.trim(),
+              meta: toJson({
+                community: h.c.community, reason: h.reason, askingForTools: h.asking,
+                rulesNote: draft.grund, mentionsProduct: draft.nenntProdukt, linksAllowed: false,
+                // Ohne diese Kennung lässt sich später nicht antworten:
+                // `reply_to_id` verlangt die Beitrags-ID, nicht den Permalink.
+                externalId: h.c.externalId ?? "", kommentar: true,
+                selbstSenden: kannSelbstAntworten(h.c.platform),
+              }),
+            }).run();
+          } else {
+            const draft = await chatJson(llm, modelFor("community"), Reply, replyDraftPrompt({ brief: brief.data, ...(personas[0] ? { persona: personas[0] } : {}), thread: h.c, rules: rules.text, linksAllowed: rules.linksAllowed, voiceProfile: voice, productUrl: project.url }), usage, { maxTokens: 1500, temperature: 0.5 });
+            ctx.db.insert(t.mpCommunityLeads).values({ ...gemeinsam, draftReply: draft.reply, meta: toJson({ community: h.c.community, reason: h.reason, askingForTools: h.asking, rulesNote: draft.rulesNote, mentionsProduct: draft.mentionsProduct, linksAllowed: rules.linksAllowed, rules: rules.text.slice(0, 1500) }) }).run();
+          }
           created++;
-        } catch (e) { warnings.push(`${h.c.url}: ${e instanceof Error ? e.message : String(e)}`); }
+        } catch (e) {
+          const text = e instanceof Error ? e.message : String(e);
+          warnings.push(`${h.c.url}: ${/MP_LLM_PAUSED|OpenRouter ist pausiert/.test(text) ? KOMMENTARE_PAUSIERT : text}`);
+          // Die Pause trifft jeden weiteren Aufruf genauso — nicht zwanzigmal
+          // dieselbe Meldung sammeln.
+          if (/OpenRouter ist pausiert/.test(text)) break;
+        }
       }
       return created;
     });
   }
+  if (verworfen) warnings.push(`${verworfen} Beiträge übersprungen — das Modell fand nichts Konkretes zu sagen.`);
   ctx.db.insert(t.mpSettings).values({ key: LAST_SCAN_KEY(projectId), value: nowIso(), updatedAt: nowIso() }).onConflictDoUpdate({ target: t.mpSettings.key, set: { value: nowIso(), updatedAt: nowIso() } }).run();
   return { scanned: fresh.length, scored: result, leads: created, warnings };
 }
@@ -250,6 +315,12 @@ export const communityScanJob: JobHandler<CommunityContext> = async (ctx, job, p
   progress("scan", { status: "done", finishedAt: nowIso(), detail: `${r.scanned} Threads, ${r.leads} neue Leads${r.warnings.length ? `, ${r.warnings.length} Warnungen` : ""}` });
   return { ...r };
 };
+
+/** Ein Eintrag mit ausgepacktem `meta` — die Sende-Route braucht die Beitrags-Kennung. */
+export function getLead(db: Db, id: string): s.CommunityLead | null {
+  const r = db.select().from(t.mpCommunityLeads).where(eq(t.mpCommunityLeads.id, id)).get();
+  return r ? { ...r, status: r.status as s.CommunityLead["status"], meta: parseJson<Record<string, unknown>>(r.meta, {}) } : null;
+}
 
 export function updateLead(db: Db, id: string, patch: s.CommunityLeadPatch): s.CommunityLead | null {
   const row = db.select().from(t.mpCommunityLeads).where(eq(t.mpCommunityLeads.id, id)).get();

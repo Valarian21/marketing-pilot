@@ -25,6 +25,9 @@ const pausiert = () => Object.assign(new Error(LLM_PAUSIERT), { statusCode: 503 
 
 /** Nimmt jeden Aufruf an und lehnt ihn mit derselben klaren Meldung ab. */
 class PausedLlm implements LlmProvider { async chat(): Promise<never> { throw pausiert(); } }
+
+/** Die Meldung, wenn auch die Kommentar-Ausnahme aus ist. */
+export const KOMMENTARE_PAUSIERT = "Kommentar-Entwürfe brauchen ein Modell, OpenRouter ist aber pausiert. Zum Einschalten MP_LLM_KOMMENTARE=true in die .env und beide Dienste neu starten — das erlaubt nur diesen einen Agenten, auf dem billigen Modell.";
 class PausedImage implements ImageProvider { async generate(): Promise<never> { throw pausiert(); } }
 
 export interface ServiceOverrides {
@@ -38,9 +41,15 @@ export function buildContext(env: Env, db: Db, log: (m: string) => void, o: Serv
   // und Zahlen-Abruf laufen — nur die Modellaufrufe scheitern, und zwar laut.
   const llm = o.llm ?? (env.MP_LLM_PAUSED ? new PausedLlm() : env.OPENROUTER_API_KEY ? new OpenRouterProvider(env.OPENROUTER_API_KEY, { referer: env.MP_PUBLIC_BASE }) : null);
   if (!llm) return null;
+  // Kommentare dürfen die Pause überspringen, wenn es ausdrücklich erlaubt ist:
+  // derselbe echte Anbieter, nur an diesem einen Draht. Ist die Ausnahme aus,
+  // bleibt es beim pausierten `llm` und der Agent scheitert wie jeder andere.
+  const llmKommentare = o.llm ?? (!env.MP_LLM_PAUSED ? llm
+    : env.MP_LLM_KOMMENTARE && env.OPENROUTER_API_KEY ? new OpenRouterProvider(env.OPENROUTER_API_KEY, { referer: env.MP_PUBLIC_BASE })
+    : llm);
   const image = o.image !== undefined ? o.image : env.MP_LLM_PAUSED ? new PausedImage() : (env.OPENROUTER_API_KEY ? new OpenRouterImageProvider(env.OPENROUTER_API_KEY, MODEL_IMAGE) : null);
   return {
-    db, env, llm, image, dataDir: env.MP_DATA_DIR, log,
+    db, env, llm, llmKommentare, image, dataDir: env.MP_DATA_DIR, log,
     search: o.search ?? createSearchProvider(env).provider,
     publish: o.publish ?? createPublishProvider(env),
     voice: o.voice !== undefined ? o.voice : createVoiceProvider(env),
