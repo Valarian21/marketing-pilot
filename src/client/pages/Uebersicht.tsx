@@ -197,7 +197,7 @@ export function UebersichtPage() {
               </dl>
               <Sparkline punkte={kn.verlauf.map((v) => ({ tag: v.tag, wert: v.aufrufe }))} farbe={kanalFarbe(kn.platform)} breite={200} hoehe={40} />
               {kn.fehler && <p className="mp-small mp-kanal-fehler">{kn.fehler}</p>}
-              {!kn.fehler && kn.aufrufe === null && kn.messbar && <p className="mp-small mp-muted">Diese Plattform meldet keine Aufrufe je Kanal.</p>}
+              {!kn.fehler && kn.aufrufe === null && kn.aufrufeHinweis && <p className="mp-small mp-muted">{kn.aufrufeHinweis}</p>}
             </div>
           ))}
         </div>

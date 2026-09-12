@@ -27,7 +27,7 @@ import { parseJson, type Db } from "../../db/index.js";
 import { PLATFORMS } from "../../../shared/channels.js";
 import { loadProfiles } from "../../channels.js";
 import { leseMetriken } from "../../publish/metrics.js";
-import { leseHandStand, leseKanalStatus, leseKanalTage, MESSBARE_KANAELE, type KanalWerte } from "../../publish/kanal-metriken.js";
+import { kanalEingerichtet, leseHandStand, leseKanalStatus, leseKanalTage, MESSBARE_KANAELE, type KanalWerte } from "../../publish/kanal-metriken.js";
 import { loadCredentials } from "../../publish/index.js";
 import { BIO_CODE, berlinTag } from "../../shortlinks.js";
 import { geschaeftsZahlen, tageZwischen, type GeschaeftsTag } from "../../providers/geschaeft.binderplan.js";
@@ -50,6 +50,23 @@ export interface CockpitOptions {
   /** Pfad zum Schnappschuss der Produktdatenbank, falls das Projekt eine Datenquelle hat. */
   produktDbPfad?: string | undefined;
   now?: Date;
+}
+
+/**
+ * Der Satz unter einer Kanalkarte ohne Aufrufe.
+ *
+ * YouTube zählt über Bestände: der erste Lauf speichert nur den Stand, der
+ * Tageswert entsteht als Zuwachs beim zweiten. Das ist etwas anderes als eine
+ * Plattform, die Aufrufe je Kanal gar nicht herausgibt (Facebook seit 2026).
+ */
+function aufrufeHinweis(platform: string, werte: (KanalWerte | undefined)[]): string {
+  if (werte.some((w) => typeof w?.aufrufe === "number")) return "";
+  const bestand = werte.reduce<number | undefined>((n, w) => (typeof w?.aufrufeGesamt === "number" ? w.aufrufeGesamt : n), undefined);
+  if (bestand !== undefined) {
+    return `Erster Stand gespeichert: ${bestand.toLocaleString("de-DE")} Aufrufe insgesamt. `
+      + "Ab dem nächsten Abruf steht hier, wie viele davon am Tag dazukamen.";
+  }
+  return MESSBARE_KANAELE.includes(platform) ? "Diese Plattform meldet keine Aufrufe je Kanal." : "";
 }
 
 export function cockpitView(db: Db, projectId: string, opts: CockpitOptions): s.CockpitView {
@@ -79,7 +96,13 @@ export function cockpitView(db: Db, projectId: string, opts: CockpitOptions): s.
    * hochgeladen hat.
    */
   const handStand = leseHandStand(db, projectId);
-  const zaehlKanaele = [...new Set([...MESSBARE_KANAELE, ...handStand.keys()])];
+  // Nur messbare Kanäle, die es hier auch gibt: seit YouTube über die bloße
+  // Kanaladresse misst (12.09.2026), stünde sonst in jedem Projekt ohne
+  // YouTube-Kanal eine leere Karte.
+  const zaehlKanaele = [...new Set([
+    ...MESSBARE_KANAELE.filter((p) => kanalEingerichtet(p, creds[p], profile.find((x) => x.platform === p)?.url) || jeKanal.has(p)),
+    ...handStand.keys(),
+  ])];
 
   // --- Beiträge ---------------------------------------------------------------
   const stuecke = new Map(db.select({ id: t.mpContentPieces.id, title: t.mpContentPieces.title, format: t.mpContentPieces.format })
@@ -160,7 +183,7 @@ export function cockpitView(db: Db, projectId: string, opts: CockpitOptions): s.
    * gefolgt ist.
    */
   const eingerichteteKanaele = [
-    ...MESSBARE_KANAELE.filter((p) => creds[p]?.["accessToken"]),
+    ...MESSBARE_KANAELE.filter((p) => kanalEingerichtet(p, creds[p], profile.find((x) => x.platform === p)?.url)),
     // Ein Export-Kanal zählt beim Follower-Bestand nur mit, wenn der Export
     // überhaupt Follower nennt — TikToks Übersicht tut das nicht.
     ...[...handStand.keys()].filter((p) => !MESSBARE_KANAELE.includes(p) && [...(jeKanal.get(p)?.values() ?? [])].some((w) => typeof w.follower === "number")),
@@ -210,7 +233,7 @@ export function cockpitView(db: Db, projectId: string, opts: CockpitOptions): s.
     return {
       platform,
       label: PLATFORMS[platform]?.label ?? platform,
-      eingerichtet: Boolean(creds[platform]?.["accessToken"]) || Boolean(hand),
+      eingerichtet: kanalEingerichtet(platform, creds[platform], profil?.url) || Boolean(creds[platform]?.["accessToken"]) || Boolean(hand),
       messbar: MESSBARE_KANAELE.includes(platform),
       vonHand: Boolean(hand),
       standBis: hand?.bisTag ?? null,
@@ -226,6 +249,7 @@ export function cockpitView(db: Db, projectId: string, opts: CockpitOptions): s.
       beitragsInteraktionen: summe(metriken.flatMap((m) => [m?.likes, m?.kommentare, m?.saves, m?.shares])),
       letzterAbruf: hand?.eingespieltAt ?? status.letzterLauf,
       fehler: status.fehler[platform] ?? "",
+      aufrufeHinweis: aufrufeHinweis(platform, imRaum.map(({ w }) => w)),
       verlauf: imRaum.map(({ tag, w }) => ({ tag, aufrufe: w?.aufrufe ?? null, interaktionen: w?.interaktionen ?? null, follower: w?.follower ?? null })),
     };
   })

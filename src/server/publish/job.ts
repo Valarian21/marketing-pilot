@@ -7,6 +7,7 @@ import type { JobHandler } from "../jobs.js";
 import { nowIso } from "../db/index.js";
 import { duePosts, runScheduledPost, type PostContext } from "./schedule.js";
 import { holeMetriken } from "./metrics.js";
+import { loadProfiles } from "../channels.js";
 import { holeKanalStats } from "./kanal-metriken.js";
 import { credentialsFor } from "./index.js";
 
@@ -63,6 +64,7 @@ export const kanalStatsJob: JobHandler<PostContext> = async (ctx, job, progress)
   const res = await holeKanalStats({
     db: ctx.db,
     creds: (platform) => credentialsFor(ctx.db, projectId, platform),
+    profilUrl: (platform) => loadProfiles(ctx.db, projectId).find((p) => p.platform === platform)?.url || null,
     ...(ctx.fetchImpl ? { fetchImpl: ctx.fetchImpl } : {}),
     log: ctx.log,
     ...(ctx.now ? { now: ctx.now } : {}),

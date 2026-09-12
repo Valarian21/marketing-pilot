@@ -34,7 +34,7 @@
  * schreibt der Pilot sie selbst fort, auch wenn Meta die Vergangenheit längst
  * nicht mehr herausgibt.
  */
-import { and, desc, eq, gte } from "drizzle-orm";
+import { and, desc, eq, gte, lt } from "drizzle-orm";
 import * as t from "../db/schema.js";
 import { newId, nowIso, parseJson, toJson, type Db } from "../db/index.js";
 
@@ -75,6 +75,15 @@ export interface KanalWerte {
   videoAufrufe?: number | undefined;
   /** Anzahl Beiträge auf dem Konto (Bestand). */
   beitraege?: number | undefined;
+  /**
+   * Aufrufe **aller** Videos zusammen, seit es den Kanal gibt (YouTube).
+   *
+   * Ein Bestand, kein Tageswert — er steht hier, damit der nächste Lauf die
+   * Differenz bilden kann und `aufrufe` ein echter Tageswert bleibt.
+   */
+  aufrufeGesamt?: number | undefined;
+  /** Wie `aufrufeGesamt`, für die Bewertungen. */
+  interaktionenGesamt?: number | undefined;
   /** Einzelne Interaktionsarten, wo ein Export sie nennt (TikTok). */
   likes?: number | undefined;
   kommentare?: number | undefined;
@@ -137,6 +146,10 @@ interface Abruf {
   /** Tage, für die noch Fenster-Werte fehlen (neueste zuerst), mit ihrem Raster. */
   fehlend: (tag: string) => boolean;
   heute: string;
+  /** Die Adresse des Kanals aus der Kanäle-Seite — YouTube braucht nur sie. */
+  profilUrl?: string | undefined;
+  /** Der zuletzt gespeicherte Stand dieses Kanals, für Bestand → Tageswert. */
+  vorher?: KanalWerte | undefined;
 }
 
 // --- Instagram ---------------------------------------------------------------
@@ -234,14 +247,113 @@ export async function threadsKanal({ creds, f, fehlend, heute }: Abruf): Promise
   return [...je.entries()].map(([tag, werte]) => ({ tag, werte }));
 }
 
+// --- YouTube -----------------------------------------------------------------
+
+/**
+ * YouTube **ohne** Google-Projekt, OAuth und Kontingent.
+ *
+ * Jeder Kanal hat einen offenen Atom-Feed
+ * (`/feeds/videos.xml?channel_id=UC…`), und der nennt zu jedem der letzten 15
+ * Videos `media:statistics views` und `media:starRating count` — Aufrufe und
+ * Bewertungen, ohne Schlüssel, ohne Tageslimit. Die Data API v3 gäbe dieselben
+ * Zahlen erst nach einem Cloud-Projekt, die Analytics-API (Wiedergabezeit,
+ * Klickrate, Zuschauerbindung) zusätzlich nach OAuth des Kanalinhabers — beides
+ * lohnt erst, wenn es mehr als eine Handvoll Videos gibt. Geprüft am 12.09.2026
+ * gegen @binderplanapp.
+ *
+ * Was der Feed **nicht** kann: eine Vergangenheit. Er liefert immer nur den
+ * Stand von jetzt, deshalb wird der Bestand mitgeschrieben (`aufrufeGesamt`)
+ * und der Tageswert als Zuwachs dazu gebildet. Beim ersten Lauf gibt es keinen
+ * Zuwachs — dann bleibt `aufrufe` leer statt 0, sonst stünde am Starttag eine
+ * Null, die wie „niemand hat zugesehen" aussieht.
+ */
+export async function youtubeKanal({ f, heute, profilUrl, vorher }: Abruf): Promise<KanalTag[]> {
+  const kanalId = await youtubeKanalId(f, profilUrl ?? "");
+  const res = await f(`https://www.youtube.com/feeds/videos.xml?channel_id=${encodeURIComponent(kanalId)}`,
+    { signal: AbortSignal.timeout(TIMEOUT) });
+  if (!res.ok) throw new Error(`YouTube-Feed: HTTP ${res.status}`);
+  const xml = await res.text();
+  const videos = [...xml.matchAll(/<media:statistics\s+views="(\d+)"/g)].map((m) => Number(m[1]));
+  const sterne = [...xml.matchAll(/<media:starRating\s+count="(\d+)"/g)].map((m) => Number(m[1]));
+  if (!videos.length && !/<entry>/.test(xml)) throw new Error("YouTube-Feed: keine Videos im Feed.");
+  const aufrufeGesamt = videos.reduce((n, v) => n + v, 0);
+  const interaktionenGesamt = sterne.reduce((n, v) => n + v, 0);
+
+  const werte: KanalWerte = { aufrufeGesamt, interaktionenGesamt, beitraege: videos.length };
+  // Zuwachs nur, wenn ein früherer Stand existiert — und nie negativ: verschwindet
+  // ein Video aus dem Feed (nur 15 Einträge), sinkt die Summe, ohne dass jemand
+  // Aufrufe verloren hätte.
+  const zu = (jetzt: number, davor: number | undefined): number | undefined =>
+    davor === undefined ? undefined : Math.max(0, jetzt - davor);
+  const aufrufe = zu(aufrufeGesamt, vorher?.aufrufeGesamt);
+  const interaktionen = zu(interaktionenGesamt, vorher?.interaktionenGesamt);
+  if (aufrufe !== undefined) werte.aufrufe = aufrufe;
+  if (interaktionen !== undefined) werte.interaktionen = interaktionen;
+
+  const abos = await youtubeAbos(f, kanalId);
+  if (abos !== undefined) werte.follower = abos;
+  return [{ tag: heute, werte }];
+}
+
+/** `@handle` → `UC…`; eine fertige Kanal-ID wird durchgereicht. */
+async function youtubeKanalId(f: typeof fetch, url: string): Promise<string> {
+  const roh = url.trim();
+  if (!roh) throw new Error("YouTube: keine Kanal-Adresse hinterlegt (Kanäle-Seite).");
+  const direkt = /(?:channel\/)?(UC[\w-]{20,})/.exec(roh);
+  if (direkt) return direkt[1]!;
+  const seite = await f(roh, { headers: { "user-agent": UA }, signal: AbortSignal.timeout(TIMEOUT) });
+  if (!seite.ok) throw new Error(`YouTube-Kanalseite: HTTP ${seite.status}`);
+  const html = await seite.text();
+  const id = /"externalId":"(UC[\w-]{20,})"/.exec(html) ?? /channel\/(UC[\w-]{20,})/.exec(html);
+  if (!id) throw new Error(`YouTube: zu ${roh} ließ sich keine Kanal-ID finden.`);
+  return id[1]!;
+}
+
+/**
+ * Abonnenten, so wie YouTube sie öffentlich zeigt — gerundet („1,2 Tsd.").
+ *
+ * Kein Fehler, wenn es nicht klappt: die Zahl ist ein Zusatz, die Aufrufe sind
+ * die Hauptsache, und an der Seitenstruktur kann sich jederzeit etwas ändern.
+ */
+async function youtubeAbos(f: typeof fetch, kanalId: string): Promise<number | undefined> {
+  try {
+    const res = await f(`https://www.youtube.com/channel/${encodeURIComponent(kanalId)}`,
+      { headers: { "user-agent": UA, "accept-language": "de-DE,de;q=0.9" }, signal: AbortSignal.timeout(TIMEOUT) });
+    if (!res.ok) return undefined;
+    const m = /"([\d.,]+)\s*(Tsd\.|Mio\.|K|M)?\s*Abonnent/.exec(await res.text());
+    if (!m) return undefined;
+    const n = Number(m[1]!.replace(/\./g, "").replace(",", "."));
+    if (!Number.isFinite(n)) return undefined;
+    const faktor = m[2] === "Tsd." || m[2] === "K" ? 1000 : m[2] === "Mio." || m[2] === "M" ? 1_000_000 : 1;
+    return Math.round(n * faktor);
+  } catch { return undefined; }
+}
+
+const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Safari/537.36";
+
 const ABRUFE: Record<string, (a: Abruf) => Promise<KanalTag[]>> = {
   instagram: instagramKanal,
   facebook: facebookKanal,
   threads: threadsKanal,
+  youtube: youtubeKanal,
 };
 
 /** Kanäle, deren Zahlen der Pilot selbst holen kann. */
 export const MESSBARE_KANAELE = Object.keys(ABRUFE);
+
+/**
+ * Kanäle, die statt eines Zugriffstokens nur ihre öffentliche Adresse brauchen.
+ *
+ * YouTube misst über den offenen Feed: dort ist die Kanal-Adresse aus der
+ * Kanäle-Seite der ganze „Zugang".
+ */
+export const OFFENE_KANAELE = new Set(["youtube"]);
+
+/** Ist dieser Kanal messbar eingerichtet? */
+export function kanalEingerichtet(platform: string, creds: Record<string, string> | undefined, profilUrl: string | null | undefined): boolean {
+  if (!MESSBARE_KANAELE.includes(platform)) return false;
+  return OFFENE_KANAELE.has(platform) ? Boolean(profilUrl) : Boolean(creds?.["accessToken"]);
+}
 
 // --- Speicher ----------------------------------------------------------------
 
@@ -306,6 +418,8 @@ function schreibeKanalStatus(db: Db, projectId: string, status: KanalStatus): vo
 export interface KanalContext {
   db: Db;
   creds: (platform: string) => Record<string, string>;
+  /** Die hinterlegte Kanaladresse — für Kanäle, die über ihre öffentliche Seite messen. */
+  profilUrl?: (platform: string) => string | null;
   fetchImpl?: typeof fetch;
   log?: (m: string) => void;
   now?: () => Date;
@@ -327,12 +441,14 @@ export async function holeKanalStats(ctx: KanalContext, projectId: string): Prom
 
   for (const [platform, abruf] of Object.entries(ABRUFE)) {
     const creds = ctx.creds(platform);
-    if (!creds["accessToken"]) continue;
+    const profilUrl = ctx.profilUrl?.(platform) ?? null;
+    if (!kanalEingerichtet(platform, creds, profilUrl)) continue;
     // Welche Tage schon Fenster-Werte haben: alles, was `interaktionen` kennt,
     // wurde bereits einzeln abgefragt.
     const bekannt = new Set(db_tageMitFensterwerten(ctx.db, projectId, platform));
     try {
-      const tage = await abruf({ creds, f, heute, fehlend: (tag) => !bekannt.has(tag) && tag !== heute });
+      const tage = await abruf({ creds, f, heute, fehlend: (tag) => !bekannt.has(tag) && tag !== heute,
+        profilUrl: profilUrl ?? undefined, vorher: letzterStand(ctx.db, projectId, platform, heute) });
       for (const { tag, werte } of tage) schreibeKanalTag(ctx.db, projectId, platform, tag, werte, now);
       out.push({ platform, tage: tage.length });
     } catch (e) {
@@ -344,6 +460,20 @@ export async function holeKanalStats(ctx: KanalContext, projectId: string): Prom
   }
   schreibeKanalStatus(ctx.db, projectId, status);
   return out;
+}
+
+/**
+ * Der jüngste gespeicherte Stand eines Kanals **vor** heute.
+ *
+ * Grundlage für „Bestand minus letzter Bestand = Zuwachs". Der heutige Tag
+ * zählt nicht mit: sonst wäre der zweite Lauf des Tages immer ein Zuwachs von
+ * null gegen sich selbst.
+ */
+function letzterStand(db: Db, projectId: string, platform: string, heute: string): KanalWerte | undefined {
+  const zeile = db.select().from(t.mpKanalStats)
+    .where(and(eq(t.mpKanalStats.projectId, projectId), eq(t.mpKanalStats.platform, platform), lt(t.mpKanalStats.tag, heute)))
+    .orderBy(desc(t.mpKanalStats.tag)).get();
+  return zeile ? parseJson<KanalWerte>(zeile.werte, {}) : undefined;
 }
 
 /**

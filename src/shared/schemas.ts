@@ -1475,6 +1475,15 @@ export const CockpitKanal = z.object({
   beitragsInteraktionen: z.number().nullable().default(null),
   letzterAbruf: Iso.nullable().default(null),
   fehler: z.string().default(""),
+  /**
+   * Warum hier keine Aufrufe stehen — leer, wenn welche dastehen.
+   *
+   * „Keine Zahl" hat mehrere Gründe, und sie sehen für den Leser gleich aus:
+   * Facebook gibt Seitenaufrufe seit 2026 gar nicht mehr heraus, YouTube misst
+   * über Bestände und kennt am ersten Tag noch keinen Zuwachs. Ein Satz, der
+   * beides „meldet keine Aufrufe" nennt, wäre im zweiten Fall schlicht falsch.
+   */
+  aufrufeHinweis: z.string().default(""),
   verlauf: z.array(z.object({ tag: z.string(), aufrufe: z.number().nullable(), interaktionen: z.number().nullable(), follower: z.number().nullable() })).default([]),
 });
 
