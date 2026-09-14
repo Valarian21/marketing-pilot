@@ -149,7 +149,9 @@ export async function sitzungStarten(env: Env): Promise<{ passwort: string }> {
     locale: "de-DE",
     timezoneId: "Europe/Berlin",
     env: { ...process.env, DISPLAY } as Record<string, string>,
-    args: ["--start-maximized", "--disable-gpu"],
+    // Die Wiederherstellen-Blase nach einem harten Beenden verdeckt sonst die
+    // Anmeldemaske, und wegklicken kann sie im VNC-Fenster nur der Mensch.
+    args: ["--start-maximized", "--disable-gpu", "--hide-crash-restore-bubble"],
   });
   const seite = ctx.pages()[0] ?? (await ctx.newPage());
   await seite.goto("https://www.tiktok.com/login", { waitUntil: "domcontentloaded" }).catch(() => {});

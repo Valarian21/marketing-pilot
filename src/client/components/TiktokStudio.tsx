@@ -58,8 +58,16 @@ export function TiktokStudio({ projectId }: { projectId: string }) {
   const lauf = view?.lauf ?? null;
   const wartend = view?.wartend ?? [];
   // noVNC bekommt das Passwort gleich mit — sonst müsste man es abtippen.
+  //
+  // `path` muss ausgeschrieben sein: noVNC baut die WebSocket-Adresse aus
+  // Protokoll, Host und Port und hängt den Pfad an die **Wurzel** an
+  // (app/ui.js: `url += '/' + path`). Ohne diesen Parameter landet der Draht
+  // auf /websockify beim Dashboard statt hier — und die Ansicht meldet nur
+  // „Failed to connect to server".
   const rahmenUrl = view?.passwort
-    ? `/api/mp/tiktok/vnc/vnc.html?autoconnect=1&resize=remote&password=${encodeURIComponent(view.passwort)}`
+    ? "/api/mp/tiktok/vnc/vnc.html?autoconnect=1&resize=remote"
+      + "&path=api%2Fmp%2Ftiktok%2Fvnc%2Fwebsockify"
+      + `&password=${encodeURIComponent(view.passwort)}`
     : null;
 
   return (
