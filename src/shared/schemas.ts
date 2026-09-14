@@ -1139,6 +1139,38 @@ export const HandarbeitView = z.object({
   kanaele: z.array(HandarbeitKanal),
   eintraege: z.array(HandarbeitEintrag),
 });
+/**
+ * TikTok-Studio: Zustand der Anmelde-Sitzung und was auf den naechsten Lauf
+ * wartet. `passwort` ist das VNC-Passwort der laufenden Sitzung, nicht ein
+ * TikTok-Geheimnis — solche nimmt der Pilot nicht entgegen.
+ */
+export const TiktokPlanZeile = z.object({
+  pieceId: Id,
+  titel: z.string(),
+  geplantAm: z.string().nullable().default(null),
+  status: z.enum(["geplant", "uebersprungen", "fehler"]),
+  meldung: z.string(),
+});
+export const TiktokLauf = z.object({
+  laeuft: z.boolean(),
+  probe: z.boolean(),
+  gestartetAm: z.string(),
+  fertigAm: z.string().nullable().default(null),
+  gesamt: z.number().int(),
+  erledigt: z.number().int(),
+  aktuell: z.string().nullable().default(null),
+  zeilen: z.array(TiktokPlanZeile).default([]),
+});
+export const TiktokView = z.object({
+  laeuft: z.boolean(),
+  angemeldet: z.boolean(),
+  passwort: z.string().nullable().default(null),
+  gestartetAm: z.string().nullable().default(null),
+  lauf: TiktokLauf.nullable().default(null),
+  wartend: z.array(z.object({ pieceId: Id, titel: z.string(), geplantAm: z.string() })).default([]),
+  uebersprungen: z.array(TiktokPlanZeile).default([]),
+});
+
 export const VerteilenRequest = z.object({
   platform: z.string(),
   /** Erster Tag (YYYY-MM-DD, Berliner Zeit). */
@@ -1462,6 +1494,9 @@ export type PublishPackage = z.infer<typeof PublishPackage>;
 export type HandarbeitEintrag = z.infer<typeof HandarbeitEintrag>;
 export type HandarbeitKanal = z.infer<typeof HandarbeitKanal>;
 export type HandarbeitView = z.infer<typeof HandarbeitView>;
+export type TiktokView = z.infer<typeof TiktokView>;
+export type TiktokLauf = z.infer<typeof TiktokLauf>;
+export type TiktokPlanZeile = z.infer<typeof TiktokPlanZeile>;
 export type VerteilenRequest = z.infer<typeof VerteilenRequest>;
 export type ChannelProfile = z.infer<typeof ChannelProfile>;
 export type ChannelStage = z.infer<typeof ChannelStage>;

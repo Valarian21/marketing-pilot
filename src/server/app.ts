@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import Fastify, { type FastifyError, type FastifyInstance } from "fastify";
 import cookie from "@fastify/cookie";
+import httpProxy from "@fastify/http-proxy";
 import fastifyStatic from "@fastify/static";
 import { hasZodFastifySchemaValidationErrors, serializerCompiler, validatorCompiler } from "fastify-type-provider-zod";
 import type { Env } from "./env.js";
@@ -22,6 +23,7 @@ import { videoRoutes } from "./routes/video.js";
 import { musicRoutes } from "./routes/music.js";
 import { seriesRoutes } from "./routes/series.js";
 import { publishRoutes } from "./routes/publish.js";
+import { tiktokRoutes } from "./routes/tiktok.js";
 import { loopRoutes, EVENTS_PUBLIC_PATH } from "./routes/loop.js";
 import { storageRoutes } from "./routes/storage.js";
 import { mediaRoutes } from "./routes/media.js";
@@ -98,6 +100,17 @@ export async function buildApp(env: Env, opts: { host?: HostAdapter; dbFile?: st
   musicRoutes(app);
   seriesRoutes(app, db);
   publishRoutes(app, db, env);
+  tiktokRoutes(app, db, env);
+  // Die Sicht auf den Anmelde-Browser (noVNC). Liegt unter /api/mp/, damit die
+  // Anmeldung des Piloten davor steht — ein eigener nginx-Pfad waere offen im
+  // Netz gestanden. Der Aufstieg auf WebSocket braucht websocket: true.
+  await app.register(httpProxy, {
+    upstream: "http://127.0.0.1:6080",
+    prefix: "/api/mp/tiktok/vnc",
+    rewritePrefix: "",
+    websocket: true,
+    httpMethods: ["GET", "POST"],
+  });
   loopRoutes(app, db, env, () => ctx);
   storageRoutes(app, db, () => env.MP_DATA_DIR);
   mediaRoutes(app, db, () => env.MP_DATA_DIR);

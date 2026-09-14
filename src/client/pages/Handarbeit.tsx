@@ -17,6 +17,7 @@ import type { HandarbeitView } from "../../shared/schemas.js";
 import { api } from "../api.js";
 import { ProjectNav } from "../components/ProjectNav.js";
 import { Button, Card, CopyButton, Notice, PageHeader, Pill } from "../components/ui.js";
+import { TiktokStudio } from "../components/TiktokStudio.js";
 
 const heuteIso = () => new Date(Date.now() + 2 * 3600_000).toISOString().slice(0, 10);
 
@@ -95,6 +96,8 @@ export function HandarbeitPage() {
           </p>
         )}
       </Card>
+
+      {platform === "tiktok" && <TiktokStudio projectId={id} />}
 
       <Card>
         <div className="mp-card-head"><h2>Termine vergeben</h2></div>

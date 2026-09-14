@@ -1,0 +1,78 @@
+/**
+ * TikTok-Studio: anmelden und planen lassen.
+ *
+ * Die Sicht auf den Browser läuft über `/api/mp/tiktok/vnc` — also durch den
+ * Piloten und damit durch dessen Anmeldung. Ein eigener nginx-Pfad wäre offen
+ * im Netz gestanden; so kommt nur hinein, wer ohnehin im Dashboard angemeldet
+ * ist, und das VNC-Passwort ist die zweite Tür.
+ */
+import { z } from "zod";
+import type { FastifyInstance } from "fastify";
+import type { ZodTypeProvider } from "fastify-type-provider-zod";
+import * as s from "../../shared/schemas.js";
+import type { Db } from "../db/index.js";
+import type { Env } from "../env.js";
+import { getProject } from "../repo/projects.js";
+import { writeAudit } from "../audit.js";
+import {
+  laufVermerken, offeneAuftraege, planenStarten, sitzungBeenden, sitzungStarten, sitzungStatus,
+} from "../publish/tiktok-studio.js";
+
+export function tiktokRoutes(app: FastifyInstance, db: Db, env: Env): void {
+  const r = app.withTypeProvider<ZodTypeProvider>();
+  const P = s.ProjectIdParams;
+
+  /** Was wartet, was fällt raus — ohne irgendetwas zu starten. */
+  r.get("/api/mp/projects/:projectId/tiktok", {
+    schema: { params: P, response: { 200: s.TiktokView, 404: s.ErrorBody } },
+  }, async (req, reply) => {
+    if (!getProject(db, req.params.projectId)) return reply.code(404).send({ detail: "Projekt nicht gefunden." });
+    const { auftraege, uebersprungen } = offeneAuftraege(db, env, req.params.projectId);
+    const st = await sitzungStatus(env);
+    return {
+      ...st,
+      wartend: auftraege.map((a) => ({ pieceId: a.pieceId, titel: a.titel, geplantAm: a.geplantAm })),
+      uebersprungen,
+    };
+  });
+
+  /** Browser hochfahren und TikTok öffnen; der Mensch meldet sich selbst an. */
+  r.post("/api/mp/projects/:projectId/tiktok/sitzung", {
+    schema: { params: P, response: { 200: s.TiktokView, 404: s.ErrorBody, 400: s.ErrorBody } },
+  }, async (req, reply) => {
+    if (!getProject(db, req.params.projectId)) return reply.code(404).send({ detail: "Projekt nicht gefunden." });
+    try { await sitzungStarten(env); }
+    catch (e) { return reply.code(400).send({ detail: e instanceof Error ? e.message : "Sitzung ließ sich nicht starten." }); }
+    writeAudit(db, { user: req.user, action: "tiktok.sitzung", entityType: "project", entityId: req.params.projectId, projectId: req.params.projectId, content: {} });
+    const { auftraege, uebersprungen } = offeneAuftraege(db, env, req.params.projectId);
+    return { ...(await sitzungStatus(env)), wartend: auftraege.map((a) => ({ pieceId: a.pieceId, titel: a.titel, geplantAm: a.geplantAm })), uebersprungen };
+  });
+
+  /** Browser und VNC wieder abschalten. */
+  r.delete("/api/mp/projects/:projectId/tiktok/sitzung", {
+    schema: { params: P, response: { 200: z.object({ ok: z.boolean() }), 400: s.ErrorBody } },
+  }, async (req, reply) => {
+    try { await sitzungBeenden(env); return { ok: true }; }
+    catch (e) { return reply.code(400).send({ detail: e instanceof Error ? e.message : "Konnte nicht beenden." }); }
+  });
+
+  /** Den Stapel im Studio eintragen. `probe: true` füllt alles aus, schickt aber nicht ab. */
+  r.post("/api/mp/projects/:projectId/tiktok/planen", {
+    schema: { params: P, body: z.object({ probe: z.boolean().default(false) }), response: { 200: s.TiktokView, 400: s.ErrorBody, 404: s.ErrorBody } },
+  }, async (req, reply) => {
+    if (!getProject(db, req.params.projectId)) return reply.code(404).send({ detail: "Projekt nicht gefunden." });
+    try { await planenStarten(db, env, req.params.projectId, req.body.probe); }
+    catch (e) { return reply.code(400).send({ detail: e instanceof Error ? e.message : "Lauf ließ sich nicht starten." }); }
+    writeAudit(db, { user: req.user, action: "tiktok.planen", entityType: "project", entityId: req.params.projectId, projectId: req.params.projectId, content: { probe: req.body.probe } });
+    const { auftraege, uebersprungen } = offeneAuftraege(db, env, req.params.projectId);
+    return { ...(await sitzungStatus(env)), wartend: auftraege.map((a) => ({ pieceId: a.pieceId, titel: a.titel, geplantAm: a.geplantAm })), uebersprungen };
+  });
+
+  /** Nach dem Lauf: im Piloten vermerken, was jetzt im Studio liegt. */
+  r.post("/api/mp/projects/:projectId/tiktok/vermerken", {
+    schema: { params: P, response: { 200: z.object({ vermerkt: z.number().int() }), 404: s.ErrorBody } },
+  }, async (req, reply) => {
+    if (!getProject(db, req.params.projectId)) return reply.code(404).send({ detail: "Projekt nicht gefunden." });
+    return { vermerkt: laufVermerken(db, req.params.projectId) };
+  });
+}
