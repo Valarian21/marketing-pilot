@@ -202,9 +202,9 @@ export async function generateArtworkBundle(
   const brand = base.brief.productName;
   const domain = base.project.url.replace(/^https?:\/\//, "").replace(/\/$/, "");
   const L = lang === "de"
-    ? { faecher: "Fächer", echt: "echt", aufloesung: "Aufgelöst", stil: "Stil", so: "So entsteht sie", nurEcht: "echte Karte", seite: "Kunstseite", kiHinweis: "Bild KI-erzeugt", drucken: "Als PDF drucken, in dieselbe Hülle" }
-    : { faecher: "pockets", echt: "real", aufloesung: "Revealed", stil: "Style", so: "How it is made", nurEcht: "real card", seite: "Art page", kiHinweis: "Image AI-generated", drucken: "Print as PDF, into the same sleeve" };
-  const footer = `${L.seite} · ${domain} · ${fmtDate(new Date(), lang)} · ${L.kiHinweis}`;
+    ? { faecher: "Fächer", echt: "echt", aufloesung: "Aufgelöst", stil: "Stil", so: "So entsteht sie", nurEcht: "echte Karte", seite: "Kunstseite", drucken: "Als PDF drucken, in dieselbe Hülle" }
+    : { faecher: "pockets", echt: "real", aufloesung: "Revealed", stil: "Style", so: "How it is made", nurEcht: "real card", seite: "Art page", drucken: "Print as PDF, into the same sleeve" };
+  const footer = `${L.seite} · ${domain} · ${fmtDate(new Date(), lang)}`;
 
   // --- der einzige Modellaufruf ---------------------------------------------
   const out = await chatJson(ctx.llm, modelFor("content"), Out, artworkPrompt({

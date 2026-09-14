@@ -24,8 +24,9 @@ import { getProject } from "../../repo/projects.js";
 import { playwrightRecorder, type Recorder, type Recording } from "./record.js";
 import { saveUiMap } from "./uimap.js";
 import { estimateDurationMs, estimateWords, isSpokenWord, type WordTiming } from "./voice.js";
-import { assemble, detectFreezes, pickMusic, planScene, runFfmpeg, type FfmpegRunner, type ScenePlan } from "./assemble.js";
-import { backgroundHtml, captionJobs, deviceFrameHtml, endCardHtml, hookCardHtml, layoutFor, screenMaskHtml, type CaptionCue } from "./overlays.js";
+import { assemble, detectFreezes, OUTPUT_FPS, pickMusic, planScene, runFfmpeg, speechWindow, type FfmpegRunner, type ScenePlan } from "./assemble.js";
+import { backgroundHtml, captionJobs, deviceFrameHtml, layoutFor, screenMaskHtml, type CaptionCue } from "./overlays.js";
+import { abspannJobs, type AbspannInhalt } from "./abspann.js";
 
 export interface VideoContext {
   db: Db; env: Env; dataDir: string; log: (m: string) => void;
@@ -35,12 +36,51 @@ export interface VideoContext {
   recorder?: Recorder; renderer?: Renderer; ffmpeg?: FfmpegRunner; freezes?: (file: string) => Promise<{ startMs: number; endMs: number }[]>;
 }
 
-export const HOOK_MS = 1500, END_MS = 2500;
+/**
+ * Vorspann und Abspann.
+ *
+ * Die Textkarte vor dem Video ist am 11.09.2026 rausgeflogen - sie hat die ersten
+ * Sekunden verschenkt, in denen ein Reel entscheidet, ob jemand bleibt. Die Hooks
+ * bleiben im Skript, sie sind jetzt Vorschlag fuer den Beitragstext. Dafuer haelt
+ * die Abschluss-Slide laenger, sie traegt die ganze Werbung.
+ */
+export const HOOK_MS = 0, END_MS = 3200;
 /** Variant count / landscape flag of an earlier render (for re-renders); defaults for never-rendered pieces. */
 export function renderOptionsFromMeta(meta: Record<string, unknown>): { variants: number; landscape: boolean; music: "none" | "landscape" | "all" } {
   const vs = Array.isArray(meta["variants"]) ? (meta["variants"] as { variant: string }[]) : [];
   const music = meta["musicMode"] === "none" || meta["musicMode"] === "all" ? (meta["musicMode"] as "none" | "all") : "landscape";
   return { variants: Math.max(1, vs.filter((v) => String(v.variant).startsWith("reel")).length), landscape: vs.some((v) => v.variant === "landscape"), music };
+}
+
+/** Part-ID des Warmlaufs vor der ersten Szene (siehe Schritt „voice"). */
+export const WARMLAUF_ID = "__warmlauf";
+/**
+ * Ein paar Sätze zum Einsprechen, die nie im Video landen - sie geben dem Modell Kontext für Satz eins.
+ *
+ * Kurz reicht nicht: mit rund 200 Zeichen klang der erste Satz immer noch vorgelesen. Deshalb
+ * mehrere Sätze mit wechselndem Ton (Frage, Einschub, Aufbruch) und über 300 Zeichen - erst dann
+ * ist die Stimme beim ersten echten Satz in der Umgangslage.
+ */
+export function warmlaufText(brand: string, language: string): string {
+  if (!/^de/i.test(language)) return `Okay, mic on? Good. So, quick heads-up on what this is: I'm getting next week's lessons ready — normal evening, laptop on the kitchen table, tea next to it. And instead of spending two hours hunting for material, I'll just show you what I click in ${brand} today. Takes less than two minutes. Right, let's go.`;
+  return `Okay, Mikrofon läuft? Gut. Also, kurz vorweg, damit du weißt, worum es hier geht: Ich bereite gerade meinen Unterricht für nächste Woche vor — ganz normaler Abend, Laptop auf dem Küchentisch, Tee daneben. Und statt wie sonst zwei Stunden zu suchen, zeige ich dir einfach, was ich heute in ${brand} anklicke. Das dauert keine zwei Minuten. So, fangen wir an.`;
+}
+
+/**
+ * Was auf der Abschluss-Slide steht.
+ *
+ * Adresse und Kleingedrucktes sind Projektsache und stehen in den Einstellungen
+ * (`abspann:<projektId>`); ohne Eintrag traegt die Slide den CTA aus dem Skript.
+ */
+export function abspannInhalt(db: Db, projectId: string, script: s.VideoScript): AbspannInhalt {
+  const row = db.select().from(t.mpSettings).where(eq(t.mpSettings.key, `abspann:${projectId}`)).get();
+  const cfg = row ? parseJson<{ ordner?: string; claim?: string; fuss?: string }>(row.value, {}) : {};
+  return {
+    domain: script.cta.url.replace(/^https?:\/\//, "").replace(/\/$/, ""),
+    claim: cfg.claim ?? script.cta.text,
+    fuss: cfg.fuss ?? "",
+    ordner: cfg.ordner ?? null,
+  };
 }
 
 export const VIDEO_STEPS = ["record", "check", "voice", "overlays", "reels", "landscape", "assets"];
@@ -152,8 +192,12 @@ export const renderVideoJob: JobHandler<VideoContext> = async (ctx, job, progres
     if (ctx.voice?.synthesizeScript && spoken.length) {
       // one request for the whole script: continuous prosody, real pauses between scenes; then cut per scene from the master
       const t0 = Date.now();
-      const r = await ctx.voice.synthesizeScript(spoken.map((sc) => ({ id: sc.id, text: sc.voiceover.trim() })), lang, voiceDir);
-      const chars = spoken.reduce((n, sc) => n + sc.voiceover.trim().length, 0);
+      // Warmlauf: der erste Satz einer v3-Anfrage hat keinen Kontext und klingt vorgelesen
+      // (gemessen 10.09.2026: Tonhöhen-Streuung der ersten 5 s 46,7 Hz ohne, 60,7 Hz mit Vorlauf).
+      // Dieser Vorlauf wird mitgesprochen, aber nie in eine Szene geschnitten - keine Szene heißt so.
+      const warmlauf = { id: WARMLAUF_ID, text: warmlaufText(brand, script.language) };
+      const r = await ctx.voice.synthesizeScript([warmlauf, ...spoken.map((sc) => ({ id: sc.id, text: sc.voiceover.trim() }))], lang, voiceDir);
+      const chars = spoken.reduce((n, sc) => n + sc.voiceover.trim().length, warmlauf.text.length);
       bookRun(ctx.db, { task: "video.voice", model: `elevenlabs/${ctx.env.ELEVENLABS_VOICE_ID ?? "voice"}`, provider: "elevenlabs", projectId: piece.projectId, pieceId, costUsd: (chars / 1000) * ctx.env.ELEVENLABS_USD_PER_1K_CHARS, durationMs: Date.now() - t0 });
       for (const [i, sc] of script.scenes.entries()) {
         const part = r.parts.find((x) => x.id === sc.id);
@@ -161,10 +205,21 @@ export const renderVideoJob: JobHandler<VideoContext> = async (ctx, job, progres
         // a little lead-in/out, but never into the neighbour's words
         const prevEnd = [...r.parts].filter((x) => x.endMs <= part.startMs).map((x) => x.endMs).sort((a, b) => b - a)[0] ?? 0;
         const nextStart = [...r.parts].filter((x) => x.startMs >= part.endMs).map((x) => x.startMs).sort((a, b) => a - b)[0] ?? r.durationMs;
-        const from = Math.max(prevEnd, part.startMs - 120), to = Math.min(nextStart, part.endMs + 180);
+        // Grosszuegig schneiden und dann nachmessen: die Zeitmarken von v3 liegen rund um
+        // Pausen in beide Richtungen bis zu 1,5 s daneben. Erst der gemessene Sprechbeginn
+        // legt fest, wo der Schnipsel anfaengt - sonst laufen die Untertitel dem Ton voraus.
+        const roh = Math.max(prevEnd + 60, part.startMs - 600), bis = Math.min(nextStart, part.endMs + 500);
         const file = path.join(voiceDir, `scene-${i + 1}-${sc.id}.mp3`);
-        await ffmpeg(["-y", "-ss", (from / 1000).toFixed(3), "-to", (to / 1000).toFixed(3), "-i", r.file, "-c:a", "libmp3lame", "-q:a", "2", file]);
-        out.push({ file, durationMs: to - from, words: part.words.map((w) => ({ word: w.word, startMs: w.startMs - from, endMs: w.endMs - from })) });
+        const rohDatei = path.join(voiceDir, `roh-${i + 1}-${sc.id}.mp3`);
+        await ffmpeg(["-y", "-ss", (roh / 1000).toFixed(3), "-to", (bis / 1000).toFixed(3), "-i", r.file, "-c:a", "libmp3lame", "-q:a", "2", rohDatei]);
+        const fenster = await speechWindow(rohDatei, ffmpeg);
+        const vorlauf = Math.max(0, fenster.startMs - 120);                        // Stille vor dem ersten Wort
+        const ende = Math.min(fenster.durationMs, fenster.endMs + 250);            // Ausklang nach dem letzten Wort
+        await ffmpeg(["-y", "-ss", (vorlauf / 1000).toFixed(3), "-to", (ende / 1000).toFixed(3), "-i", rohDatei, "-c:a", "libmp3lame", "-q:a", "2", file]);
+        fs.rmSync(rohDatei, { force: true });
+        // Erstes Wort auf den gemessenen Sprechbeginn setzen, der Rest bleibt relativ dazu
+        const anker = part.words[0]?.startMs ?? part.startMs;
+        out.push({ file, durationMs: Math.max(400, ende - vorlauf), words: part.words.map((w) => ({ word: w.word, startMs: 120 + (w.startMs - anker), endMs: 120 + (w.endMs - anker) })) });
       }
       progress("voice", { detail: `${spoken.length} Szenen am Stück, ${Math.round(r.durationMs / 1000)} s Sprache` });
       return out;
@@ -186,7 +241,7 @@ export const renderVideoJob: JobHandler<VideoContext> = async (ctx, job, progres
   });
 
   // 3. overlays + scene plans per device
-  type Prepared = { rec: Recording; plans: ScenePlan[]; layout: ReturnType<typeof layoutFor>; bg: string; frame: string; mask: string; end: string; captions: CaptionCue[]; hooks: string[] };
+  type Prepared = { rec: Recording; plans: ScenePlan[]; layout: ReturnType<typeof layoutFor>; bg: string; frame: string; mask: string; end: string; endSeq: { muster: string; fps: number }; captions: CaptionCue[] };
   const prepared = await step("overlays", async () => {
     const out: Partial<Record<s.VideoDevice, Prepared>> = {};
     const jobs: RenderJob[] = [];
@@ -201,12 +256,14 @@ export const renderVideoJob: JobHandler<VideoContext> = async (ctx, job, progres
       jobs.push({ html: backgroundHtml(kit, layout.w, layout.h, brand), width: layout.w, height: layout.h, file: bg });
       jobs.push({ html: deviceFrameHtml(kit, layout), width: layout.w, height: layout.h, file: frame, transparent: true });
       jobs.push({ html: screenMaskHtml(layout), width: layout.inner.w, height: layout.inner.h, file: mask });
-      jobs.push({ html: endCardHtml(kit, script.cta.text, script.cta.url, brand, layout.w, layout.h), width: layout.w, height: layout.h, file: end });
-      const hooks = script.hooks.slice(0, landscape ? 1 : Math.max(1, variants)).map((h, n) => { const file = path.join(outDir, `${tag}-hook-${n + 1}.png`); jobs.push({ html: hookCardHtml(kit, h, brand, layout.w, layout.h), width: layout.w, height: layout.h, file }); return file; });
+      // Abspann als Bildfolge (bewegte Figur); das letzte Bild dient als Vorschaubild
+      const abspann = abspannJobs(kit, abspannInhalt(ctx.db, piece.projectId, script), layout.w, layout.h, END_MS, OUTPUT_FPS, outDir, `${tag}-end`);
+      jobs.push(...abspann.jobs);
+      // ohne Vorspann-Karte: das Vorschaubild ist die Abschluss-Slide
       const captions: CaptionCue[] = [];
       let offset = 0;
       plans.forEach((p, n) => { const cj = captionJobs(kit, audio[n]?.words ?? [], offset, layout, outDir, `${tag}-s${n}`); jobs.push(...cj.jobs); captions.push(...cj.cues); offset += p.totalMs; });
-      out[device] = { rec, plans, layout, bg, frame, mask, end, captions, hooks };
+      out[device] = { rec, plans, layout, bg, frame, mask, end: abspann.letzte, endSeq: { muster: abspann.muster, fps: abspann.fps }, captions };
     }
     await renderer(jobs);
     progress("overlays", { detail: `${jobs.length} Overlays gerendert` });
@@ -223,12 +280,10 @@ export const renderVideoJob: JobHandler<VideoContext> = async (ctx, job, progres
   if (prepared.mobile) {
     await step("reels", async () => {
       const p = prepared.mobile!;
-      for (let n = 0; n < p.hooks.length; n++) {
-        const out = path.join(outDir, `reel-${n + 1}.mp4`);
-        const r = await assemble({ recording: p.rec, plans: p.plans, audio: audio.map((a) => ({ file: a.file, durationMs: a.durationMs })), layout: p.layout, hookCard: p.hooks[n]!, endCard: p.end, frame: p.frame, mask: p.mask, background: p.bg, hookMs: HOOK_MS, endMs: END_MS, captions: p.captions, music: musicFor(false), out, segmentCache }, ffmpeg);
-        outputs.push({ file: out, variant: `reel-${n + 1}`, hook: script.hooks[n] ?? "", device: "mobile", landscape: false, durationMs: r.durationMs, thumb: p.hooks[n]! });
-        progress("reels", { detail: `${n + 1}/${p.hooks.length} gerendert` });
-      }
+      const out = path.join(outDir, "reel-1.mp4");
+      const r = await assemble({ recording: p.rec, plans: p.plans, audio: audio.map((a) => ({ file: a.file, durationMs: a.durationMs })), layout: p.layout, hookCard: null, endCard: p.end, endSeq: p.endSeq, frame: p.frame, mask: p.mask, background: p.bg, hookMs: HOOK_MS, endMs: END_MS, captions: p.captions, music: musicFor(false), out, segmentCache }, ffmpeg);
+      outputs.push({ file: out, variant: "reel-1", hook: script.hooks[0] ?? "", device: "mobile", landscape: false, durationMs: r.durationMs, thumb: p.end });
+      progress("reels", { detail: `${Math.round(r.durationMs / 1000)} s ohne Vorspann` });
     });
   } else progress("reels", { status: "skipped", detail: "kein Mobile-Recording" });
 
@@ -237,8 +292,8 @@ export const renderVideoJob: JobHandler<VideoContext> = async (ctx, job, progres
     await step("landscape", async () => {
       const p = prepared.desktop!;
       const out = path.join(outDir, "landscape.mp4");
-      const r = await assemble({ recording: p.rec, plans: p.plans, audio: audio.map((a) => ({ file: a.file, durationMs: a.durationMs })), layout: p.layout, hookCard: p.hooks[0]!, endCard: p.end, frame: p.frame, mask: p.mask, background: p.bg, hookMs: HOOK_MS, endMs: END_MS, captions: p.captions, music: musicFor(true), out, segmentCache }, ffmpeg);
-      outputs.push({ file: out, variant: "landscape", hook: script.hooks[0] ?? "", device: "desktop", landscape: true, durationMs: r.durationMs, thumb: p.hooks[0]! });
+      const r = await assemble({ recording: p.rec, plans: p.plans, audio: audio.map((a) => ({ file: a.file, durationMs: a.durationMs })), layout: p.layout, hookCard: null, endCard: p.end, endSeq: p.endSeq, frame: p.frame, mask: p.mask, background: p.bg, hookMs: HOOK_MS, endMs: END_MS, captions: p.captions, music: musicFor(true), out, segmentCache }, ffmpeg);
+      outputs.push({ file: out, variant: "landscape", hook: script.hooks[0] ?? "", device: "desktop", landscape: true, durationMs: r.durationMs, thumb: p.end });
     });
   } else progress("landscape", { status: "skipped", detail: "nicht angefordert" });
 
@@ -265,7 +320,7 @@ export const renderVideoJob: JobHandler<VideoContext> = async (ctx, job, progres
     if (!canReuse) for (const device of devices) { const rec = recordings[device]!; addAsset("recording", rec.file, { device, width: rec.width, height: rec.height, durationMs: rec.durationMs, aiGenerated: false, provenance: "none" }); }
     for (const o of outputs) {
       const thumb = o.file.replace(/\.mp4$/, "-thumb.png");
-      fs.copyFileSync(o.thumb, thumb); markPng(thumb, { aiGenerated: true, generator: "Marketing Pilot (video hook card)" });
+      fs.copyFileSync(o.thumb, thumb); markPng(thumb, { aiGenerated: true, generator: "Marketing Pilot (Abschluss-Slide)" });
       const thumbId = addAsset("image", thumb, { role: "thumbnail", variant: o.variant });
       addAsset("render", o.file, { variant: o.variant, hook: o.hook, device: o.device, landscape: o.landscape, durationMs: o.durationMs, thumbnailAssetId: thumbId, size: o.landscape ? "1920x1080" : "1080x1920" });
     }

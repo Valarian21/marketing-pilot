@@ -2,9 +2,19 @@
 import { useEffect } from "react";
 import { NavLink } from "react-router";
 
-// Heute und Kanäle sind der Weg des Content-Piloten; der Produkt-Brief (Analyse) ist der einmalige Einrichtungsschritt davor.
+/**
+ * Die Reiter in der Reihenfolge des Arbeitswegs: Heute → Freigaben → Pipeline →
+ * Handarbeit → Kanäle. Freigaben und Pipeline fehlten hier bis zum 14.09.2026,
+ * obwohl sie der tägliche Weg sind — man musste dafür in die Seitenleiste,
+ * die auf dem Handy hinter „Mehr" liegt. Der Produkt-Brief (Analyse) ist der
+ * einmalige Einrichtungsschritt und steht deshalb hinten.
+ */
 const TABS = [
-  { to: "", label: "Heute" }, { to: "/uebersicht", label: "Übersicht" }, { to: "/channels", label: "Kanäle" }, { to: "/analysis", label: "Produkt-Brief" },
+  { to: "", label: "Heute" }, { to: "/review", label: "Freigaben" }, { to: "/pipeline", label: "Pipeline" },
+  // TikTok und YouTube haben keine Veroeffentlichungs-API — ihre Warteschlange
+  // braucht einen eigenen Ort, sonst liegt fertiger Inhalt ungenutzt herum.
+  { to: "/handarbeit", label: "Handarbeit" }, { to: "/channels", label: "Kanäle" },
+  { to: "/uebersicht", label: "Übersicht" }, { to: "/analysis", label: "Produkt-Brief" },
 ];
 
 export function rememberProject(id: string): void { try { localStorage.setItem("mp_project", id); } catch { /* ignore */ } }

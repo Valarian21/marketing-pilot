@@ -626,3 +626,131 @@ button, input { font: inherit; color: inherit; }
 .mp-kanal-import-form .mp-form-row .mp-field { min-width: 0; flex: 1 1 220px; }
 .mp-kanal-import-form .mp-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .mp-table--zahlen td.mp-num, .mp-table--zahlen th.mp-num { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* Themen-Ansicht: ein Beitrag je Kachel, App-Fassungen als Reiter.
+   Benutzt von der Mediathek und der Freigabe. */
+.mp-thema-leiste { display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  background: var(--mp-surface); border: var(--mp-border); border-radius: var(--mp-radius);
+  padding: 10px 14px; margin-top: 14px; position: sticky; top: 8px; z-index: 3; }
+.mp-thema-leiste > :last-child { margin-left: auto; }
+.mp-themen { display: flex; flex-direction: column; gap: 14px; margin-top: 14px; }
+.mp-thema { padding: 0; overflow: hidden; }
+.mp-thema-kopf { display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 12px 16px; border-bottom: var(--mp-border); }
+.mp-thema-haken { display: inline-flex; align-items: center; }
+.mp-thema-haken input { width: 17px; height: 17px; accent-color: var(--mp-accent); cursor: pointer; }
+.mp-thema-nr { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--mp-ink-2); font-size: var(--mp-text-sm); }
+.mp-thema-titel { font-size: var(--mp-text-md); font-weight: 600; margin: 0; flex: 1 1 260px; min-width: 0; }
+.mp-thema-inhalt { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 18px; padding: 16px; }
+.mp-thema-schau { display: flex; flex-direction: column; gap: 8px; }
+.mp-thema-schau video, .mp-thema-schau img { width: 100%; aspect-ratio: 9 / 16; object-fit: cover;
+  border-radius: var(--mp-radius-sm); background: var(--mp-nav-active); display: block; }
+.mp-thema-leer { aspect-ratio: 9 / 16; display: flex; align-items: center; justify-content: center;
+  background: var(--mp-nav-active); border-radius: var(--mp-radius-sm); color: var(--mp-ink-2);
+  font-size: var(--mp-text-sm); text-align: center; padding: 8px; }
+.mp-thema-reiter { display: flex; gap: 4px; }
+.mp-thema-reiter button { flex: 1 1 auto; font-size: var(--mp-text-sm); font-weight: 600; cursor: pointer;
+  padding: 6px 4px; border: var(--mp-border); border-radius: var(--mp-radius-sm);
+  background: var(--mp-bg); color: var(--mp-ink-2); }
+.mp-app-kurz { display: none; }
+.mp-thema-reiter button[aria-selected="true"] { background: var(--mp-ink); color: var(--mp-bg); border-color: var(--mp-ink); }
+.mp-thema-text { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.mp-thema-textkopf { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.mp-thema-textkopf > strong { font-size: var(--mp-text-sm); letter-spacing: .08em; text-transform: uppercase; }
+.mp-thema-textkopf > .mp-btn:first-of-type { margin-left: auto; }
+.mp-thema-eng { color: var(--mp-bad, #c0392b); font-weight: 700; }
+.mp-thema-tags { font-size: var(--mp-text-sm); font-weight: 600; color: var(--mp-accent); word-spacing: 3px; }
+.mp-thema-body { font: inherit; font-size: var(--mp-text-sm); line-height: 1.55; white-space: pre-wrap;
+  word-wrap: break-word; margin: 0; background: var(--mp-bg); border: var(--mp-border);
+  border-radius: var(--mp-radius-sm); padding: 12px 14px; max-height: 320px; overflow-y: auto; }
+/* Auf dem Handy bleibt die Kachel zweispaltig — nur schmaler.
+   Einspaltig füllte ein einziges Thema den ganzen Bildschirm, und von einer
+   Liste mit zwanzig Beiträgen sah man genau einen. Zum Beurteilen reicht das
+   kleine Bild; wer es genauer sehen will, spielt es im Vollbild ab. */
+@media (max-width: 760px) {
+  .mp-thema-inhalt { grid-template-columns: 132px minmax(0, 1fr); gap: 12px; padding: 12px; }
+  .mp-thema-kopf { padding: 10px 12px; gap: 8px; }
+  .mp-thema-reiter button { padding: 5px 2px; font-size: 11px; }
+  .mp-app-voll { display: none; }
+  .mp-app-kurz { display: inline; }
+  .mp-thema-body { max-height: 210px; padding: 10px 12px; }
+  .mp-thema-textkopf { gap: 6px; }
+  .mp-thema-textkopf > .mp-btn:first-of-type { margin-left: 0; }
+  .mp-thema-leiste { padding: 8px 12px; gap: 10px; }
+}
+@media (max-width: 420px) {
+  .mp-thema-inhalt { grid-template-columns: 104px minmax(0, 1fr); }
+}
+
+/* --- Post-Arten (Playbook Abschnitt 4) --------------------------------------
+   Eine Farbe je Sorte, damit die Woche auf einen Blick lesbar ist: siebenmal A
+   und nie B sieht man an der Farbe, nicht am Titel. Die Töne sind gedeckt und
+   unterscheiden sich in Hue, nicht in Helligkeit — auch im Dunkel-Thema. */
+.mp-art { display: inline-flex; align-items: center; gap: 3px; height: 20px; padding: 0 7px; border-radius: 6px; font-size: var(--mp-text-xs); font-weight: 700; letter-spacing: .03em; white-space: nowrap; border: 1px solid transparent; background: var(--art-bg, var(--mp-pill-kind-bg)); color: var(--art-fg, var(--mp-ink)); }
+.mp-art--mini { height: 16px; padding: 0 4px; font-size: 10px; flex: none; }
+.mp-art--a { --art-bg: #E6EFD9; --art-fg: #3E6B1E; }
+.mp-art--b { --art-bg: #E0EAF6; --art-fg: #274C7A; }
+.mp-art--c { --art-bg: #E9E2F4; --art-fg: #52377C; }
+.mp-art--d { --art-bg: #F6E3D6; --art-fg: #8A4A1F; }
+.mp-art--e { --art-bg: #F9EBC8; --art-fg: #7A5210; }
+.mp-art--f { --art-bg: #F3DDE6; --art-fg: #8A2E58; }
+.mp-art--g { --art-bg: #D8EFEC; --art-fg: #1D6660; }
+.mp-art--t { --art-bg: #E5E5E5; --art-fg: #3B3F45; }
+.mp-art--s { --art-bg: #ECECEC; --art-fg: #5B6068; }
+.mp-art--x { --art-bg: #F0F0F0; --art-fg: #6B7079; border-style: dashed; border-color: #B8BCC2; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .mp-art--a { --art-bg: #27391C; --art-fg: #B9D89B; }
+  :root:not([data-theme="light"]) .mp-art--b { --art-bg: #1E2E44; --art-fg: #A9C4E6; }
+  :root:not([data-theme="light"]) .mp-art--c { --art-bg: #2F2544; --art-fg: #C7B4E6; }
+  :root:not([data-theme="light"]) .mp-art--d { --art-bg: #43291A; --art-fg: #E8B48F; }
+  :root:not([data-theme="light"]) .mp-art--e { --art-bg: #3A2E15; --art-fg: #E4B466; }
+  :root:not([data-theme="light"]) .mp-art--f { --art-bg: #40202E; --art-fg: #E6A3C1; }
+  :root:not([data-theme="light"]) .mp-art--g { --art-bg: #173432; --art-fg: #9BD6CF; }
+  :root:not([data-theme="light"]) .mp-art--t, :root:not([data-theme="light"]) .mp-art--s { --art-bg: #2A2D31; --art-fg: #C2C6CC; }
+  :root:not([data-theme="light"]) .mp-art--x { --art-bg: #26282B; --art-fg: #A3A7AD; border-color: #4A4E55; }
+}
+:root[data-theme="dark"] .mp-art--a { --art-bg: #27391C; --art-fg: #B9D89B; }
+:root[data-theme="dark"] .mp-art--b { --art-bg: #1E2E44; --art-fg: #A9C4E6; }
+:root[data-theme="dark"] .mp-art--c { --art-bg: #2F2544; --art-fg: #C7B4E6; }
+:root[data-theme="dark"] .mp-art--d { --art-bg: #43291A; --art-fg: #E8B48F; }
+:root[data-theme="dark"] .mp-art--e { --art-bg: #3A2E15; --art-fg: #E4B466; }
+:root[data-theme="dark"] .mp-art--f { --art-bg: #40202E; --art-fg: #E6A3C1; }
+:root[data-theme="dark"] .mp-art--g { --art-bg: #173432; --art-fg: #9BD6CF; }
+:root[data-theme="dark"] .mp-art--t, :root[data-theme="dark"] .mp-art--s { --art-bg: #2A2D31; --art-fg: #C2C6CC; }
+:root[data-theme="dark"] .mp-art--x { --art-bg: #26282B; --art-fg: #A3A7AD; border-color: #4A4E55; }
+
+/* Soll-Marken im Kalender: hohl = fehlt, gefüllt = steht, gestrichelt = wartet. */
+.mp-kal-soll .mp-art { background: transparent; border-color: var(--art-fg); opacity: .55; }
+.mp-kal-soll .mp-art.is-da { background: var(--art-bg); opacity: 1; }
+.mp-kal-soll .mp-art.is-wartet { border-style: dashed; opacity: .85; }
+.mp-kal-soll .mp-art.is-verpasst { text-decoration: line-through; opacity: .35; }
+
+/* --- Kalender-Ansicht der Pipeline ------------------------------------------ */
+.mp-kalender { display: grid; grid-template-columns: repeat(var(--tage, 7), minmax(150px, 1fr)); min-width: calc(var(--tage, 7) * 150px); }
+.mp-kal-tag { display: flex; flex-direction: column; border-left: 1px solid var(--mp-grid-line); min-width: 0; }
+.mp-kal-tag:first-child { border-left: 0; }
+.mp-kal-tag.is-today { background: var(--mp-today); }
+.mp-kal-tag.is-vorbei .mp-kal-liste { opacity: .7; }
+.mp-kal-kopf { height: 40px; display: flex; align-items: center; justify-content: center; border-bottom: var(--mp-border); }
+.mp-kal-soll { display: flex; flex-wrap: wrap; gap: 4px; padding: 6px; border-bottom: 1px solid var(--mp-grid-line); min-height: 34px; }
+.mp-kal-liste { display: flex; flex-direction: column; gap: 4px; padding: 6px; min-height: 120px; }
+.mp-kal-chip { display: flex; flex-direction: column; align-items: stretch; gap: 1px; padding: 5px 7px; border-radius: 6px; border: 1px solid color-mix(in srgb, var(--art-fg) 35%, transparent); background: var(--art-bg); color: var(--art-fg); font-size: var(--mp-text-xs); cursor: pointer; text-align: left; min-width: 0; }
+.mp-kal-chip:hover, .mp-kal-chip.is-gewaehlt { border-color: var(--art-fg); }
+.mp-kal-chip.is-gelb { border-style: dashed; background: color-mix(in srgb, var(--art-bg) 45%, var(--mp-surface)); }
+.mp-kal-chip.is-fehler { border-color: var(--mp-bad); box-shadow: inset 3px 0 0 var(--mp-bad); }
+.mp-kal-chip-kopf { font-family: var(--mp-font-mono); font-weight: 600; opacity: .9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mp-kal-chip-kopf b { font-size: 12px; }
+.mp-kal-chip-text { color: var(--mp-ink); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.3; }
+.mp-art-legende { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 6px 18px; }
+.mp-art-legende li { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: var(--mp-text-sm); }
+.mp-art-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mp-art-zahl { flex: none; font-weight: 600; }
+.mp-schalter { display: inline-flex; gap: 2px; margin-right: 8px; }
+.mp-warn-text { color: var(--mp-warn); }
+/* Freigabe: ohne Warteschlange rechts braucht die Einzelansicht keine zweite Spalte. */
+.mp-review--einzeln { grid-template-columns: minmax(0, 1fr); }
+.mp-review--einzeln .mp-review-main { max-width: 980px; }
+@media (max-width: 720px) {
+  .mp-kalender { grid-template-columns: repeat(var(--tage, 7), minmax(132px, 1fr)); min-width: calc(var(--tage, 7) * 132px); }
+  .mp-art-legende { grid-template-columns: 1fr; }
+}

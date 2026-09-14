@@ -1,9 +1,18 @@
-/** Review queue: one piece at a time, platform-style preview, inline edit, approve / reject / regenerate. */
+/**
+ * Freigaben: die Übersicht ist die Seite.
+ *
+ * Alle offenen Beiträge als Kacheln — Vorschau links, fertiger Text rechts,
+ * App-Fassungen als Reiter, Freigeben und Ablehnen direkt daran. Die
+ * Einzelansicht (Text bearbeiten, Bündel steuern, neu erzeugen) gibt es nur
+ * noch für ein bestimmtes Stück (`?piece=`), erreichbar über „Öffnen" und die
+ * Links aus Pipeline, Mediathek und Startseite. Bis zum 14.09.2026 waren beide
+ * gleichrangige Modi mit einem Umschalter, und die Einzelansicht war der
+ * Standard — zehn fertige Reels durchzuwinken hieß zehn Seiten.
+ */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import type { ContentPiece } from "../../shared/schemas.js";
 import { api } from "../api.js";
-import { formatName } from "../../shared/labels.js";
 import { Button, Card, Notice, PageHeader, Pill, fmtDateTime, type PillKind } from "../components/ui.js";
 import { ProjectNav } from "../components/ProjectNav.js";
 import { markdownToHtml } from "../../shared/markdown.js";
@@ -13,6 +22,7 @@ import { ShotGallery } from "../components/Lightbox.js";
 import { ReviseBox, fmtUsd } from "../components/Revise.js";
 import { useProfiles } from "../components/ChannelLink.js";
 import { STAGES, stageAtLeast } from "../../shared/channels.js";
+import { Themen, type ThemenStueck } from "../components/Themen.js";
 
 /**
  * Kurzes Format-Etikett vor dem Titel in der Schlange. Ohne das war ein Reel
@@ -29,7 +39,7 @@ export function ReviewPage() {
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [showAll, setShowAll] = useState(false);
+  const [offeneMedien, setOffeneMedien] = useState<ThemenStueck[] | null>(null);
 
   /**
    * Geladen wird, was zur Prüfung ansteht — nicht das ganze Archiv.
@@ -50,13 +60,45 @@ export function ReviewPage() {
   }, [id]);
   useEffect(() => { void load(); }, [load]);
 
-  // „Alle anzeigen": einmalig das Archiv nachladen.
-  const [archivGeladen, setArchivGeladen] = useState(false);
-  useEffect(() => {
-    if (!showAll || archivGeladen) return;
-    setArchivGeladen(true);
-    api<ContentPiece[]>(`/projects/${id}/content`).then((alle) => setPieces((v) => [...v, ...alle.filter((a) => !v.some((x) => x.id === a.id))])).catch(() => setArchivGeladen(false));
-  }, [showAll, archivGeladen, id]);
+  /**
+   * Die Übersicht holt dieselben Stücke über die Mediathek-Schnittstelle: Dort
+   * hängen Vorschaubild, Videodatei und Gruppenschlüssel schon dran, und genau
+   * die braucht die Kachel.
+   */
+  const ladeUebersicht = useCallback(async () => {
+    try {
+      /**
+       * Geladen werden **alle** Fassungen des Projekts, nicht nur die offenen.
+       * Sonst verschwindet eine bereits freigegebene App-Fassung aus ihrer
+       * Kachel, und das Thema steht mit einem einzigen Reiter da — es sieht
+       * aus, als fehlten Medien. Gezeigt werden dann nur Themen, in denen noch
+       * etwas auf Freigabe wartet.
+       */
+      const alle = await api<ThemenStueck[]>(`/media?projectId=${id}&limit=400`);
+      const offeneGruppen = new Set(alle.filter((m) => m.status === "review").map((m) => m.gruppe));
+      setOffeneMedien(alle.filter((m) => offeneGruppen.has(m.gruppe)));
+    } catch (e) { setError(e instanceof Error ? e.message : "Fehler"); }
+  }, [id]);
+  useEffect(() => { void ladeUebersicht(); }, [ladeUebersicht]);
+
+  /** Ein Thema freigeben — ohne Umweg über die Einzelansicht. Auf Kanälen ab „Freigeben“ plant der Server dabei ein. */
+  const freigeben = async (stuecke: ThemenStueck[]) => {
+    setBusy(true);
+    try {
+      for (const st of stuecke) await api(`/content/${st.id}`, { method: "PATCH", json: { status: "approved" } });
+      await Promise.all([load(), ladeUebersicht()]);
+    } catch (e) { setError(e instanceof Error ? e.message : "Fehler"); } finally { setBusy(false); }
+  };
+  /** Ein Thema ablehnen — ein Grund für alle Fassungen, wird protokolliert. */
+  const ablehnen = async (stuecke: ThemenStueck[]) => {
+    const reason = window.prompt(stuecke.length > 1 ? `Grund der Ablehnung für alle ${stuecke.length} Fassungen (wird protokolliert):` : "Grund der Ablehnung (wird protokolliert):");
+    if (!reason) return;
+    setBusy(true);
+    try {
+      for (const st of stuecke) await api(`/content/${st.id}`, { method: "PATCH", json: { status: "rejected", reason } });
+      await Promise.all([load(), ladeUebersicht()]);
+    } catch (e) { setError(e instanceof Error ? e.message : "Fehler"); } finally { setBusy(false); }
+  };
   // Die Stufe des Kanals entscheidet, was „Freigeben" hier heißt: selbst posten oder einplanen lassen.
   const profiles = useProfiles(id);
   const stageFor = (p: ContentPiece) => profiles.find((x) => x.platform === String(p.meta["platform"] ?? p.channel).toLowerCase())?.stage ?? "off";
@@ -73,8 +115,12 @@ export function ReviewPage() {
       return true;
     });
   }, [pieces]);
+  // Gezählt werden Themen (ein Reel = drei App-Fassungen), nicht Fassungen —
+  // die Kopfzeile sagte „59 Themen", als es 21 Themen mit 59 Fassungen waren.
+  const offeneThemen = offeneMedien ? new Set(offeneMedien.filter((m) => m.status === "review").map((m) => m.gruppe)).size : queue.length;
   const focusId = params.get("piece");
-  const current = pieces.find((p) => p.id === focusId) ?? queue[0] ?? null;
+  // Ohne `?piece=` gibt es keine Einzelansicht — die Übersicht ist die Seite.
+  const current = focusId ? pieces.find((p) => p.id === focusId) ?? null : null;
 
   // Ein Stück, das über die Adresse angesteuert wurde (aus Medien, Speicher,
   // einer Aufgabe), steht nicht zwingend in der Warteschlange — dann einzeln holen.
@@ -95,6 +141,7 @@ export function ReviewPage() {
   useEffect(() => setDraft(null), [current?.id]);
 
   const go = (p: ContentPiece | undefined) => { if (p) setParams({ piece: p.id }); else setParams({}); };
+  const zurueck = () => setParams({});
   const act = async (status: ContentPiece["status"] | "regenerate", thenPackage = false) => {
     if (!current) return;
     setBusy(true); setError(null);
@@ -109,7 +156,8 @@ export function ReviewPage() {
       }
       await load();
       if (status === "approved" && thenPackage) { void navigate(`/projects/${id}/publish/${current.id}`); return; }
-      if (status === "approved" || status === "rejected") go(queue[idx + 1] ?? queue.find((p) => p.id !== current.id));
+      if (status === "approved" || status === "rejected") go(queue[idx + 1] ?? queue.find((p) => p.id !== current.id && bundleIdOf(p) !== bundleId));
+      void ladeUebersicht();
     } catch (e) { setError(e instanceof Error ? e.message : "Fehler"); }
     finally { setBusy(false); }
   };
@@ -121,7 +169,7 @@ export function ReviewPage() {
     setBusy(true); setError(null);
     try {
       await api(`/content/${current.id}/bundle/status`, { method: "POST", json: { status, reason: reason ?? "" } });
-      await load();
+      await load(); void ladeUebersicht();
       go(queue.find((p) => bundleIdOf(p) !== bundleId && p.id !== current.id));
     } catch (e) { setError(e instanceof Error ? e.message : "Fehler"); }
     finally { setBusy(false); }
@@ -145,8 +193,8 @@ export function ReviewPage() {
         const res = await api<{ platform: string; scheduledAt: string }[]>(`/content/${p.id}/publish/schedule`, { method: "POST", json: { platforms: [], scheduledAt: undefined } }).catch(() => [] as { platform: string; scheduledAt: string }[]);
         for (const x of res) geplant.push(`${x.platform}: ${new Date(x.scheduledAt).toLocaleString("de-DE")}`);
       }
-      window.alert(geplant.length ? `Eingeplant:\n${geplant.join("\n")}` : "Freigegeben. Kein Kanal steht auf „Freigeben“ — die Stücke stehen jetzt unter „Von Hand posten“.");
-      await load();
+      window.alert(geplant.length ? `Eingeplant:\n${geplant.join("\n")}` : "Freigegeben. Kein Kanal steht auf „Freigeben“ — die Stücke stehen jetzt unter „Handarbeit“.");
+      await load(); void ladeUebersicht();
       go(queue.find((p) => bundleIdOf(p) !== bundleId && p.id !== current.id));
     } catch (e) { setError(e instanceof Error ? e.message : "Fehler"); }
     finally { setBusy(false); }
@@ -160,7 +208,8 @@ export function ReviewPage() {
       await api(`/content/${current.id}`, { method: "PATCH", json: { status: "approved", ...(draft !== null && draft !== current.body ? { body: draft } : {}) } });
       const planned = await api<{ platform: string; scheduledAt: string }[]>(`/content/${current.id}/publish/schedule`, { method: "POST", json: { platforms: [], scheduledAt: undefined } });
       window.alert(planned.map((p) => `${p.platform}: ${new Date(p.scheduledAt).toLocaleString("de-DE")}`).join("\n"));
-      await load();
+      await load(); void ladeUebersicht();
+      go(queue[idx + 1] ?? queue.find((p) => p.id !== current.id));
     } catch (e) { setError(e instanceof Error ? e.message : "Fehler"); }
     finally { setBusy(false); }
   };
@@ -169,11 +218,26 @@ export function ReviewPage() {
   return (
     <>
       <ProjectNav id={id} />
-      <PageHeader label="Inhalte" title="Freigaben" actions={<span className="mp-label">{queue.length} in der Warteschlange</span>} />
+      <PageHeader label="Inhalte" title={current ? "Freigabe im Einzelnen" : "Freigaben"} actions={
+        <div className="mp-inline">
+          <span className="mp-label">{offeneThemen} {offeneThemen === 1 ? "Thema" : "Themen"} · {queue.length} {queue.length === 1 ? "Stück wartet" : "Stücke warten"}</span>
+          {current && <Button onClick={zurueck}>← Zur Übersicht</Button>}
+          {current && idx >= 0 && <Button disabled={!queue[idx + 1]} onClick={() => go(queue[idx + 1])}>Nächstes →</Button>}
+        </div>} />
       {error && <Notice kind="bad">{error}</Notice>}
-      {!current && <Card className="mp-empty"><h2>Nichts zu prüfen</h2><p>Entwürfe aus „Erstellen" und aus Agent-Aufgaben landen hier.</p><Link className="mp-btn mp-btn--primary" to={`/projects/${id}/studio`}>Zum Erstellen</Link></Card>}
+      {!current && focusId && <Notice kind="info">Dieses Stück wird geladen oder ist nicht mehr vorhanden.</Notice>}
+      {!current && offeneMedien && offeneMedien.length === 0 && (
+        <Card className="mp-empty"><h2>Nichts zu prüfen</h2><p>Hier stehen alle Beiträge, die auf Freigabe warten — aus „Erstellen“, aus Serien und aus den Reel-Skripten.</p><Link className="mp-btn mp-btn--primary" to={`/projects/${id}/studio`}>Zum Erstellen</Link></Card>
+      )}
+      {!current && offeneMedien && offeneMedien.length > 0 && (
+        <Themen items={offeneMedien} busy={busy}
+                linkFor={(st) => `/projects/${st.projectId}/review?piece=${st.id}`}
+                aufFreigabe={(stuecke) => void freigeben(stuecke)}
+                aufAblehnung={(stuecke) => void ablehnen(stuecke)}
+                aufSammelFreigabe={(stuecke) => void freigeben(stuecke)} />
+      )}
       {current && (
-        <div className="mp-review">
+        <div className="mp-review mp-review--einzeln">
           <Card className="mp-review-main">
             <div className="mp-card-head">
               <div>
@@ -184,7 +248,7 @@ export function ReviewPage() {
               <div className="mp-inline">
                 <Pill kind={STATUS[current.status].kind}>{STATUS[current.status].label}</Pill>
                 {current.humanEdited && <Pill kind="review">von dir bearbeitet</Pill>}
-                {idx >= 0 && <span className="mp-label">{idx + 1}/{queue.length}</span>}
+                {idx >= 0 && <span className="mp-label">Stück {idx + 1} von {queue.length}</span>}
               </div>
             </div>
             {siblings.length > 1 && (
@@ -246,12 +310,6 @@ export function ReviewPage() {
             {current.aiTellNotes && <details className="mp-details mp-small"><summary className="mp-label">{current.format === "video" ? "Render-Hinweise" : "AI-Tell-Prüfer"}</summary><pre className="mp-pre">{current.aiTellNotes}</pre></details>}
             {current.rejectionReason && <Notice kind="warn">Abgelehnt: {current.rejectionReason}</Notice>}
           </Card>
-          <aside>
-            <Card>
-              <div className="mp-card-head"><h2>Warteschlange</h2><button type="button" className="mp-linkbtn mp-small" onClick={() => setShowAll((v) => !v)}>{showAll ? "nur offene" : "alle anzeigen"}</button></div>
-              <ul className="mp-queue">{(showAll ? pieces : queue).map((p) => <li key={p.id} className={p.id === current.id ? "is-current" : ""}><button type="button" className="mp-linkbtn" onClick={() => go(p)}>{formatName(p.format) && <span className="mp-format-tag">{formatName(p.format)}</span>}{p.title || p.format}</button><Pill kind={STATUS[p.status].kind}>{STATUS[p.status].label}</Pill></li>)}</ul>
-            </Card>
-          </aside>
         </div>
       )}
     </>

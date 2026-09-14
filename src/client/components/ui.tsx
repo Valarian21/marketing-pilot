@@ -40,6 +40,13 @@ export function EmptyState({ title, text, shot }: { title: string; text?: string
   );
 }
 
+/** Text in die Zwischenablage, mit kurzer Rueckmeldung. Lag bis zum 14.09.2026
+ *  lokal in Publish.tsx — die Handarbeit-Seite braucht ihn genauso. */
+export function CopyButton({ text, label = "Kopieren", variant = "secondary" as "secondary" | "primary", onCopied }: { text: string; label?: string; variant?: "secondary" | "primary"; onCopied?: () => void }) {
+  const [done, setDone] = useState(false);
+  return <Button variant={variant} onClick={() => { void navigator.clipboard.writeText(text).then(() => { setDone(true); onCopied?.(); setTimeout(() => setDone(false), 1800); }); }}>{done ? "Kopiert ✓" : label}</Button>;
+}
+
 export function Notice({ kind, children }: { kind: "warn" | "bad" | "info"; children: ReactNode }) {
   return <div className={`mp-notice mp-notice--${kind}`} role={kind === "bad" ? "alert" : "status"}>{children}</div>;
 }

@@ -9,7 +9,7 @@ import type { Recorder } from "../src/server/agents/video/record.js";
 import { isSelector, substitute, easeInOutCubic, resolveUrl } from "../src/server/agents/video/record.js";
 import { estimateWords, wordsFromAlignment } from "../src/server/agents/video/voice.js";
 import { chunkWords, layoutFor } from "../src/server/agents/video/overlays.js";
-import { buildComposeArgs, buildSceneArgs, parseFreezes, planScene } from "../src/server/agents/video/assemble.js";
+import { buildComposeArgs, buildSceneArgs, parseFreezes, parseSilences, planScene, speechWindow } from "../src/server/agents/video/assemble.js";
 import { claimNextJob, enqueueJob, finishJob, markStaleJobs, processNextJob, workerAlive, writeHeartbeat } from "../src/server/jobs.js";
 import { renderVideoJob } from "../src/server/agents/video/pipeline.js";
 import { videoScriptPrompt } from "../src/server/agents/prompts/video.js";
@@ -174,20 +174,20 @@ describe("video API + render job", () => {
     expect(done.error).toBeNull();
     expect(done.status).toBe("done");
     expect(done.steps.every((st: { status: string }) => st.status === "done")).toBe(true);
-    expect(done.result.variants).toEqual(["reel-1", "reel-2", "landscape"]);
-    // final outputs: 2 reels + landscape; scene segments are cut once per device and reused across reels
+    // seit 11.09.2026 ohne Vorspann-Karte: ein Reel je Stueck, keine Hook-Varianten mehr
+    expect(done.result.variants).toEqual(["reel-1", "landscape"]);
     const finals = ffmpegCalls.map((a) => path.basename(a[a.length - 1]!)).filter((f) => /^(reel-\d+|landscape)\.mp4$/.test(f));
-    expect(finals).toEqual(["reel-1.mp4", "reel-2.mp4", "landscape.mp4"]);
+    expect(finals).toEqual(["reel-1.mp4", "landscape.mp4"]);
     expect(ffmpegCalls.filter((a) => /seg-recording-mobile-\d\.mp4$/.test(a[a.length - 1]!))).toHaveLength(2);
-    expect(renderedJobs.some((h) => h.includes("Sonntag gehört wieder dir"))).toBe(true);
+    expect(renderedJobs.some((h) => h.includes("Probier es kostenlos"))).toBe(true);   // Abschluss-Slide statt Vorspann
     expect(renderedJobs.some((h) => h.includes("<mask"))).toBe(true);
 
     const piece = (await built.app.inject({ url: `/api/mp/content/${pieceId}`, headers: auth })).json();
     expect(piece.status).toBe("review");
-    expect(piece.meta.variants.map((v: { variant: string }) => v.variant)).toEqual(["reel-1", "reel-2", "landscape"]);
+    expect(piece.meta.variants.map((v: { variant: string }) => v.variant)).toEqual(["reel-1", "landscape"]);
     const pkg = (await built.app.inject({ url: `/api/mp/content/${pieceId}/package`, headers: auth })).json();
     const kinds = pkg.assets.map((a: { kind: string }) => a.kind).sort();
-    expect(kinds).toEqual(["image", "image", "image", "recording", "recording", "render", "render", "render"]);
+    expect(kinds).toEqual(["image", "image", "recording", "recording", "render", "render"]);
     const mp4 = pkg.assets.find((a: { filename: string }) => a.filename === "reel-1.mp4");
     const file = await built.app.inject({ url: mp4.url, headers: { ...auth, range: "bytes=0-1" } });
     expect(file.statusCode).toBe(206);
@@ -245,5 +245,25 @@ describe("quality round", () => {
     expect(v3).toHaveProperty("language_code", "de");
     expect(v3).not.toHaveProperty("previous_text");
     expect(v3["voice_settings"]).not.toHaveProperty("style");
+  });
+});
+
+describe("Sprechfenster", () => {
+  it("liest Stillen aus dem silencedetect-Protokoll", () => {
+    const log = "[silencedetect] silence_start: 0\n[silencedetect] silence_end: 1.62 | silence_duration: 1.62\nsilence_start: 4.4";
+    expect(parseSilences(log, 5000)).toEqual([{ startMs: 0, endMs: 1620 }, { startMs: 4400, endMs: 5000 }]);
+  });
+
+  it("misst Anfang und Ende der Sprache im Schnipsel", async () => {
+    const log = "silence_start: 0\nsilence_end: 1.5 | silence_duration: 1.5\nsilence_start: 4.2\nsilence_end: 5.0";
+    const w = await speechWindow("/tmp/egal.mp3", async () => log);
+    expect(w.startMs).toBe(1500);
+    expect(w.endMs).toBe(4200);
+  });
+
+  it("ohne Stille bleibt das ganze Stueck Sprache", async () => {
+    const w = await speechWindow("/tmp/egal.mp3", async () => "");
+    expect(w.startMs).toBe(0);
+    expect(w.endMs).toBe(w.durationMs);
   });
 });

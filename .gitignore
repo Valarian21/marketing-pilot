@@ -8,3 +8,6 @@ data/
 # Musikbetten sind lokale Dateien (Lizenz!), nur die README wandert ins Repo
 assets/music/*
 !assets/music/README.md
+
+# Marken fertiger Reel-Bauläufe (bauen-alle.sh)
+.bau-fertig/

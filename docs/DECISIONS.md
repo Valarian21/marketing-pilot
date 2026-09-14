@@ -2,6 +2,46 @@
 
 Format: Datum · Entscheidung · Grund · Alternative, die verworfen wurde.
 
+## 2026-09-14 (Bedienung: Freigabe, Medien, Pipeline)
+
+- **Die Freigabe-Übersicht ist die Seite, „Einzeln" ist kein Modus mehr.** Die Einzelansicht (Text bearbeiten, Bündel steuern, neu erzeugen) gibt es nur noch über `?piece=` — erreichbar über „Öffnen" und die Links aus Pipeline, Mediathek und Startseite; die Warteschlange rechts daneben entfällt. Grund: Beide Wege waren gleichrangig mit einem Umschalter, der Standard war der langsame. Die Übersicht kann jetzt auch **ablehnen** (ein Grund für alle Fassungen des Themas).
+- **Post-Arten aus dem Playbook stehen im Code** (`src/shared/postarten.ts`): A–G aus Abschnitt 4, dazu T (Threads-Text), S (Story), X (Versuch). Drehbuch → Sorte nach der Tabelle in 3a; ohne Drehbuch entscheiden Format und `dataQuery` (Set → B, Ära → C, Movers → E). Der Wochenrhythmus steht als `WOCHENRHYTHMUS`. Ändert sich der Katalog, ändern sich beide Stellen. Verworfen: die Sorte als Datenbankspalte (müsste nachgepflegt werden, das Drehbuch trägt sie schon).
+- **Pipeline hat einen Kalender**: je Tag alle Beiträge aller Kanäle, eingefärbt nach Post-Art, darüber das Soll des Wochenrhythmus mit ✓ (steht) / ○ (wartet) / nichts (fehlt). Die Kanal-Ampel bleibt als zweite Ansicht. Grund: „Welche Sorte geht wann raus?" ließ sich aus der Ampel nicht lesen — sie kannte nur Formate.
+- **Kanäle ohne Slots erscheinen in der Pipeline, sobald dort etwas wartet.** YouTube (keine Slots, kein Termin, 19 Shorts in der Freigabe) war unsichtbar; jetzt steht die Zeile mit „ohne Slots · 21 warten" und einem Weg zur Handarbeit. Wartendes ohne Termin bekommt im Kalender eine eigene Karte.
+- **Mediathek: Dateien über die Kennungsliste des Stücks auflösen**, nicht nur über `mp_assets.content_piece_id`. Bündel-Geschwister (die TikTok-Fassung einer Rangliste) verweisen auf die Dateien des Leitstücks und hatten keine eigenen Zeilen — 13 freigegebene TikTok-Reels fehlten, alle Geschwister standen ohne Vorschau. Ranglisten-Reels legen ihre MP4 als `render` ab, das zählt jetzt als Video. Text ohne Dateien (Threads) ist kein leeres Stück und bleibt sichtbar.
+- **Filterlisten der Mediathek kommen aus `/media/facets`**, nicht aus dem gefilterten Ergebnis: vorher schrumpften Projekt- und Kanalliste mit jedem Filter, und eine Kombination ohne Treffer ließ die eigene Auswahl verschwinden. Eigene Schlüssel wie `shorts` heißen im UI „YouTube Shorts" (`plattformName`). Suche wartet 300 ms Tipp-Pause.
+- **Projekt-Reiter in Arbeitsreihenfolge**: Heute · Freigaben · Pipeline · Handarbeit · Kanäle · Übersicht · Produkt-Brief. Freigaben und Pipeline fehlten dort, obwohl sie der tägliche Weg sind.
+
+## 2026-09-14 (Themen-Ansicht, Nachbesserung)
+
+- **Basis-Stücke sind Entwürfe, keine Beiträge.** `reel-binder.ts --ohne-folgen` legt sie jetzt mit `status: "draft"` an, und `listMedia` blendet alles mit `meta.basis` aus. Vorher standen sie als viertes Stück je Thema in der Freigabe (79 statt 59 offene Beiträge) — ein Zwischenstand ohne Folgen-Pille, den niemand ansieht oder freigibt. 20 vorhandene wurden einmalig umgestellt.
+- **Die Freigabe-Übersicht lädt alle Fassungen eines Themas, nicht nur die offenen.** Sonst verschwindet eine bereits freigegebene App-Fassung aus ihrer Kachel und das Thema steht mit einem einzigen Reiter da — es sieht aus, als fehlten Medien. Gezeigt werden Themen, in denen noch etwas wartet; erledigte Reiter tragen ein Häkchen.
+- **Freigegeben wird das Thema, nicht die sichtbare App.** Ein Reel geht auf allen Kanälen gleichzeitig raus; der Knopf heißt „Alle 3 freigeben". Dieselbe Aktion gibt es jetzt auch in der Mediathek.
+- **Vorschaubilder als eigenes Asset** (`scripts/reel-vorschaubilder.ts`, 82 nachgerüstet, läuft am Ende jedes Baulaufs). Mobile Browser ignorieren `preload="metadata"` und laden gar nichts — die Kacheln waren auf dem Handy schwarze Flächen.
+- **Mobil bleibt die Kachel zweispaltig**, nur schmaler (132 px Video, unter 420 px 104 px), Reiter mit Kürzeln (IG/TT/YT). Einspaltig war eine Kachel rund 1.000 px hoch, und von zwanzig Beiträgen sah man genau einen; jetzt sind es 561 px.
+
+## 2026-09-14 (Themen-Ansicht)
+
+- **Mediathek und Freigabe zeigen Beiträge als Themen**, nicht als Einzelstücke: `components/Themen.tsx`, links Vorschau, rechts der fertige Text, die App-Fassungen als Reiter. Grund: Ein Reel entsteht dreimal (Instagram, TikTok, Shorts), ist aber ein Thema — nebeneinander als drei Kacheln war das nicht zu lesen. Beide Seiten füttern die Ansicht aus `/api/mp/media`, das dafür `body` und `gruppe` mitliefert (Drehbuch, sonst Bündel, sonst Titel ohne Plattform-Endung).
+- **Freigeben ohne Einzelansicht:** Häkchen je Thema, „Alle auswählen", „Auswahl freigeben" — für zehn fertige Reels braucht es keine zehn Einzelseiten. Die alte Warteschlange bleibt als Modus „Einzeln prüfen" erhalten; sie kann Text bearbeiten, ablehnen und einplanen, das kann die Übersicht bewusst nicht.
+- **Je App nur die jüngste Fassung** in einem Thema: Ein neu gebautes Reel ersetzt das alte, das alte bleibt aber in der Datenbank — sonst stünden zwei Reiter „Instagram" nebeneinander.
+- Videos ohne eigenes Vorschaubild bekommen `#t=1` an die Quelle und `preload="metadata"`; ohne das steht in der Kachel ein schwarzes Feld.
+
+## 2026-09-14 (Content-Vorgaben, Teil 2)
+
+- **Kein Markenhinweis mehr in Captions.** „Kein offizielles Pokémon-Produkt." fällt weg (Prompt, Kürzungs-Kritiker, Zeichenbudget in `channels.ts`). Grund: Dass ein Binder-Planer nicht von Nintendo kommt, sieht die Nische sofort; in einer 180-Zeichen-TikTok-Caption fraß der Satz ein Viertel des Budgets und las sich wie eine Rechtsabteilung. Zusammen mit dem KI-Hinweis gilt: kein Beitrag trägt eine Fußnote.
+- **Zwei Schritte statt drei Bauten je Thema.** `reel-binder.ts --ohne-folgen` baut die Basis (Textkürzung schon drin, Pille noch nicht), `reel-plattformen.ts` legt die App-Pille auf und schreibt je Plattform ein Stück. Gemessen: 65 s Basis + 25 s je Fassung gegen 4 min für jede einzeln gebaute Fassung. Die Pille liegt dafür jetzt in `video/folgen-pille.ts` statt im Skript. Verworfen: drei volle Bauten (2,5 h für zwölf Themen) und Parallelbetrieb (bei 6 Kernen lag die Last schon bei 10).
+- **`reel-daten.ts` holt Kartendaten und Bilder für neue Drehbücher** (Bereich Set/Ära/Illustrator, Pokémon-Suche über den Katalog, Einzelkarten für Vergleiche). Grund: Fünf neue Formate brauchten echte Preise und Scans; abgetippte Zahlen wären die erste Stelle, an der uns jemand einen Fehler nachweist.
+- **Namensschilder nur auf Rückseiten.** Auf einer Kartenvorderseite liegt das Schild genau über dem gedruckten Namen. Bei den Ranglisten (`aera`, `illustrator`, `seitenwert`) tragen die Fächer deshalb nur Preisschilder.
+- **`captionKurz` je Drehbuch.** Instagram bekommt die lange Fassung, TikTok/Threads/Shorts die kurze, Schlagworte dort von sechs auf drei gekürzt.
+
+## 2026-09-14 (Content-Vorgaben)
+
+- **`docs/CONTENT_PLAYBOOK.md` ist die verbindliche Content-Vorgabe**, und `CLAUDE.md` in diesem Paket verweist darauf. Grund: Tonfall, Slide-Layout und Sprache wurden in jeder Sitzung neu erfunden — mühsam abgestimmter Slang war eine Sitzung später wieder weg. Verworfen: Vorgaben nur im Gedächtnis der Sitzung (hält nicht) und im Wurzel-`CLAUDE.md` (gehört nicht dorthin, eigenes Repo).
+- **Abspann von 2000 auf 3200 ms.** Grund: Das Ausblenden beginnt bei `ABSPANN_MS − 420`; bei 2000 ms verschwand der Abspann bei 1580 ms, während die Fußzeile erst bei 1800 ms vollständig aufgeblendet war. `binderplan.app` war praktisch nicht lesbar. Jetzt steht das fertige Bild rund eine Sekunde.
+- **Folgen-Hinweis mitten im Reel statt im Abspann.** Eine Pille `@binderplan.app` + gelber „Folgen"-Knopf, 2,6 s ab dem vorletzten Clip. Grund: Der Abspann ist der einzige Moment mit der Adresse im Bild, zwei Aufforderungen in drei Sekunden heben sich auf; wer den Abspann sieht, ist ohnehin geblieben. Verworfen: zusätzliche Zeile im Abspann (überladen) und Dauereinblendung (unruhig). Zu messen, sobald die Reichweite dafür reicht.
+- **`reel-abspann.ts` schneidet nach `meta.abspannMs`**, nicht nach der heutigen Konstante — sonst verlieren ältere Reels beim Nachrüsten 1,2 s Inhalt. Fehlt der Wert, gilt 2000. Der Ton wird beim Tausch mit `apad` verlängert statt stumm zu enden.
+
 ## 2026-08-26 (Shot 0)
 
 - **Eigener Node-Dienst statt Modul in `main.py`.** Grund: Host-Regel „nie wieder in main.py“, Plan verlangt TS/Zod/Playwright/Remotion. Verworfen: Python-Paket mit FastAPI-Router (hätte Remotion/c2pa-node unmöglich gemacht) und Next.js (SSR unnötig für ein Admin-Tool hinter Login, deutlich mehr RAM auf dem VPS). Siehe `HOST.md`.

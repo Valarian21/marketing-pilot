@@ -145,6 +145,29 @@ describe("Pipeline: Freigabe = Einplanen", () => {
     expect(gruen?.state).toBe("queued");
     expect(gruen?.at).toBe(queued[0]!.scheduledAt);
   });
+  it("zeigt einen Kanal ohne Slots, sobald dort etwas wartet — YouTube war unsichtbar", async () => {
+    const { pipelineView } = await import("../src/server/publish/pipeline.js");
+    patchChannel(built.db, pid, "youtube", { stage: "prepare", slots: [] });
+    // Ohne Wartendes: keine Zeile, steht bei „ohne Slots".
+    expect(pipelineView(built.db, pid).rows.find((r) => r.platform === "youtube")).toBeUndefined();
+    expect(pipelineView(built.db, pid).withoutSlots).toContain("youtube");
+    built.db.run(`INSERT INTO mp_content_pieces (id, project_id, task_id, channel, format, title, body, assets, status, human_edited, published_at, external_url, utm, meta, ai_tell_score, ai_tell_notes, rejection_reason, created_at, updated_at)
+      VALUES ('pipe-yt', '${pid}', NULL, 'youtube', 'artwork_reel', 'Drei Slabs · shorts', 'Text', '[]', 'review', 0, NULL, NULL, '{}', '{"platform":"shorts","drehbuch":"slab"}', NULL, '', '', '2026-09-05T00:00:00.000Z', '2026-09-05T00:00:00.000Z')` as never);
+    const row = pipelineView(built.db, pid).rows.find((r) => r.platform === "youtube");
+    expect(row).toBeDefined();
+    expect(row!.ohneSlots).toBe(true);
+    // Ohne Slots gibt es keine Projektion — das Stück steht als Wartendes im Backlog.
+    expect(row!.backlog).toBe(1);
+    expect(row!.slots).toHaveLength(0);
+    // Ein Termin aus der Handarbeit bekommt seine Post-Art aus dem Drehbuch.
+    recordExternPost(built.db, pid, { pieceId: "pipe-yt", platform: "youtube", scheduledAt: new Date(Date.now() + 2 * 86_400_000).toISOString(), externalUrl: "", posted: false });
+    const danach = pipelineView(built.db, pid).rows.find((r) => r.platform === "youtube")!;
+    expect(danach.slots).toHaveLength(1);
+    expect(danach.slots[0]!.postArt).toBe("A");
+    expect(danach.slots[0]!.drehbuch).toBe("slab");
+    expect(danach.slots[0]!.extern).toBe(true);
+    expect(danach.backlog).toBe(0);
+  });
   it("lässt Kanäle auf „Vorbereiten“ in Ruhe — dort postet der Mensch", async () => {
     const { autoScheduleOnApprove } = await import("../src/server/publish/pipeline.js");
     patchChannel(built.db, pid, "instagram", { stage: "prepare" });

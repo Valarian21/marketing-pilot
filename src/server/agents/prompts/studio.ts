@@ -212,7 +212,6 @@ ${input.platforms.map((p) => `  - ${p.platform}: target under ${p.limit} chars W
 - Hashtags come from these pools where they fit; add specific niche tags when a pool is thin. Lowercase, no duplicates, no generic filler (#love #follow).
 ${pools}
 ${input.kind === "guess" ? `- THIS IS A QUIZ: every card appears twice — first without its price, then revealed. The caption must ask the reader to guess before swiping on, and must NOT give away the prices. Mention at most the range.` : ""}
-- Every caption must contain, once, the disclosure "${de ? "Kein offizielles Pokémon-Produkt." : "Not affiliated with Nintendo or The Pokémon Company."}" — as its own short sentence near the end, before the hashtags.
 ${writingRules({ language: input.language, voiceProfile: input.voiceProfile, caption: true })}
 Return JSON: {"title","coverTitle","hook","ctaLine","captions":[{"platform","caption","hashtags":["#tag"]}]}` },
     { role: "user", content: `SCOPE: ${input.scopeLabel} (${input.kind === "top" ? "most expensive cards" : input.kind === "movers" ? "biggest price moves" : "price quiz: each card is shown without its price first, the next slide reveals it"})
@@ -290,7 +289,6 @@ Deliverables:
 ${input.platforms.map((p) => `  - ${p.platform}: target under ${p.limit} chars WITHOUT hashtags (the hard platform limit is higher - do not use it), ${p.policy.max === 0 ? "NO hashtags" : `${p.policy.min || 1}-${p.policy.max} hashtags`}, ${p.linkRule === "bio" ? 'no link in the text - point to "Link in Bio"' : "a link may go into the text"}. ${p.policy.note}`).join("\n")}
 - Hashtags from these pools where they fit, plus specific niche tags. Lowercase, no duplicates.
 ${pools}
-- Every caption contains, once, the disclosure "${de ? "Kein offizielles Pokémon-Produkt." : "Not affiliated with Nintendo or The Pokémon Company."}" as its own short sentence before the hashtags.
 ${writingRules({ language: input.language, voiceProfile: input.voiceProfile, caption: true })}
 Return JSON: {"title","coverTitle","hook","ctaLine","captions":[{"platform","caption","hashtags":["#tag"]}]}` },
     { role: "user", content: `BINDER: ${input.binderName}
@@ -366,7 +364,7 @@ Deliverables:
 ${input.platforms.map((p) => `  - ${p.platform}: target under ${p.limit} chars WITHOUT hashtags (the hard platform limit is higher - do not use it), ${p.policy.max === 0 ? "NO hashtags" : `${p.policy.min || 1}-${p.policy.max} hashtags`}, ${p.linkRule === "bio" ? 'no link in the text - point to "Link in Bio"' : "a link may go into the text"}. ${p.policy.note}`).join("\n")}
 - Hashtags from these pools where they fit, plus specific niche tags. Lowercase, no duplicates.
 ${pools}
-- Every caption contains, once, the disclosure "${de ? "Kein offizielles Pokémon-Produkt. Die Seite ist KI-erzeugt." : "Not affiliated with Nintendo or The Pokémon Company. The page is AI-generated."}" as its own short sentence before the hashtags.
+- Never mention AI, image generation or models in a caption, and never add a disclaimer about the Pokémon brand — see docs/CONTENT_PLAYBOOK.md.
 ${writingRules({ language: input.language, voiceProfile: input.voiceProfile, caption: true })}
 Return JSON: {"title","coverTitle","claims":["..."],"hook","ctaLine","captions":[{"platform","caption","hashtags":["#tag"]}]}` },
     { role: "user", content: `ART PAGE: ${input.titel}

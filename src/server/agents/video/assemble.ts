@@ -52,6 +52,37 @@ export async function detectFreezes(file: string, run: FfmpegRunner = runFfmpeg,
   return parseFreezes(err);
 }
 
+/** Stillen aus einem `silencedetect`-Protokoll ("silence_start: 1.2" / "silence_end: 2.0"). */
+export function parseSilences(stderr: string, totalMs: number): Interval[] {
+  const out: Interval[] = [];
+  let start: number | null = null;
+  for (const m of stderr.matchAll(/silence_(start|end): (-?[\d.]+)/g)) {
+    const v = Math.max(0, Math.round(parseFloat(m[2] ?? "0") * 1000));
+    if (m[1] === "start") start = v;
+    else if (start !== null) { out.push({ startMs: start, endMs: v }); start = null; }
+  }
+  if (start !== null) out.push({ startMs: start, endMs: totalMs });   // Stille bis zum Dateiende
+  return out;
+}
+
+/**
+ * Wo in einer Tondatei wirklich gesprochen wird.
+ *
+ * Die Zeichen-Zeitmarken von ElevenLabs v3 liegen rund um Pausen gelegentlich
+ * über eine Sekunde daneben (gemessen 10.09.2026). Wer Untertitel danach setzt,
+ * schneidet sie vor den Ton. Deshalb wird jeder Szenen-Schnipsel nachgemessen.
+ */
+export async function speechWindow(file: string, run: FfmpegRunner = runFfmpeg): Promise<{ startMs: number; endMs: number; durationMs: number }> {
+  const durationMs = await probeDurationMs(file);
+  const err = await run(["-loglevel", "info", "-i", file, "-af", "silencedetect=noise=-38dB:d=0.15", "-f", "null", "-"]);
+  const stillen = parseSilences(err, durationMs);
+  const vorne = stillen.find((s) => s.startMs <= 60);
+  const hinten = [...stillen].reverse().find((s) => s.endMs >= durationMs - 60);
+  const startMs = vorne ? (durationMs > 0 ? Math.min(vorne.endMs, durationMs) : vorne.endMs) : 0;
+  const endMs = hinten && hinten.startMs > startMs ? hinten.startMs : durationMs;
+  return { startMs, endMs, durationMs };
+}
+
 export interface Interval { startMs: number; endMs: number }
 export interface ScenePlan { id: string; keep: Interval[]; videoMs: number; padMs: number; totalMs: number; clickAtMs: number | null; clickX: number | null; clickY: number | null }
 
@@ -134,7 +165,10 @@ export function buildSceneArgs(rec: Recording, p: ScenePlan, layout: Layout, out
 export interface ComposeInput {
   body: string; bodyMs: number; layout: Layout;
   audio: { file: string | null; durationMs: number }[]; plans: ScenePlan[];
-  hookCard: string; endCard: string; frame: string; /** rounded-corner alpha mask for the recording (inner size), optional */ mask?: string; background: string; hookMs: number; endMs: number;
+  /** Vorspann-Karte - seit 11.09.2026 fahren die Reels ohne, dann `null` und `hookMs: 0`. */
+  hookCard: string | null; endCard: string; frame: string; /** rounded-corner alpha mask for the recording (inner size), optional */ mask?: string; background: string; hookMs: number; endMs: number;
+  /** Bewegter Abspann: ffmpeg-Muster der Bildfolge statt des Standbilds `endCard`. */
+  endSeq?: { muster: string; fps: number };
   captions: CaptionCue[]; music: string | null; out: string; fps?: number;
 }
 export function buildComposeArgs(i: ComposeInput): { args: string[]; totalMs: number } {
@@ -147,8 +181,10 @@ export function buildComposeArgs(i: ComposeInput): { args: string[]; totalMs: nu
   const BG = add("-loop", "1", "-framerate", String(fps), "-t", s3(totalMs), "-i", i.background);
   const FR = add("-loop", "1", "-framerate", String(fps), "-t", s3(i.bodyMs), "-itsoffset", s3(i.hookMs), "-i", i.frame);
   const MASK = i.mask ? add("-loop", "1", "-framerate", String(fps), "-t", s3(i.bodyMs), "-i", i.mask) : null;
-  const HOOK = add("-loop", "1", "-framerate", String(fps), "-t", s3(i.hookMs), "-i", i.hookCard);
-  const END = add("-loop", "1", "-framerate", String(fps), "-t", s3(i.endMs), "-itsoffset", s3(i.hookMs + i.bodyMs), "-i", i.endCard);
+  const HOOK = i.hookCard && i.hookMs > 0 ? add("-loop", "1", "-framerate", String(fps), "-t", s3(i.hookMs), "-i", i.hookCard) : null;
+  const END = i.endSeq
+    ? add("-framerate", String(i.endSeq.fps), "-t", s3(i.endMs), "-itsoffset", s3(i.hookMs + i.bodyMs), "-i", i.endSeq.muster)
+    : add("-loop", "1", "-framerate", String(fps), "-t", s3(i.endMs), "-itsoffset", s3(i.hookMs + i.bodyMs), "-i", i.endCard);
   const caps = i.captions.filter((c) => c.endMs > c.startMs).map((c) => ({ ...c, idx: add("-loop", "1", "-framerate", String(fps), "-t", s3(c.endMs - c.startMs), "-itsoffset", s3(i.hookMs + c.startMs), "-i", c.file) }));
   const audioIdx = i.audio.map((a) => (a.file ? add("-i", a.file) : -1));
   const MUSIC = i.music ? add("-i", i.music) : -1;
@@ -163,7 +199,8 @@ export function buildComposeArgs(i: ComposeInput): { args: string[]; totalMs: nu
   f.push(`[c0][${FR}:v]overlay=0:0:eof_action=pass[c1]`);
   let last = "[c1]";
   caps.forEach((c, k) => { const out = `[cp${k}]`; f.push(`${last}[${c.idx}:v]overlay=0:${i.layout.captionY}:eof_action=pass:enable='between(t,${s3(i.hookMs + c.startMs)},${s3(i.hookMs + c.endMs)})'${out}`); last = out; });
-  f.push(`${last}[${HOOK}:v]overlay=0:0:eof_action=pass:enable='lt(t,${s3(i.hookMs)})'[c2]`);
+  if (HOOK !== null) f.push(`${last}[${HOOK}:v]overlay=0:0:eof_action=pass:enable='lt(t,${s3(i.hookMs)})'[c2]`);
+  else f.push(`${last}null[c2]`);
   f.push(`[c2][${END}:v]overlay=0:0:eof_action=pass:enable='gte(t,${s3(i.hookMs + i.bodyMs)})',fade=t=in:st=0:d=0.3,format=yuv420p[vout]`);
   // audio: silence(hook) + per-scene voice (padded) + silence(end), then music bed
   i.plans.forEach((p, k) => {
@@ -171,8 +208,10 @@ export function buildComposeArgs(i: ComposeInput): { args: string[]; totalMs: nu
     if (idx >= 0) f.push(`[${idx}:a]aresample=44100,aformat=channel_layouts=stereo,apad=whole_dur=${s3(p.totalMs)},atrim=duration=${s3(p.totalMs)}[sa${k}]`);
     else f.push(`anullsrc=r=44100:cl=stereo,atrim=duration=${s3(p.totalMs)}[sa${k}]`);
   });
-  f.push(`anullsrc=r=44100:cl=stereo,atrim=duration=${s3(i.hookMs)}[sahook]`, `anullsrc=r=44100:cl=stereo,atrim=duration=${s3(i.endMs)}[saend]`);
-  f.push(`[sahook]${i.plans.map((_, k) => `[sa${k}]`).join("")}[saend]concat=n=${i.plans.length + 2}:v=0:a=1[voice]`);
+  if (i.hookMs > 0) f.push(`anullsrc=r=44100:cl=stereo,atrim=duration=${s3(i.hookMs)}[sahook]`);
+  f.push(`anullsrc=r=44100:cl=stereo,atrim=duration=${s3(i.endMs)}[saend]`);
+  const vorspann = i.hookMs > 0 ? "[sahook]" : "";
+  f.push(`${vorspann}${i.plans.map((_, k) => `[sa${k}]`).join("")}[saend]concat=n=${i.plans.length + (i.hookMs > 0 ? 2 : 1)}:v=0:a=1[voice]`);
   // music bed with ducking: the voice drives a sidechain compressor on the music, so it sits low under speech and fills the pauses
   // the bed is normalised first (tracks arrive at any level), sits ~18 dB under the voice and ducks further while she speaks;
   // the final mix is brought to -14 LUFS (Instagram/TikTok/YouTube reference) so reels are not quieter than the feed
@@ -187,7 +226,9 @@ export function buildComposeArgs(i: ComposeInput): { args: string[]; totalMs: nu
 
 export interface AssembleInput {
   recording: Recording; plans: ScenePlan[]; audio: { file: string | null; durationMs: number }[]; layout: Layout;
-  hookCard: string; endCard: string; frame: string; /** rounded-corner alpha mask for the recording (inner size), optional */ mask?: string; background: string; hookMs: number; endMs: number;
+  hookCard: string | null; endCard: string; frame: string; /** rounded-corner alpha mask for the recording (inner size), optional */ mask?: string; background: string; hookMs: number; endMs: number;
+  /** Bewegter Abspann (Bildfolge) — ohne das bleibt `endCard` ein Standbild. */
+  endSeq?: { muster: string; fps: number };
   captions: CaptionCue[]; music: string | null; out: string; fps?: number;
   /** Reuse scene segments across variants (same recording/layout, different hook). */
   segmentCache?: Map<string, string>;
@@ -213,7 +254,7 @@ export async function assemble(i: AssembleInput, run: FfmpegRunner = runFfmpeg):
     i.segmentCache?.set(cacheKey, body);
   }
   const bodyMs = i.plans.reduce((n, p) => n + p.totalMs, 0);
-  const { args, totalMs } = buildComposeArgs({ body, bodyMs, layout: i.layout, audio: i.audio, plans: i.plans, hookCard: i.hookCard, endCard: i.endCard, frame: i.frame, ...(i.mask ? { mask: i.mask } : {}), background: i.background, hookMs: i.hookMs, endMs: i.endMs, captions: i.captions, music: i.music, out: i.out, fps });
+  const { args, totalMs } = buildComposeArgs({ body, bodyMs, layout: i.layout, audio: i.audio, plans: i.plans, hookCard: i.hookCard, endCard: i.endCard, frame: i.frame, ...(i.mask ? { mask: i.mask } : {}), ...(i.endSeq ? { endSeq: i.endSeq } : {}), background: i.background, hookMs: i.hookMs, endMs: i.endMs, captions: i.captions, music: i.music, out: i.out, fps });
   await run(args);
   return { file: i.out, durationMs: totalMs };
 }

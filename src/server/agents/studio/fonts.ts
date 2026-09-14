@@ -17,9 +17,12 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { ROOT } from "../../env.js";
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../..");
+// ROOT kommt aus env.ts (sucht die package.json nach oben). Vorher stand hier ein
+// geratenes `../../../..`, das im gebauten Server auf dist/server/assets zeigte -
+// die Datei fehlte dort, und jede Slide zog ihre Schriften wieder von Google,
+// genau das, was dieser Umbau verhindern sollte (gefunden 11.09.2026).
 export const FONT_CSS_FILE = path.join(ROOT, "assets", "fonts", "inline.css");
 
 /** Der Rückfall: derselbe Link, den es vorher gab. */

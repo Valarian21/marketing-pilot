@@ -21,6 +21,7 @@ const StudioPage = lazy(() => import("./pages/Studio.js").then((m) => ({ default
 const SeriesPage = lazy(() => import("./pages/Series.js").then((m) => ({ default: m.SeriesPage })));
 const ChannelsPage = lazy(() => import("./pages/Channels.js").then((m) => ({ default: m.ChannelsPage })));
 const PublishPage = lazy(() => import("./pages/Publish.js").then((m) => ({ default: m.PublishPage })));
+const HandarbeitPage = lazy(() => import("./pages/Handarbeit.js").then((m) => ({ default: m.HandarbeitPage })));
 const VideoPage = lazy(() => import("./pages/Video.js").then((m) => ({ default: m.VideoPage })));
 const MusicPage = lazy(() => import("./pages/Music.js").then((m) => ({ default: m.MusicPage })));
 const StrategyPage = lazy(() => import("./pages/Strategy.js").then((m) => ({ default: m.StrategyPage })));
@@ -57,6 +58,7 @@ function Gate() {
           <Route path="projects/:id/publishing" element={<ChannelsPage />} />
           <Route path="projects/:id/studio" element={<StudioPage />} />
           <Route path="projects/:id/studio/video" element={<VideoPage />} />
+          <Route path="projects/:id/handarbeit" element={<HandarbeitPage />} />
           <Route path="projects/:id/publish/:pieceId" element={<PublishPage />} />
           <Route path="timeline" element={<ProjectScoped page="timeline" title="Timeline" />} />
           <Route path="pipeline" element={<ProjectScoped page="pipeline" title="Pipeline" />} />

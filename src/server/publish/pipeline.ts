@@ -18,6 +18,7 @@ import type { HostUser } from "../../host-adapter.js";
 import { berlinInstant, berlinParts } from "../agents/series/time.js";
 import { loadProfiles, stageOf } from "../channels.js";
 import { stageAtLeast, PLATFORMS } from "../../shared/channels.js";
+import { drehbuchOf, postArtOf } from "../../shared/postarten.js";
 import { writeAudit } from "../audit.js";
 import { credentialsFor, posterFor } from "./index.js";
 import { schedulePiece } from "./schedule.js";
@@ -84,6 +85,9 @@ export interface PipelineSlot {
   missed: boolean;
   /** Von Hand auf der Plattform eingeplant — der Pilot setzt ihn nicht ab. */
   extern: boolean;
+  /** Post-Art aus dem Playbook (A–G, T, S, X); leer bei leerem Slot. */
+  postArt: string;
+  drehbuch: string;
 }
 
 export interface PipelineRow {
@@ -95,6 +99,8 @@ export interface PipelineRow {
   slots: PipelineSlot[];
   /** Freigabe-Warteschlange, die über die sichtbaren Slots hinausgeht. */
   backlog: number;
+  /** Kanal ohne Slots — Termine kommen aus der Handarbeit, Wartendes steht im `backlog`. */
+  ohneSlots: boolean;
 }
 
 export interface PipelineView {
@@ -121,15 +127,21 @@ export function pipelineView(db: Db, projectId: string, opts: { days?: number; n
   const alle = loadProfiles(db, projectId).filter((p) => p.stage !== "off");
   const scheduled = db.select().from(t.mpScheduledPosts).where(eq(t.mpScheduledPosts.projectId, projectId)).all()
     .filter((x) => x.scheduledAt >= start.toISOString() && x.scheduledAt < ende.toISOString());
-  // Ein Kanal ohne Slots, auf dem trotzdem Termine stehen, bekommt eine Zeile:
-  // die Eintraege haengen sich dann unter dem Slotraster ein. Sonst waere
-  // TikTok unsichtbar, obwohl dort taeglich zwei Reels vorgeplant sind — und
-  // die Slotzeiten dafuer zu raten, waere schlechter als sie wegzulassen.
-  const mitTerminen = new Set(scheduled.filter((x) => x.status !== "cancelled").map((x) => x.platform));
-  const profiles = alle.filter((p) => p.slots.length > 0 || mitTerminen.has(p.platform));
-  const withoutSlots = alle.filter((p) => p.slots.length === 0 && !mitTerminen.has(p.platform)).map((p) => p.platform);
   const pieces = db.select().from(t.mpContentPieces).where(eq(t.mpContentPieces.projectId, projectId)).all();
   const byId = new Map(pieces.map((p) => [p.id, p]));
+  const metaOf = (p: { meta: string }) => parseJson<Record<string, unknown>>(p.meta, {});
+  const artOf = (p: { format: string; meta: string } | undefined) => (p ? { postArt: postArtOf({ format: p.format, meta: metaOf(p) }), drehbuch: drehbuchOf({ format: p.format, meta: metaOf(p) }) } : { postArt: "", drehbuch: "" });
+  /**
+   * Eine Zeile bekommt jeder eingeschaltete Kanal, auf dem etwas ansteht —
+   * Slots, Termine **oder wartende Stücke**. Bis zum 14.09.2026 galt nur die
+   * erste Bedingung plus Termine; YouTube hatte weder Slots noch Termine und
+   * war unsichtbar, obwohl 19 Shorts in der Freigabe lagen. Eine Pipeline,
+   * die den Stau nicht zeigt, zeigt das Falsche.
+   */
+  const mitTerminen = new Set(scheduled.filter((x) => x.status !== "cancelled").map((x) => x.platform));
+  const mitWartendem = new Set(pieces.filter((p) => p.status === "approved" || p.status === "review").map((p) => p.channel));
+  const profiles = alle.filter((p) => p.slots.length > 0 || mitTerminen.has(p.platform) || mitWartendem.has(p.platform));
+  const withoutSlots = alle.filter((p) => !profiles.includes(p)).map((p) => p.platform);
 
   const rows: PipelineRow[] = profiles.map((profile) => {
     const platform = profile.platform;
@@ -142,7 +154,7 @@ export function pipelineView(db: Db, projectId: string, opts: { days?: number; n
       const tag = berlinParts(new Date(start.getTime() + i * DAY + 12 * 3_600_000));
       for (const sl of [...profile.slots].filter((x) => x.day === tag.day).sort((a, b) => a.hour - b.hour)) {
         const at = berlinInstant(tag.date, sl.hour);
-        slots.push({ at: at.toISOString(), date: tag.date, hour: sl.hour, state: "empty", pieceId: null, title: "", format: "", error: "", missed: at.getTime() < now.getTime(), extern: false });
+        slots.push({ at: at.toISOString(), date: tag.date, hour: sl.hour, state: "empty", pieceId: null, title: "", format: "", error: "", missed: at.getTime() < now.getTime(), extern: false, postArt: "", drehbuch: "" });
       }
     }
 
@@ -153,7 +165,7 @@ export function pipelineView(db: Db, projectId: string, opts: { days?: number; n
     for (const sp of mine) {
       const piece = byId.get(sp.pieceId);
       const state: SlotState = sp.status === "posted" ? "published" : sp.status === "failed" ? "failed" : "queued";
-      const eintrag = { state, pieceId: sp.pieceId, title: piece?.title ?? "", format: piece?.format ?? "", error: sp.error ?? "", extern: sp.origin === "extern" };
+      const eintrag = { state, pieceId: sp.pieceId, title: piece?.title ?? "", format: piece?.format ?? "", error: sp.error ?? "", extern: sp.origin === "extern", ...artOf(piece) };
       // Eine Story teilt sich den Slot mit ihrem Beitrag — sie ersetzt ihn nicht.
       if (piece?.format === "story") continue;
       const frei = slots.find((x) => x.state === "empty" && Math.abs(Date.parse(x.at) - Date.parse(sp.scheduledAt)) < 30 * 60_000);
@@ -178,10 +190,10 @@ export function pipelineView(db: Db, projectId: string, opts: { days?: number; n
       const p = kandidaten[k];
       if (!p) break;
       k++;
-      Object.assign(slot, { state: p.status === "approved" ? "approved" : "review", pieceId: p.id, title: p.title, format: p.format, extern: false });
+      Object.assign(slot, { state: p.status === "approved" ? "approved" : "review", pieceId: p.id, title: p.title, format: p.format, extern: false, ...artOf(p) });
     }
 
-    return { platform, label: PLATFORMS[platform]?.label ?? platform, stage: profile.stage, automatic, slots, backlog: Math.max(0, kandidaten.length - k) };
+    return { platform, label: PLATFORMS[platform]?.label ?? platform, stage: profile.stage, automatic, slots, backlog: Math.max(0, kandidaten.length - k), ohneSlots: profile.slots.length === 0 };
   });
 
   return { from: heute, days, today: heute, rows, withoutSlots };

@@ -33,6 +33,15 @@ export const PLATFORMS: Record<string, PlatformDef> = {
   newsletter: { label: "Newsletter", home: "", compose: null, composeLabel: null, match: /newsletter|e-?mail/i },
 };
 
+/**
+ * Eigene Plattform-Schlüssel, die keinen Kanal bezeichnen: Reels für YouTube
+ * bauen wir unter „shorts" (`meta.platform`), der Kanal heißt „youtube".
+ */
+export const PLATTFORM_ALIAS: Record<string, string> = { shorts: "youtube" };
+/** Anzeigename eines Plattform-Schlüssels — auch für die eigenen wie „shorts". */
+export const plattformName = (key: string): string =>
+  key === "shorts" ? "YouTube Shorts" : PLATFORMS[PLATTFORM_ALIAS[key] ?? key]?.label ?? key;
+
 /** Platform key for a free-text channel name, or null if nothing matches. */
 export function platformKey(name: string): string | null {
   const n = name.trim();
@@ -220,11 +229,11 @@ export const DEFAULT_HASHTAG_POLICY: HashtagPolicy = { min: 0, max: 2, note: "H�
  */
 export const CAPTION_ZIEL: Record<string, number> = {
   instagram: 280,
-  // Untergrenze der Struktur: Frage an den Leser, Aufruf und der Pflichtsatz
-  // „Kein offizielles Pokémon-Produkt." brauchen zusammen rund 100 Zeichen,
-  // bevor der Haken auch nur ein Wort hat. Mit 140 (TikTok) und 220 (Facebook)
-  // blieben am 08.09. alle 20 Texte nach zwei Kürzungsrunden darüber — nicht
-  // weil das Modell nicht wollte, sondern weil es nicht ging.
+  // Untergrenze der Struktur: Frage an den Leser und Aufruf brauchen zusammen
+  // rund 60 Zeichen, bevor der Haken auch nur ein Wort hat. Mit 140 (TikTok)
+  // und 220 (Facebook) blieben am 08.09. alle 20 Texte nach zwei
+  // Kürzungsrunden darüber — damals kam der Pflichtsatz „Kein offizielles
+  // Pokémon-Produkt" dazu, der seit dem 14.09.2026 entfällt.
   facebook: 260,
   tiktok: 180,
   threads: 280,

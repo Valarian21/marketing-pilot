@@ -319,6 +319,18 @@ export const facebookPoster: PlatformPoster = {
     const token = i.creds["accessToken"]!;
     const bilder = aufLimit(i.assets.filter((a) => a.kind === "image" && a.url), 10, i.log);
 
+    // Video zuerst: ein Reel kam hier sonst als reiner Textbeitrag heraus, weil
+    // nur Bilder geprueft wurden. Facebook holt die Datei selbst von der
+    // signierten Adresse (`file_url`) — am 11.09.2026 mit einem
+    // unveroeffentlichten Testvideo geprueft.
+    const video = i.assets.find((a) => a.kind === "video" && a.url);
+    if (video) {
+      const out = await json<{ id: string }>(await call(f, `${GRAPH}/${page}/videos`, {
+        method: "POST", body: new URLSearchParams({ file_url: video.url, description: i.text.slice(0, 2000), access_token: token }),
+      }, "Facebook-Video"));
+      return { ref: out.id, externalUrl: `https://www.facebook.com/${out.id}` };
+    }
+
     if (bilder.length > 1) {
       const ids: string[] = [];
       for (const b of bilder) {

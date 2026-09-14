@@ -179,12 +179,19 @@ describe("storage", () => {
 
 describe("media library", () => {
   it("lists pieces across projects with thumbnail, size and filters", async () => {
-    const all = (await built.app.inject({ url: "/api/mp/media", headers: auth })).json();
+    // Ohne Status-Filter bleibt das Video verborgen: der Speicher-Test oben hat
+    // seine Dateien gelöscht, und ein Stück ohne Dateien ist in der Mediathek
+    // nichts (Regel vom 14.09.2026). Der Text ohne Dateien bleibt sichtbar.
+    const ohne = (await built.app.inject({ url: "/api/mp/media", headers: auth })).json();
+    expect(ohne.some((m: { format: string }) => m.format === "text")).toBe(true);
+    expect(ohne.some((m: { format: string }) => m.format === "video")).toBe(false);
+    // Mit ausdrücklichem Status zählt der Filter — dann steht es wieder da.
+    const all = (await built.app.inject({ url: "/api/mp/media?status=review", headers: auth })).json();
     expect(all.length).toBeGreaterThanOrEqual(2);
     const vid = all.find((m: { format: string }) => m.format === "video");
     expect(vid.projectName).toBe("Beispielwerk");
-    expect(vid.thumbUrl === null || /^\/api\/mp\/assets\/.+\/file$/.test(vid.thumbUrl)).toBe(true);   // storage test above wiped the files
-    expect(vid.bytes).toBeGreaterThanOrEqual(0);
+    expect(vid.thumbUrl).toBeNull();
+    expect(vid.bytes).toBe(0);
     expect(typeof vid.renderedAt).toBe("string");
     const onlyText = (await built.app.inject({ url: "/api/mp/media?format=text", headers: auth })).json();
     expect(onlyText.every((m: { format: string }) => m.format === "text")).toBe(true);

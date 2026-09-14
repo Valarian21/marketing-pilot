@@ -4,14 +4,9 @@ import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router";
 import type { PublishPackage } from "../../shared/schemas.js";
 import { api } from "../api.js";
-import { Button, Card, Notice, PageHeader, Pill } from "../components/ui.js";
+import { Button, Card, CopyButton, Notice, PageHeader, Pill } from "../components/ui.js";
 import { ProjectNav } from "../components/ProjectNav.js";
 import { ChannelTag } from "../components/ChannelLink.js";
-
-function CopyButton({ text, label = "Kopieren", variant = "secondary" as "secondary" | "primary", onCopied }: { text: string; label?: string; variant?: "secondary" | "primary"; onCopied?: () => void }) {
-  const [done, setDone] = useState(false);
-  return <Button variant={variant} onClick={() => { void navigator.clipboard.writeText(text).then(() => { setDone(true); onCopied?.(); setTimeout(() => setDone(false), 1800); }); }}>{done ? "Kopiert ✓" : label}</Button>;
-}
 
 export function PublishPage() {
   const { id = "", pieceId = "" } = useParams();

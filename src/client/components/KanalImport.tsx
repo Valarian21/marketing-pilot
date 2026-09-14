@@ -83,7 +83,12 @@ export function KanalImport({ projectId, vorhanden, onGespeichert }: { projectId
           {vorhanden.length ? `Aus Exporten: ${vorhanden.map((p) => EXPORT_KANAELE.find((k) => k.id === p)?.label ?? p).join(", ")}. ` : "TikTok, Pinterest und YouTube haben keine Lese-API — "}
           {vorhanden.length ? "Neuen Export einspielen, sobald es weitere Tage gibt." : "ihre Zahlen kommen aus dem Analytics-Export."}
         </span>
-        <button type="button" className="mp-linkbtn mp-small" onClick={() => { setOffen(!offen); setFertig(null); }}>{offen ? "Schließen" : "Export einspielen"}</button>
+        {/* Vorher ein Textlink „Export einspielen" in Kleinschrift — als Weg, den
+            man taeglich geht, war er schlicht nicht zu finden. Jetzt ein echter
+            Knopf mit dem Wort, nach dem man sucht: hochladen. */}
+        {offen
+          ? <button type="button" className="mp-linkbtn mp-small" onClick={() => { setOffen(false); setFertig(null); }}>Schließen</button>
+          : <Button variant="primary" onClick={() => { setOffen(true); setFertig(null); }}>Analytics-Datei hochladen</Button>}
       </div>
       {fertig && !offen && <Notice kind="info">{fertig}</Notice>}
       {offen && (

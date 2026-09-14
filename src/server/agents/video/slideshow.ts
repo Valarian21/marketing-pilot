@@ -21,6 +21,7 @@ import type { JobHandler } from "../../jobs.js";
 import { loadBrandKit } from "../studio/brandkit.js";
 import { REEL_FORMATE } from "../studio/data-content.js";
 import { playwrightRenderer, type RenderJob } from "../studio/render.js";
+import { abspannClip, abspannVerfuegbar, ABSPANN_MS, BINDERPLAN_PROJEKT } from "./abspann-binderplan.js";
 import { markPng } from "../../util/png.js";
 import { bookRun, finishRun, startRun } from "../../audit.js";
 import { getProject } from "../../repo/projects.js";
@@ -431,10 +432,44 @@ export const renderSlideshowJob: JobHandler<VideoContext> = async (ctx, job, pro
     const out = path.join(outDir, "reel.mp4");
     const music = opts.music === "bed" ? pickMusic(path.join(ctx.env.MP_DATA_DIR, "..", "assets", "music")) : null;
     if (opts.music === "bed" && !music) warnings.push("Kein Musikbett gefunden (assets/music/ ist leer) — stumm gerendert.");
-    const { args, totalMs } = buildSlideshowComposeArgs({ body, segments: segments.map((x) => ({ durationMs: x.durationMs, audio: x.audio })), captions, captionY: lay.captionY, music, out });
+    const roh = path.join(outDir, "reel-ohne-abspann.mp4");
+    const { args, totalMs } = buildSlideshowComposeArgs({ body, segments: segments.map((x) => ({ durationMs: x.durationMs, audio: x.audio })), captions, captionY: lay.captionY, music, out: roh });
     await ffmpeg(args);
-    progress("video", { detail: `${Math.round(totalMs / 1000)} s, ${segments.length} Segmente` });
-    return { file: out, durationMs: totalMs };
+
+    /**
+     * Der Binderplan-Abspann gehoert hinter **jedes** Video, nicht nur hinter
+     * die Kunstseiten-Reels (`docs/CONTENT_PLAYBOOK.md`): Er ist die einzige
+     * Stelle, an der die Adresse im Bild steht, und Wiedererkennung entsteht
+     * aus Wiederholung.
+     *
+     * Der Clip ist stumm — ohne eigene Tonspur liesse `concat` mit `a=1` den
+     * Graphen scheitern, deshalb der `anullsrc`-Eingang. Beide Teile laufen in
+     * 1080x1920 und derselben Bildrate, `setsar=1` faengt nur ab, dass ein
+     * abweichendes Pixelseitenverhaeltnis die Verkettung verweigert.
+     */
+    const mitAbspann = piece.projectId === BINDERPLAN_PROJEKT && abspannVerfuegbar(ctx.env.MP_DATA_DIR);
+    if (!mitAbspann) {
+      // Fremdes Projekt (der Abspann traegt Binderplans Logo, Adresse und
+      // Claim) oder fehlendes Markenbild: dann bleibt das Reel, wie es ist.
+      if (piece.projectId === BINDERPLAN_PROJEKT) warnings.push("Ohne Abspann gerendert — binderplan-logo-512.png fehlt unter assets/<projekt>/brand/.");
+      fs.renameSync(roh, out);
+      progress("video", { detail: `${Math.round(totalMs / 1000)} s, ${segments.length} Segmente` });
+      return { file: out, durationMs: totalMs };
+    }
+    const abspann = await abspannClip(ctx.env.MP_DATA_DIR);
+    await ffmpeg(["-i", roh, "-i", abspann,
+      "-f", "lavfi", "-t", s3(ABSPANN_MS), "-i", "anullsrc=r=44100:cl=stereo",
+      "-filter_complex",
+      "[0:v]setsar=1,format=yuv420p[v0];[1:v]setsar=1,format=yuv420p[v1];" +
+      "[v0][0:a][v1][2:a]concat=n=2:v=1:a=1[v][a]",
+      "-map", "[v]", "-map", "[a]", "-r", String(OUTPUT_FPS),
+      "-c:v", "libx264", "-preset", "medium", "-crf", "20", "-pix_fmt", "yuv420p",
+      "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart", "-y", out]);
+    try { fs.unlinkSync(roh); } catch { /* egal */ }
+
+    const gesamtMs = totalMs + ABSPANN_MS;
+    progress("video", { detail: `${Math.round(gesamtMs / 1000)} s, ${segments.length} Segmente + Abspann` });
+    return { file: out, durationMs: gesamtMs };
   });
 
   // 4. Assets: das Reel ersetzt die Slides am Stück; alle Bündel-Mitglieder zeigen auf dieselbe Datei

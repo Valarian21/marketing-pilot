@@ -1,0 +1,33 @@
+<!-- Die Lehreule als Abspann-Figur. Die Klassen steuern die Bewegung (siehe abspann.ts):
+     .kopf wiegt, .auge blinzelt, .koerper atmet, .blatt fliegt ein, .haken poppt. -->
+<svg class="figur" viewBox="0 0 240 300" xmlns="http://www.w3.org/2000/svg">
+  <g class="koerper">
+    <g class="kopf">
+      <path d="M62 62 C54 34 60 20 74 12 C78 30 86 44 96 54 Z" fill="#2c2135"/>
+      <path d="M178 62 C186 34 180 20 166 12 C162 30 154 44 144 54 Z" fill="#2c2135"/>
+      <ellipse cx="120" cy="132" rx="92" ry="102" fill="#382c43"/>
+      <path d="M32 122 C22 156 30 194 52 214 C58 186 56 150 48 126 Z" fill="#2c2135"/>
+      <path d="M208 122 C218 156 210 194 188 214 C182 186 184 150 192 126 Z" fill="#2c2135"/>
+      <ellipse cx="120" cy="164" rx="54" ry="62" fill="#4d3c5c"/>
+      <g class="auge auge-l"><circle cx="86" cy="104" r="36" fill="#fdf1e3"/>
+        <circle cx="90" cy="106" r="15" fill="#2c2135"/><circle cx="96" cy="99" r="5" fill="#fff" opacity=".9"/></g>
+      <g class="auge auge-r"><circle cx="154" cy="104" r="36" fill="#fdf1e3"/>
+        <circle cx="150" cy="106" r="15" fill="#2c2135"/><circle cx="156" cy="99" r="5" fill="#fff" opacity=".9"/></g>
+      <path d="M120 116 L133 138 Q120 146 107 138 Z" fill="#e8912d"/>
+    </g>
+    <g class="fuesse">
+      <path d="M96 230 q-12 4 -16 10 M104 230 q-2 8 -2 12 M112 230 q10 4 14 10" stroke="#e8912d" stroke-width="6" stroke-linecap="round" fill="none"/>
+      <path d="M128 230 q-12 4 -16 10 M136 230 q-2 8 -2 12 M144 230 q10 4 14 10" stroke="#e8912d" stroke-width="6" stroke-linecap="round" fill="none"/>
+    </g>
+  </g>
+  <g class="blatt" opacity="0">
+    <rect x="72" y="196" width="96" height="88" rx="3" fill="#fffdfa" stroke="#e3d4c0" stroke-width="1.5" transform="rotate(-4 120 240)"/>
+    <g transform="rotate(-4 120 240)" fill="#b9ab9c">
+      <rect x="82" y="208" width="52" height="4" rx="2" fill="#382c43"/>
+      <rect x="82" y="220" width="76" height="3" rx="1.5"/><rect x="82" y="229" width="68" height="3" rx="1.5"/>
+      <rect x="82" y="242" width="76" height="3" rx="1.5"/><rect x="82" y="251" width="58" height="3" rx="1.5"/>
+      <rect x="82" y="264" width="72" height="3" rx="1.5"/></g>
+    <g class="haken" opacity="0"><circle cx="160" cy="205" r="11" fill="#5f9e8c" transform="rotate(-4 120 240)"/>
+      <path d="M155 205 l3.5 4 6-7" stroke="#fff" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round" transform="rotate(-4 120 240)"/></g>
+  </g>
+</svg>

@@ -328,10 +328,19 @@ export const PipelineSlot = z.object({
    * gar nicht tun kann (TikTok, X, LinkedIn).
    */
   extern: z.boolean().default(false),
+  /** Post-Art aus dem Playbook (A–G, T, S, X) — leer bei leerem Slot. */
+  postArt: z.string().default(""),
+  /** Drehbuch des Stücks, falls es eines hat. */
+  drehbuch: z.string().default(""),
 });
 export const PipelineRow = z.object({
   platform: z.string(), label: z.string(), stage: z.string(), automatic: z.boolean(),
   slots: z.array(PipelineSlot), backlog: z.number().int(),
+  /**
+   * Der Kanal hat keine Slots: Termine kommen aus der Handarbeit, und was
+   * freigegeben wartet, steht im `backlog`, nicht als Projektion auf Slots.
+   */
+  ohneSlots: z.boolean().default(false),
 });
 export const PipelineView = z.object({ from: z.string(), days: z.number().int(), today: z.string(), rows: z.array(PipelineRow), withoutSlots: z.array(z.string()) });
 export const AutoScheduled = z.object({ pieceId: z.string(), platform: z.string(), at: z.string().nullable(), note: z.string() });
@@ -1076,6 +1085,49 @@ export const PublishPackage = z.object({
   postizAvailable: z.boolean(),
   notes: z.array(z.string()),
 });
+/**
+ * Handarbeit: die Warteschlange für Kanäle ohne Veröffentlichungs-API.
+ *
+ * TikTok hat keine, YouTube Shorts lädt man in Studio hoch — dort bleibt das
+ * Posten Handarbeit. Bisher fuehrte der Weg ueber die Publish-Seite, aber die
+ * zeigt **ein** Stueck; fuer eine Woche waeren das vierzehn Einzelaufrufe.
+ * Diese Ansicht legt stattdessen alles nebeneinander: Text zum Kopieren, Datei
+ * zum Laden, Termin, und ein Haken „gepostet".
+ */
+export const HandarbeitEintrag = z.object({
+  pieceId: Id,
+  titel: z.string(),
+  platform: z.string(),
+  format: z.string(),
+  text: z.string(),
+  hinweise: z.array(z.string()).default([]),
+  dateien: z.array(z.object({ id: Id, kind: z.string(), url: z.string(), filename: z.string() })).default([]),
+  /** Termin aus dem extern-Eintrag, falls einer gesetzt ist. */
+  geplantAm: z.string().nullable().default(null),
+  gepostet: z.boolean().default(false),
+  externalUrl: z.string().nullable().default(null),
+  linkFuerBio: z.string().nullable().default(null),
+});
+export const HandarbeitKanal = z.object({
+  platform: z.string(), label: z.string(), profilUrl: z.string().nullable().default(null),
+  offen: z.number().int().default(0), geplant: z.number().int().default(0), gepostet: z.number().int().default(0),
+});
+export const HandarbeitView = z.object({
+  kanaele: z.array(HandarbeitKanal),
+  eintraege: z.array(HandarbeitEintrag),
+});
+export const VerteilenRequest = z.object({
+  platform: z.string(),
+  /** Erster Tag (YYYY-MM-DD, Berliner Zeit). */
+  ab: z.string(),
+  /** Uhrzeit in Berliner Zeit, volle Stunde. */
+  stunde: z.number().int().min(0).max(23).default(18),
+  /** Wie viele Stuecke je Tag. */
+  proTag: z.number().int().min(1).max(5).default(1),
+  /** Wie viele Stuecke insgesamt verteilt werden sollen. */
+  anzahl: z.number().int().min(1).max(60).default(14),
+});
+
 export const ScheduleRequest = z.object({ date: Iso });
 
 /** Ein Stück des Social-Kits (Shot 12). */
@@ -1384,6 +1436,10 @@ export type PublishView = z.infer<typeof PublishView>;
 export type DirectoryDef = z.infer<typeof DirectoryDef>;
 export type DirectoryStatus = z.infer<typeof DirectoryStatus>;
 export type PublishPackage = z.infer<typeof PublishPackage>;
+export type HandarbeitEintrag = z.infer<typeof HandarbeitEintrag>;
+export type HandarbeitKanal = z.infer<typeof HandarbeitKanal>;
+export type HandarbeitView = z.infer<typeof HandarbeitView>;
+export type VerteilenRequest = z.infer<typeof VerteilenRequest>;
 export type ChannelProfile = z.infer<typeof ChannelProfile>;
 export type ChannelStage = z.infer<typeof ChannelStage>;
 export type ChannelPatch = z.infer<typeof ChannelPatch>;

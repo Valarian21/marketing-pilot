@@ -25,10 +25,16 @@ import { pipelineView } from "../publish/pipeline.js";
 import { METRICS_STEPS, PUBLISH_STEPS } from "../publish/job.js";
 import { metrikenVonHand } from "../publish/metrics.js";
 import { loadBio, saveBio } from "../publish/bio.js";
+import { handarbeitView, verteilen } from "../publish/handarbeit.js";
+import type { StudioContext } from "../agents/studio/generate.js";
 
 export function publishRoutes(app: FastifyInstance, db: Db, env: Env): void {
   const r = app.withTypeProvider<ZodTypeProvider>();
   const P = s.ProjectIdParams;
+  // Die Warteschlange braucht vom Studio-Kontext nur Datenbank und Datenordner —
+  // buildPackage ruft weder Modell noch Renderer auf.
+  const studioCtx = (): StudioContext =>
+    ({ db, dataDir: env.MP_DATA_DIR, env, publish: { name: "manual" } } as unknown as StudioContext);
   const bioUrl = (code: string) => (env.MP_PUBLIC_BASE && code ? `${env.MP_PUBLIC_BASE.replace(/\/$/, "")}/go/bio/${code}` : null);
 
   r.get("/api/mp/projects/:projectId/publish", { schema: { params: P, response: { 200: s.PublishView, 404: s.ErrorBody } } }, async (req, reply) => {
@@ -119,6 +125,31 @@ export function publishRoutes(app: FastifyInstance, db: Db, env: Env): void {
    * läuft. Ohne das zeigt die Ampel eine leere Woche, während zweimal täglich
    * ein Reel rausgeht.
    */
+  // --- Handarbeit: Warteschlange fuer Kanaele ohne Veroeffentlichungs-API ---
+  //
+  // TikTok und YouTube Shorts lassen sich nicht automatisch bespielen. Der Pilot
+  // legt die Stuecke fertig hin, gepostet wird von Hand — diese beiden Wege
+  // machen daraus eine Liste statt vieler Einzelaufrufe.
+  r.get("/api/mp/projects/:projectId/handarbeit", {
+    schema: { params: P, querystring: z.object({ platform: z.string().optional() }),
+              response: { 200: s.HandarbeitView, 404: s.ErrorBody } },
+  }, async (req, reply) => {
+    if (!getProject(db, req.params.projectId)) return reply.code(404).send({ detail: "Projekt nicht gefunden." });
+    return handarbeitView(studioCtx(), req.params.projectId, req.query.platform);
+  });
+
+  r.post("/api/mp/projects/:projectId/handarbeit/verteilen", {
+    schema: { params: P, body: s.VerteilenRequest,
+              response: { 200: z.object({ gesetzt: z.number().int() }), 404: s.ErrorBody } },
+  }, async (req, reply) => {
+    if (!getProject(db, req.params.projectId)) return reply.code(404).send({ detail: "Projekt nicht gefunden." });
+    const gesetzt = verteilen(studioCtx(), req.params.projectId, req.body, req.user);
+    writeAudit(db, { user: req.user, action: "publish.handarbeit.verteilen", entityType: "project",
+      entityId: req.params.projectId, projectId: req.params.projectId,
+      content: { platform: req.body.platform, ab: req.body.ab, stunde: req.body.stunde, proTag: req.body.proTag, gesetzt } });
+    return { gesetzt };
+  });
+
   r.post("/api/mp/projects/:projectId/publish/extern", {
     schema: { params: P, body: s.ExternPostCreate, response: { 201: s.ScheduledPost, 400: s.ErrorBody, 404: s.ErrorBody } },
   }, async (req, reply) => {

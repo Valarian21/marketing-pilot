@@ -20,7 +20,7 @@ export interface CriticResult { body: string; score: number; rounds: number; not
 
 /** Der Auftrag an den Umschreiber, wenn ein Text zu lang ist — nennt die Zielzahl. */
 export const kuerzungsAuftrag = (laenge: number, ziel: number): string =>
-  `Der Text hat ${laenge} Zeichen, erlaubt sind höchstens ${ziel}. Kürze auf unter ${ziel} Zeichen: erste Zeile bleibt der Haken (max. 60 Zeichen), danach höchstens drei kurze Zeilen, eine Frage an den Leser, ein Aufruf. Der Hinweis „Kein offizielles Pokémon-Produkt" bleibt als eigene kurze Zeile. Erklärungen streichen, Spannung behalten.`;
+  `Der Text hat ${laenge} Zeichen, erlaubt sind höchstens ${ziel}. Kürze auf unter ${ziel} Zeichen: erste Zeile bleibt der Haken (max. 60 Zeichen), danach höchstens drei kurze Zeilen, eine Frage an den Leser, ein Aufruf. Erklärungen streichen, Spannung behalten.`;
 
 /**
  * Einen Text auf die Ziellänge bringen — ohne Kritiker, nur Länge.
