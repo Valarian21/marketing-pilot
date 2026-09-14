@@ -9,38 +9,34 @@ import { Button } from "./ui.js";
 import { lastProject, rememberProject } from "./ProjectNav.js";
 
 /**
- * Die Navigation des Content-Piloten: erst die Kanäle (was läuft wo, auf welcher
- * Stufe), dann der Weg des Contents — erstellen, Serien, freigeben, Medien. Der
- * Marketing-Teil (Analyse, Strategie, Aufgaben, Timeline, Community, Insights)
- * bleibt gebaut, ist aber eingeklappt: er kommt später wieder nach vorn.
+ * Die Navigation: vier Wege, die täglich gegangen werden — Pipeline, Freigaben,
+ * Medien, Zahlen. Alles andere (Kanäle, Erstellen, Serien, Handarbeit, Betrieb)
+ * steht eingeklappt unter „Mehr". Bis zum 14.09.2026 standen zwölf Einträge
+ * gleichrangig nebeneinander; benutzt wurden vier.
  */
 const NAV: { group: string; to: string; label: string; icon: IconName; end?: boolean }[] = [
-  { group: "Content Pilot", to: "/projects", label: "Projekte", icon: "projects", end: true },
-  { group: "Content Pilot", to: "/uebersicht", label: "Übersicht", icon: "insights" },
-  { group: "Content Pilot", to: "/channels", label: "Kanäle", icon: "send" },
-  { group: "Content Pilot", to: "/studio", label: "Erstellen", icon: "studio" },
-  { group: "Content Pilot", to: "/series", label: "Serien", icon: "series" },
-  { group: "Content Pilot", to: "/review", label: "Freigaben", icon: "review" },
   { group: "Content Pilot", to: "/pipeline", label: "Pipeline", icon: "timeline" },
+  { group: "Content Pilot", to: "/review", label: "Freigaben", icon: "review" },
   { group: "Content Pilot", to: "/media", label: "Medien", icon: "media" },
-  { group: "Betrieb", to: "/activity", label: "Aktivität", icon: "activity" },
-  { group: "Betrieb", to: "/music", label: "Musik", icon: "media" },
-  { group: "Betrieb", to: "/storage", label: "Speicher", icon: "storage" },
-  { group: "Betrieb", to: "/settings", label: "Einstellungen", icon: "settings" },
+  { group: "Content Pilot", to: "/uebersicht", label: "Zahlen", icon: "insights" },
+  { group: "Mehr", to: "/heute", label: "Heute", icon: "projects" },
+  { group: "Mehr", to: "/projects", label: "Projekte", icon: "projects", end: true },
+  { group: "Mehr", to: "/channels", label: "Kanäle", icon: "send" },
+  { group: "Mehr", to: "/handarbeit", label: "Handarbeit", icon: "send" },
+  { group: "Mehr", to: "/studio", label: "Erstellen", icon: "studio" },
+  { group: "Mehr", to: "/series", label: "Serien", icon: "series" },
+  { group: "Mehr", to: "/activity", label: "Aktivität", icon: "activity" },
+  { group: "Mehr", to: "/music", label: "Musik", icon: "media" },
+  { group: "Mehr", to: "/storage", label: "Speicher", icon: "storage" },
+  { group: "Mehr", to: "/settings", label: "Einstellungen", icon: "settings" },
 ];
 
-/**
- * Die vier Tabs am unteren Rand auf schmalen Geräten.
- *
- * Die Seitenleiste lag mobil als 900 px hoher Block über dem Inhalt: wer die
- * Startseite öffnete, sah zuerst das Menü. Unten liegen jetzt die vier Wege,
- * die man täglich geht; alles andere steht hinter „Mehr".
- */
-const TABS: { to: string; label: string; icon: IconName; end?: boolean }[] = [
-  { to: "/", label: "Heute", icon: "projects", end: true },
+/** Die Tabs am unteren Rand auf schmalen Geräten — dieselben vier Wege. */
+const TABS: { to: string; label: string; icon: IconName; global?: boolean }[] = [
+  { to: "/pipeline", label: "Pipeline", icon: "timeline" },
+  { to: "/review", label: "Freigaben", icon: "review" },
+  { to: "/media", label: "Medien", icon: "media", global: true },
   { to: "/uebersicht", label: "Zahlen", icon: "insights" },
-  { to: "/channels", label: "Kanäle", icon: "send" },
-  { to: "/studio", label: "Erstellen", icon: "studio" },
 ];
 
 const GROUPS = Array.from(new Set(NAV.map((n) => n.group)));
@@ -112,19 +108,22 @@ export function Shell() {
         </div>
         <ProjectBox projects={projects} />
         <nav className="mp-nav" aria-label="Hauptnavigation">
-          {GROUPS.map((g) => (
-            <div key={g} className="mp-nav-group">
-              <div className="mp-nav-group-label">{g}</div>
-              {NAV.filter((n) => n.group === g).map((n) => {
-                const Icon = Icons[n.icon];
-                return (
-                  <NavLink key={n.to} to={n.to} end={n.end ?? false} className={({ isActive }) => `mp-nav-item${isActive ? " is-active" : ""}`}>
-                    <span className="mp-nav-icon"><Icon /></span>{n.label}{(badge(n.to) ?? 0) > 0 && <span className="mp-nav-badge">{badge(n.to)}</span>}
-                  </NavLink>
-                );
-              })}
-            </div>
-          ))}
+          {GROUPS.map((g) => {
+            const eintraege = NAV.filter((n) => n.group === g).map((n) => {
+              const Icon = Icons[n.icon];
+              return (
+                <NavLink key={n.to} to={n.to} end={n.end ?? false} className={({ isActive }) => `mp-nav-item${isActive ? " is-active" : ""}`}>
+                  <span className="mp-nav-icon"><Icon /></span>{n.label}{(badge(n.to) ?? 0) > 0 && <span className="mp-nav-badge">{badge(n.to)}</span>}
+                </NavLink>
+              );
+            });
+            // „Mehr" klappt auf, wenn eine seiner Seiten offen ist — sonst bleibt es zu.
+            if (g === "Mehr") {
+              const aktiv = NAV.some((n) => n.group === "Mehr" && n.to !== "/projects" && (pathname === n.to || pathname.endsWith(n.to) || pathname.includes(`${n.to}/`)));
+              return <details key={g} className="mp-nav-group mp-nav-mehr" open={aktiv}><summary className="mp-nav-group-label">{g}</summary>{eintraege}</details>;
+            }
+            return <div key={g} className="mp-nav-group"><div className="mp-nav-group-label">{g}</div>{eintraege}</div>;
+          })}
         </nav>
         <div className="mp-sidebar-foot">
           {info?.backLink && (
@@ -152,9 +151,9 @@ export function Shell() {
       <nav className="mp-tabs" aria-label="Hauptbereiche">
         {TABS.map((t) => {
           const Icon = Icons[t.icon];
-          const ziel = current ? `/projects/${current.id}${t.to === "/" ? "" : t.to}` : t.to;
+          const ziel = current && !t.global ? `/projects/${current.id}${t.to}` : t.to;
           return (
-            <NavLink key={t.to} to={ziel} end={t.end ?? false} className={({ isActive }) => `mp-tab${isActive ? " is-active" : ""}`}>
+            <NavLink key={t.to} to={ziel} className={({ isActive }) => `mp-tab${isActive ? " is-active" : ""}`}>
               <span className="mp-tab-icon"><Icon /></span>{t.label}
             </NavLink>
           );

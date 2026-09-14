@@ -4,6 +4,8 @@
  *  content pieces carry the platform slug ("instagram", "linkedin"). Both are mapped to one canonical channel so the
  *  timeline, links and the cockpit line up. Profiles (per project) turn a channel name into the real page to open. */
 
+import { isPostArt } from "./postarten.js";
+
 export interface PlatformDef {
   label: string;
   /** public home of the platform - used when no profile URL is set */
@@ -120,8 +122,8 @@ export function stageFromMode(mode: unknown): ChannelStage {
 /** Ein Kanal-Profil des Projekts. `slots`/`publishMode` kamen mit Shot 10 dazu, `stage` mit dem Content-Piloten. */
 export interface ChannelProfile {
   platform: string; label: string; url: string;
-  /** Wochentag + Stunde (Europe/Berlin), zu denen auf diesem Kanal gepostet wird. */
-  slots: { day: WeekdayId; hour: number }[];
+  /** Wochentag + Stunde (Europe/Berlin), zu denen auf diesem Kanal gepostet wird; `art` = gewünschte Post-Art. */
+  slots: { day: WeekdayId; hour: number; art?: string | undefined }[];
   /** Die Stufe — siehe `STAGES`. */
   stage: ChannelStage;
   /** Abgeleitet aus `stage`; bleibt für die Zeitplan-Logik aus Shot 10 erhalten. */
@@ -132,7 +134,9 @@ export interface ChannelProfile {
 /** Ein Profil mit allen Feldern, egal wie alt der gespeicherte Eintrag ist. */
 export function fullProfile(p: Partial<ChannelProfile> & { platform: string }): ChannelProfile {
   const slots = (Array.isArray(p.slots) ? p.slots : [])
-    .filter((x): x is { day: WeekdayId; hour: number } => WEEKDAY_IDS.includes(x?.day as WeekdayId) && Number.isInteger(x?.hour) && x.hour >= 0 && x.hour <= 23);
+    .filter((x): x is { day: WeekdayId; hour: number; art?: string | undefined } => WEEKDAY_IDS.includes(x?.day as WeekdayId) && Number.isInteger(x?.hour) && x.hour >= 0 && x.hour <= 23)
+    // Die Sorte am Slot bleibt nur, wenn sie eine ist — alles andere fällt weg.
+    .map((x) => (isPostArt(x.art) ? { day: x.day, hour: x.hour, art: x.art } : { day: x.day, hour: x.hour }));
   const stage = isStage(p.stage) ? p.stage : stageFromMode(p.publishMode);
   return {
     platform: p.platform, label: p.label ?? "", url: p.url ?? "",

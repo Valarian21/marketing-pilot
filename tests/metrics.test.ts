@@ -28,19 +28,29 @@ describe("Graph-Antworten lesen", () => {
    * Medientyp passt. Ein zweiter Versuch mit dem kleinsten gemeinsamen Nenner
    * ist deshalb kein Rauschen, sondern der einzige Weg an die Zahlen.
    */
-  it("versucht es kürzer, wenn eine Metrik zum Medientyp nicht passt", async () => {
+  it("versucht es in drei Stufen kürzer, wenn eine Metrik zum Medientyp nicht passt", async () => {
+    // Stufe 1 fragt zusätzlich Follows, Profilbesuche und Watch-Time; Stufe 2
+    // den vollen Satz; Stufe 3 den kleinsten gemeinsamen Nenner.
     const gefragt: string[] = [];
     const impl = (async (url: string | URL) => {
       const u = String(url);
       gefragt.push(new URL(u).searchParams.get("metric") ?? "");
-      if (gefragt.length === 1) return fehler("(#100) metric[1] must be one of the following values: reach");
+      if (gefragt.length <= 2) return fehler("(#100) metric[1] must be one of the following values: reach");
       return ok(werte({ reach: 900, likes: 12, comments: 1 }));
     }) as unknown as typeof fetch;
     const m = await instagramMetriken("ig-2", "tok", impl);
-    expect(gefragt).toHaveLength(2);
-    expect(gefragt[1]!.split(",")).toEqual(["reach", "likes", "comments"]);
+    expect(gefragt).toHaveLength(3);
+    expect(gefragt[0]!.split(",")).toContain("follows");
+    expect(gefragt[2]!.split(",")).toEqual(["reach", "likes", "comments"]);
     expect(m.reichweite).toBe(900);
     expect(m.aufrufe).toBeNull();
+  });
+  it("nimmt Follows und Profilbesuche mit, wenn die erste Stufe durchgeht", async () => {
+    const impl = (async () => ok(werte({ reach: 900, views: 1200, likes: 12, comments: 1, saved: 3, shares: 2, total_interactions: 18, follows: 4, profile_visits: 9 }))) as unknown as typeof fetch;
+    const m = await instagramMetriken("ig-3", "tok", impl);
+    expect(m.roh?.["follows"]).toBe(4);
+    expect(m.roh?.["profile_visits"]).toBe(9);
+    expect(m.aufrufe).toBe(1200);
   });
 
   it("gibt ein fehlendes Recht durch, statt es wegzukürzen", async () => {

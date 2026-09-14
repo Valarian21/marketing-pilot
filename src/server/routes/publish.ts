@@ -22,6 +22,7 @@ import { getPiece } from "../agents/studio/generate.js";
 import { loadCredentials, platformStatus, posterFor, saveCredentials } from "../publish/index.js";
 import { cancelScheduled, listScheduled, nextFreeSlot, postedToday, recordExternPost, schedulePiece } from "../publish/schedule.js";
 import { pipelineView } from "../publish/pipeline.js";
+import { slotAnalyse } from "../publish/slotanalyse.js";
 import { METRICS_STEPS, PUBLISH_STEPS } from "../publish/job.js";
 import { metrikenVonHand } from "../publish/metrics.js";
 import { loadBio, saveBio } from "../publish/bio.js";
@@ -211,6 +212,14 @@ export function publishRoutes(app: FastifyInstance, db: Db, env: Env): void {
   }, async (req, reply) => {
     if (!getProject(db, req.params.projectId)) return reply.code(404).send({ detail: "Projekt nicht gefunden." });
     return pipelineView(db, req.params.projectId, { days: req.query.days });
+  });
+
+  /** Slot-Analyse: Einstellung, Empfehlung, Vorrat und eigene Zahlen je Kanal. */
+  r.get("/api/mp/projects/:projectId/pipeline/slotanalyse", {
+    schema: { params: P, response: { 200: s.SlotAnalyse, 404: s.ErrorBody } },
+  }, async (req, reply) => {
+    if (!getProject(db, req.params.projectId)) return reply.code(404).send({ detail: "Projekt nicht gefunden." });
+    return slotAnalyse(db, req.params.projectId);
   });
 
   /** Fällige Einträge sofort abarbeiten, statt auf den Zehn-Minuten-Takt zu warten. */

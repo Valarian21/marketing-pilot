@@ -66,6 +66,13 @@ const zahl = (x: unknown): number | null => (typeof x === "number" && Number.isF
  */
 const IG_VOLL = ["reach", "views", "likes", "comments", "saved", "shares", "total_interactions"];
 const IG_SPARSAM = ["reach", "likes", "comments"];
+/**
+ * Dritte Stufe, ganz oben: was ein Beitrag dem Konto bringt. `follows` und
+ * `profile_visits` gibt Meta seit v22 je Medium her (Feed und Reels), die
+ * Watch-Time nur für Reels. Lehnt die API die Liste ab, geht es eine Stufe
+ * tiefer — die Grundzahlen gehen dadurch nie verloren.
+ */
+const IG_MEHR = [...IG_VOLL, "follows", "profile_visits", "ig_reels_avg_watch_time"];
 
 // Meta hat `post_impressions*` für Beiträge abgeschafft (Graph v21, gemessen
 // am 08.09.2026: „must be a valid insights metric"). Übrig bleiben Aufrufe des
@@ -95,19 +102,21 @@ export function flach(body: Graph): Record<string, number> {
 export async function instagramMetriken(mediaId: string, token: string, fetchImpl: typeof fetch = fetch): Promise<PostMetrics> {
   const hol = async (metriken: string[]) =>
     flach(await graph(fetchImpl, `${GRAPH}/${mediaId}/insights?metric=${metriken.join(",")}&access_token=${encodeURIComponent(token)}`));
-  let roh: Record<string, number>;
-  try { roh = await hol(IG_VOLL); }
-  catch (e) {
-    // Nur der Metrik-Streit rechtfertigt einen zweiten Versuch. Ein fehlendes
-    // Recht bleibt ein fehlendes Recht, egal wie kurz die Liste ist.
-    const text = e instanceof Error ? e.message : String(e);
-    // Fehler 10 „Not enough viewers": Meta hält die Zahlen zurück, bis ein
-    // Beitrag genug Konten erreicht hat. Das ist kein Rechteproblem und wird
-    // beim nächsten fälligen Abruf einfach noch einmal versucht.
-    if (/not enough viewers/i.test(text)) return { ...LEERE_METRIKEN, fehler: "Noch zu wenige Zuschauer — Meta zeigt Zahlen erst ab einer Mindestgröße." };
-    if (!/must be one of|does not support|not available/i.test(text)) throw e;
-    roh = await hol(IG_SPARSAM);
+  let roh: Record<string, number> | null = null;
+  for (const stufe of [IG_MEHR, IG_VOLL, IG_SPARSAM]) {
+    try { roh = await hol(stufe); break; }
+    catch (e) {
+      // Nur der Metrik-Streit rechtfertigt einen weiteren Versuch. Ein fehlendes
+      // Recht bleibt ein fehlendes Recht, egal wie kurz die Liste ist.
+      const text = e instanceof Error ? e.message : String(e);
+      // Fehler 10 „Not enough viewers": Meta hält die Zahlen zurück, bis ein
+      // Beitrag genug Konten erreicht hat. Das ist kein Rechteproblem und wird
+      // beim nächsten fälligen Abruf einfach noch einmal versucht.
+      if (/not enough viewers/i.test(text)) return { ...LEERE_METRIKEN, fehler: "Noch zu wenige Zuschauer — Meta zeigt Zahlen erst ab einer Mindestgröße." };
+      if (!/must be one of|does not support|not available|invalid metric/i.test(text) || stufe === IG_SPARSAM) throw e;
+    }
   }
+  if (!roh) throw new Error("Instagram: keine Metriken abrufbar.");
   return {
     reichweite: zahl(roh["reach"]),
     aufrufe: zahl(roh["views"]),

@@ -13,7 +13,7 @@ const STATUS_LABEL: Record<Project["status"], { label: string; kind: PillKind }>
   archived: { label: "Archiv", kind: "kind" },
 };
 
-/** `autoOpen`: the start page jumps straight into the cockpit of the (last used or only) project - the list stays reachable via "Alle". */
+/** `autoOpen`: the start page jumps straight into the pipeline of the (last used or only) project - the list stays reachable via "Alle". */
 export function ProjectsPage({ autoOpen = false }: { autoOpen?: boolean }) {
   const nav = useNavigate();
   const [projects, setProjects] = useState<ProjectOverview[] | null>(null);
@@ -26,7 +26,7 @@ export function ProjectsPage({ autoOpen = false }: { autoOpen?: boolean }) {
   const load = useCallback(async () => {
     try {
       const list = await api<ProjectOverview[]>("/overview");
-      if (autoOpen && list.length > 0) { const last = lastProject(); const target = list.find((p) => p.id === last) ?? (list.length === 1 ? list[0] : undefined); if (target) { nav(`/projects/${target.id}`, { replace: true }); return; } }
+      if (autoOpen && list.length > 0) { const last = lastProject(); const target = list.find((p) => p.id === last) ?? (list.length === 1 ? list[0] : undefined); if (target) { nav(`/projects/${target.id}/pipeline`, { replace: true }); return; } }
       setProjects(list); setError(null);
     }
     catch (e) { setError(e instanceof Error ? e.message : "Laden fehlgeschlagen."); }

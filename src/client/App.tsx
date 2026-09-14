@@ -60,6 +60,8 @@ function Gate() {
           <Route path="projects/:id/studio/video" element={<VideoPage />} />
           <Route path="projects/:id/handarbeit" element={<HandarbeitPage />} />
           <Route path="projects/:id/publish/:pieceId" element={<PublishPage />} />
+          <Route path="heute" element={<ProjectScoped page="" title="Heute" />} />
+          <Route path="handarbeit" element={<ProjectScoped page="handarbeit" title="Handarbeit" />} />
           <Route path="timeline" element={<ProjectScoped page="timeline" title="Timeline" />} />
           <Route path="pipeline" element={<ProjectScoped page="pipeline" title="Pipeline" />} />
           <Route path="tasks" element={<ProjectScoped page="tasks" title="Aufgaben" />} />

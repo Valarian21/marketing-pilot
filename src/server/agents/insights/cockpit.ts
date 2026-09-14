@@ -32,6 +32,8 @@ import { loadCredentials } from "../../publish/index.js";
 import { BIO_CODE, berlinTag } from "../../shortlinks.js";
 import { geschaeftsZahlen, tageZwischen, type GeschaeftsTag } from "../../providers/geschaeft.binderplan.js";
 import { loadDataSource } from "../../data-source.js";
+import { berlinParts } from "../series/time.js";
+import { postArtOf } from "../../../shared/postarten.js";
 
 const TAG_MS = 86_400_000;
 
@@ -105,7 +107,7 @@ export function cockpitView(db: Db, projectId: string, opts: CockpitOptions): s.
   ])];
 
   // --- Beiträge ---------------------------------------------------------------
-  const stuecke = new Map(db.select({ id: t.mpContentPieces.id, title: t.mpContentPieces.title, format: t.mpContentPieces.format })
+  const stuecke = new Map(db.select({ id: t.mpContentPieces.id, title: t.mpContentPieces.title, format: t.mpContentPieces.format, meta: t.mpContentPieces.meta })
     .from(t.mpContentPieces).where(eq(t.mpContentPieces.projectId, projectId)).all().map((p) => [p.id, p]));
   const klicksJeStueck = new Map<string, number>();
   const klickTage = db.select().from(t.mpKlickTage).where(and(eq(t.mpKlickTage.projectId, projectId), gte(t.mpKlickTage.tag, vorherVon))).all();
@@ -130,6 +132,10 @@ export function cockpitView(db: Db, projectId: string, opts: CockpitOptions): s.
         klicks: klicksJeStueck.get(p.pieceId) ?? 0,
         quote: interaktionen !== null && m?.aufrufe ? rund(interaktionen / m.aufrufe, 4) : null,
         metricsAt: p.metricsAt, fehler: m?.fehler ?? "",
+        postArt: stueck ? postArtOf({ format: stueck.format, meta: parseJson<Record<string, unknown>>(stueck.meta, {}) }) : "",
+        stunde: p.postedAt ? berlinParts(new Date(p.postedAt)).hour : null,
+        folgen: typeof m?.roh?.["follows"] === "number" ? m.roh["follows"] : null,
+        profilbesuche: typeof m?.roh?.["profile_visits"] === "number" ? m.roh["profile_visits"] : null,
       };
     })
     .sort((a, b) => (b.aufrufe ?? -1) - (a.aufrufe ?? -1) || (b.postedAt ?? "").localeCompare(a.postedAt ?? ""));
@@ -316,10 +322,33 @@ export function cockpitView(db: Db, projectId: string, opts: CockpitOptions): s.
   if (klicksIn(von, bis) === 0 && bioIn(von, bis) === 0 && imZeitraum.length > 0) hinweise.push("Weder ein Klick auf einen Kurzlink noch ein Aufruf der Bio-Seite. Auf Instagram und Threads sind Links im Text nicht anklickbar — steht die Bio-Seite im Profil?");
   for (const [platform, fehler] of Object.entries(status.fehler)) hinweise.push(`${PLATFORMS[platform]?.label ?? platform}: ${fehler}`);
 
+  // --- Nach Sorte und Uhrzeit ---------------------------------------------------
+  // Schnitt je Kanal und Gruppe über die Beiträge mit Zahlen. Stories bleiben
+  // draußen: ihre Zahlen sind nach 24 Stunden weg und würden jede Stunde nach
+  // unten ziehen, in der eine Story lief.
+  const schnitte = (schluessel: (b: s.CockpitBeitrag) => string | null): s.CockpitSchnitt[] => {
+    const gruppen = new Map<string, s.CockpitBeitrag[]>();
+    for (const b of beitraege) {
+      if (b.format === "story" || (b.aufrufe === null && b.reichweite === null)) continue;
+      const k = schluessel(b); if (k === null) continue;
+      const id = `${b.platform}|${k}`;
+      gruppen.set(id, [...(gruppen.get(id) ?? []), b]);
+    }
+    const mittel = (xs: (number | null)[]) => { const v = xs.filter((x): x is number => x !== null); return v.length ? Math.round(v.reduce((a, c) => a + c, 0) / v.length) : null; };
+    return [...gruppen.entries()].map(([id, bs]) => {
+      const [platform, schluessel] = id.split("|") as [string, string];
+      const q = bs.map((b) => b.quote).filter((x): x is number => x !== null);
+      return { platform, schluessel, n: bs.length, aufrufe: mittel(bs.map((b) => b.aufrufe)), reichweite: mittel(bs.map((b) => b.reichweite)), quote: q.length ? rund(q.reduce((a, c) => a + c, 0) / q.length, 4) : null };
+    }).sort((a, b) => a.platform.localeCompare(b.platform) || (b.aufrufe ?? b.reichweite ?? -1) - (a.aufrufe ?? a.reichweite ?? -1));
+  };
+  const nachSorte = schnitte((b) => b.postArt || null);
+  const nachStunde = schnitte((b) => (b.stunde === null ? null : String(b.stunde).padStart(2, "0")));
+
   return {
     zeitraum: { von, bis, tage: opts.tage },
     kennzahlen, verlauf, kanaele, beitraege, trichter, produkt, hinweise,
     kanalStatus: { letzterLauf: status.letzterLauf, laeuft: false },
+    nachSorte, nachStunde,
   };
 }
 

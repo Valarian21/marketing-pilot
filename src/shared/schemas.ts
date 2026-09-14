@@ -332,6 +332,11 @@ export const PipelineSlot = z.object({
   postArt: z.string().default(""),
   /** Drehbuch des Stücks, falls es eines hat. */
   drehbuch: z.string().default(""),
+  /** Die Sorte, die dieser Slot laut Kanalplan haben soll — leer, wenn beliebig. */
+  slotArt: z.string().default(""),
+  /** Der Termin-Eintrag hinter einem belegten Slot (zum Absagen / Abhaken). */
+  scheduledId: z.string().nullable().default(null),
+  externalUrl: z.string().nullable().default(null),
 });
 export const PipelineRow = z.object({
   platform: z.string(), label: z.string(), stage: z.string(), automatic: z.boolean(),
@@ -344,6 +349,23 @@ export const PipelineRow = z.object({
 });
 export const PipelineView = z.object({ from: z.string(), days: z.number().int(), today: z.string(), rows: z.array(PipelineRow), withoutSlots: z.array(z.string()) });
 export const AutoScheduled = z.object({ pieceId: z.string(), platform: z.string(), at: z.string().nullable(), note: z.string() });
+
+/** Slot-Analyse je Kanal — siehe `publish/slotanalyse.ts`. */
+export const SlotAnalyseKanal = z.object({
+  platform: z.string(), label: z.string(), stage: z.string(), automatic: z.boolean(),
+  slotsJetzt: z.number().int(), slotsMitArt: z.number().int(),
+  empfehlung: z.object({ proTag: z.number().int(), stunden: z.array(z.number().int()), pflicht: z.string(), mix: z.array(z.string()), hinweis: z.string(), hebel: z.array(z.string()) }),
+  vorschlag: z.array(z.object({ day: z.string(), hour: z.number().int(), art: z.string() })),
+  vorrat: z.array(z.object({ art: z.string(), n: z.number().int() })),
+  vorratGesamt: z.number().int(),
+  reichtTage: z.number().int().nullable(),
+  gemessen: z.object({
+    stunden: z.array(z.object({ stunde: z.number().int(), n: z.number().int(), aufrufe: z.number() })),
+    sorten: z.array(z.object({ art: z.string(), n: z.number().int(), aufrufe: z.number() })),
+    beitraege: z.number().int(),
+  }),
+});
+export const SlotAnalyse = z.object({ kanaele: z.array(SlotAnalyseKanal) });
 
 /**
  * Ein Stück, so wie eine Liste es braucht: Name, Art, Kanal, Zustand.
@@ -872,7 +894,8 @@ export const SeriesView = z.object({
 // --- Veroeffentlichen v2 (Shot 10) -------------------------------------------
 
 /** Ein Slot je Kanal: Wochentag und Stunde in Europe/Berlin. */
-export const PostSlot = z.object({ day: Weekday, hour: z.number().int().min(0).max(23) });
+/** Ein Slot; `art` ist die Post-Art, die hier stehen soll (leer = was da ist). */
+export const PostSlot = z.object({ day: Weekday, hour: z.number().int().min(0).max(23), art: z.string().optional() });
 
 /**
  * Wie weit ein Kanal automatisiert ist.
@@ -1460,6 +1483,8 @@ export type PipelineSlot = z.infer<typeof PipelineSlot>;
 export type PipelineRow = z.infer<typeof PipelineRow>;
 export type PipelineView = z.infer<typeof PipelineView>;
 export type AutoScheduled = z.infer<typeof AutoScheduled>;
+export type SlotAnalyseKanal = z.infer<typeof SlotAnalyseKanal>;
+export type SlotAnalyse = z.infer<typeof SlotAnalyse>;
 export type ExplainerRequest = z.infer<typeof ExplainerRequest>;
 export type SocialProfile = z.infer<typeof SocialProfile>;
 export type SocialKitTexts = z.infer<typeof SocialKitTexts>;
@@ -1575,6 +1600,18 @@ export const CockpitBeitrag = z.object({
   quote: z.number().nullable().default(null),
   metricsAt: Iso.nullable().default(null),
   fehler: z.string().default(""),
+  /** Post-Art (A–G, T, S, X) und Stunde des Postens (Europe/Berlin) — für die Auswertung nach Sorte und Uhrzeit. */
+  postArt: z.string().default(""),
+  stunde: z.number().int().nullable().default(null),
+  /** Instagram: neue Follower und Profilbesuche aus diesem Beitrag, wenn die API sie hergibt. */
+  folgen: z.number().nullable().default(null),
+  profilbesuche: z.number().nullable().default(null),
+});
+
+/** Schnitt je Gruppe (Sorte oder Stunde) und Kanal. */
+export const CockpitSchnitt = z.object({
+  platform: z.string(), schluessel: z.string(), n: z.number().int(),
+  aufrufe: z.number().nullable(), reichweite: z.number().nullable(), quote: z.number().nullable(),
 });
 
 /**
@@ -1614,6 +1651,9 @@ export const CockpitView = z.object({
   /** Was gerade nicht gemessen werden kann und warum — steht wörtlich im UI. */
   hinweise: z.array(z.string()).default([]),
   kanalStatus: z.object({ letzterLauf: Iso.nullable(), laeuft: z.boolean().default(false) }),
+  /** Schnitt je Sorte und je Uhrzeit, je Kanal — welche Sorte und welche Stunde trägt. */
+  nachSorte: z.array(CockpitSchnitt).default([]),
+  nachStunde: z.array(CockpitSchnitt).default([]),
 });
 
 export type StueckKurz = z.infer<typeof StueckKurz>;
@@ -1623,4 +1663,5 @@ export type CockpitView = z.infer<typeof CockpitView>;
 export type CockpitTag = z.infer<typeof CockpitTag>;
 export type CockpitKanal = z.infer<typeof CockpitKanal>;
 export type CockpitBeitrag = z.infer<typeof CockpitBeitrag>;
+export type CockpitSchnitt = z.infer<typeof CockpitSchnitt>;
 export type CockpitKennzahl = z.infer<typeof CockpitKennzahl>;

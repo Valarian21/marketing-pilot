@@ -36,3 +36,24 @@ describe("Post-Arten", () => {
     expect(wochentagOf("2026-09-20")).toBe("sun");
   });
 });
+
+describe("Slot-Vorschlag", () => {
+  it("legt je Tag die empfohlene Zahl Slots, die beste Stunde trägt die Pflicht-Sorte", async () => {
+    const { slotVorschlag, kanalEmpfehlung } = await import("../src/shared/postarten.js");
+    const e = kanalEmpfehlung("instagram");
+    const plan = slotVorschlag("instagram");
+    expect(plan).toHaveLength(e.proTag * 7);
+    const montag = plan.filter((s) => s.day === "mon");
+    expect(montag.map((s) => s.hour)).toEqual([...e.stunden].slice(0, e.proTag).sort((a, b) => a - b));
+    expect(montag.find((s) => s.hour === e.stunden[0])!.art).toBe(e.pflicht);
+    // Die übrigen Slots rotieren durch den Mix — kein Tag besteht nur aus der Pflicht.
+    expect(montag.filter((s) => s.art !== e.pflicht).length).toBe(e.proTag - 1);
+    // Über die Woche kommen mehrere Sorten vor, nicht immer dieselbe zweite.
+    expect(new Set(plan.filter((s) => s.art !== e.pflicht).map((s) => s.art)).size).toBeGreaterThan(2);
+  });
+  it("kappt die Zahl je Tag auf die bekannten Stunden und kennt einen Standard", async () => {
+    const { slotVorschlag } = await import("../src/shared/postarten.js");
+    expect(slotVorschlag("youtube", 9).filter((s) => s.day === "tue")).toHaveLength(2);
+    expect(slotVorschlag("bluesky")).toHaveLength(14);
+  });
+});

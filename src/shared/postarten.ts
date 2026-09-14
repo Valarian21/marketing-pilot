@@ -106,3 +106,94 @@ export const WOCHENRHYTHMUS: Record<Wochentag, { pflicht: PostArt[]; dazu: PostA
 const WOCHENTAGE: readonly Wochentag[] = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
 /** Wochentag eines ISO-Datums (`2026-09-14`), ohne Zeitzonen-Sprünge: Mittag UTC. */
 export const wochentagOf = (date: string): Wochentag => WOCHENTAGE[new Date(`${date}T12:00:00Z`).getUTCDay()]!;
+
+/**
+ * Empfehlung je Kanal: wie oft, wann, und welche Sorte in welchen Slot.
+ *
+ * Die Zahlen sind eine Mischung aus Branchendaten (Stand 09/2026: Buffer,
+ * Sprout Social, Hootsuite — Tue–Do, 9–12 und 18–21 Uhr Ortszeit) und der
+ * Vorgabe des Betreibers, so viel zu posten, wie der Vorrat hergibt. Die
+ * Branchendaten sagen für den Instagram-Feed 1–2 Beiträge am Tag; mehr senkt
+ * die Reichweite **je Beitrag**, nicht zwingend die Gesamtreichweite — genau
+ * das misst die Übersicht („Nach Uhrzeit"), und die Empfehlung ist danach zu
+ * korrigieren. Uhrzeiten sind Europe/Berlin.
+ *
+ * `pflicht` ist die Sorte, die jeden Tag zur besten Stunde steht — die
+ * Binderseite (A), weil sie der Grund ist, warum Leute das Werkzeug benutzen.
+ * `mix` rotiert über die übrigen Slots, damit der Feed nicht viermal
+ * dieselbe Sorte hintereinander zeigt.
+ */
+export interface KanalEmpfehlung {
+  /** Beiträge je Tag, die der Kanal verträgt. */
+  proTag: number;
+  /** Stunden je Tag, beste zuerst — die erste bekommt die Pflicht-Sorte. */
+  stunden: number[];
+  pflicht: PostArt;
+  /** Rotation für die übrigen Slots; `null` heißt „was da ist". */
+  mix: PostArt[];
+  /** Ein Satz, woher die Zahl kommt und was sie bedeutet. */
+  hinweis: string;
+  /** Womit die Reichweite auf diesem Kanal steigt — konkret, nicht allgemein. */
+  hebel: string[];
+}
+
+export const KANAL_EMPFEHLUNG: Record<string, KanalEmpfehlung> = {
+  instagram: {
+    proTag: 5, stunden: [18, 9, 12, 15, 20], pflicht: "A", mix: ["B", "G", "C", "D", "B", "F", "E"],
+    hinweis: "Branchendaten (Buffer 9,6 Mio. Beiträge, 09/2026): 18–21 Uhr schlägt den Morgen, Mi 12 und Do 9 sind Spitzen; 1–2 Feed-Beiträge am Tag sind das Maß, ab 3 sinkt die Reichweite je Beitrag. 5 am Tag ist die Vorgabe des Betreibers — die Gesamtreichweite je Tag entscheidet, nicht die je Beitrag.",
+    hebel: ["Sends je Reichweite ist 2026 das stärkste Signal — jedes Reel endet mit einer Aufforderung zum Weiterschicken (Playbook A).", "Story zu jedem Beitrag (läuft automatisch mit).", "Erste Zeile der Caption = Hook des Videos, Keywords im Text statt in Hashtags.", "Kommentare in der ersten Stunde beantworten — Community-Radar."],
+  },
+  tiktok: {
+    proTag: 3, stunden: [19, 12, 21], pflicht: "A", mix: ["B", "D", "G", "C", "B", "F"],
+    hinweis: "TikTok verträgt 1–4 Beiträge am Tag ohne Abzug; Di–Do nachmittags/abends und Samstag sind die stärksten Fenster (Sprout Social, 2 Mrd. Interaktionen).",
+    hebel: ["Kein API-Weg — Titel, Beschreibung, Hashtags und Datei liegen im Slot bereit, Status „geplant“ per Klick.", "Erste 2 Sekunden entscheiden: Hook ab 200 ms (Playbook).", "3–5 Nischen-Tags, kein #fyp.", "Samstag doppelt belegen, wenn der Vorrat reicht."],
+  },
+  youtube: {
+    proTag: 2, stunden: [16, 12], pflicht: "A", mix: ["B", "C", "D", "G"],
+    hinweis: "Shorts: 1–2 am Tag sind nachhaltig; Di–Do 14–18 Uhr sind die Spitzen (Buffer, Sprout Social, 24k Shorts).",
+    hebel: ["Titel ≤ 100 Zeichen mit dem Haken, nicht dem Drehbuchnamen — liegt im Slot bereit.", "Beschreibung mit 3–5 Tags, #Shorts hilft nicht mehr.", "Endscreen/Abspann mit Adresse (steht in jedem Reel).", "Kanalzahlen laufen über den offenen Feed mit."],
+  },
+  threads: {
+    proTag: 3, stunden: [9, 12, 18], pflicht: "T", mix: ["B", "X", "A", "T"],
+    hinweis: "Threads: 1–3 am Tag, Mi/Do 9 Uhr sind die Spitzen; Antworten zählen mehr als Likes, ein Link kostet Reichweite.",
+    hebel: ["Frage-Beiträge ohne Bild und ohne Link — Antworten sind das Signal.", "Community-Radar antwortet auf fremde Threads (läuft).", "Ein Topic-Tag statt Hashtags."],
+  },
+  facebook: {
+    proTag: 2, stunden: [9, 13], pflicht: "A", mix: ["B", "C", "D", "B"],
+    hinweis: "Seiten: 1–2 am Tag, 9–11 und 13–15 Uhr; mehr bringt auf Facebook nichts, die Seite lebt von Gruppen und Teilen.",
+    hebel: ["Beiträge in Sammler-Gruppen teilen (von Hand — die API darf das nicht).", "Mehrbild-Beiträge statt Einzelbild.", "Höchstens zwei Hashtags."],
+  },
+  pinterest: {
+    proTag: 3, stunden: [20, 14, 21], pflicht: "A", mix: ["B", "G", "C"],
+    hinweis: "Pinterest empfiehlt 15–25 Pins am Tag — das gibt der Vorrat nicht her. 3 am Tag zu den Abend- und Wochenendspitzen sind realistisch; jede Rangliste wird ein Pin.",
+    hebel: ["Beschreibung mit Suchbegriffen (Pinterest ist eine Suchmaschine).", "Hochformat 2:3, Titel im Bild.", "Kein API-Weg — Pins aus dem Slot heraus von Hand setzen."],
+  },
+};
+
+/** Empfehlung für einen Kanal ohne Eintrag: zwei am Tag, Standardzeiten. */
+export const STANDARD_EMPFEHLUNG: KanalEmpfehlung = { proTag: 2, stunden: [12, 18], pflicht: "A", mix: ["B", "C", "D", "G"], hinweis: "Keine kanalspezifischen Daten — zwei Beiträge am Tag zu den üblichen Spitzen.", hebel: [] };
+export const kanalEmpfehlung = (platform: string): KanalEmpfehlung => KANAL_EMPFEHLUNG[platform] ?? STANDARD_EMPFEHLUNG;
+
+export const WOCHENTAGE_MO: readonly Wochentag[] = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+
+/**
+ * Der Slot-Vorschlag für eine Woche: je Tag `proTag` Slots, die beste Stunde
+ * trägt die Pflicht-Sorte, die übrigen rotieren durch `mix` — über die ganze
+ * Woche hinweg, damit nicht jeder Tag mit derselben zweiten Sorte beginnt.
+ */
+export function slotVorschlag(platform: string, proTag?: number): { day: Wochentag; hour: number; art: PostArt }[] {
+  const e = kanalEmpfehlung(platform);
+  const n = Math.max(1, Math.min(proTag ?? e.proTag, e.stunden.length));
+  const out: { day: Wochentag; hour: number; art: PostArt }[] = [];
+  let k = 0;
+  for (const day of WOCHENTAGE_MO) {
+    const stunden = e.stunden.slice(0, n);
+    for (let i = 0; i < stunden.length; i++) {
+      const art = i === 0 ? e.pflicht : e.mix[k++ % e.mix.length]!;
+      out.push({ day, hour: stunden[i]!, art });
+    }
+  }
+  return out.sort((a, b) => WOCHENTAGE_MO.indexOf(a.day) - WOCHENTAGE_MO.indexOf(b.day) || a.hour - b.hour);
+}
+
+export const isPostArt = (x: unknown): x is PostArt => typeof x === "string" && x in POST_ARTEN;

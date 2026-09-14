@@ -14,7 +14,7 @@
  * und sie zeigt keine Null, wo nichts gemessen wurde — ein Strich sagt „unbekannt",
  * eine Null sagt „niemand", und das ist ein Unterschied.
  */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useParams } from "react-router";
 import type { CockpitView } from "../../shared/schemas.js";
 import { api } from "../api.js";
@@ -22,6 +22,7 @@ import { Button, Card, Notice, PageHeader, Pill } from "../components/ui.js";
 import { ProjectNav } from "../components/ProjectNav.js";
 import { KanalImport } from "../components/KanalImport.js";
 import { Balken, Kennzahl, Sparkline, Tagesbalken, Zeitreihe, euro, kanalFarbe, prozent, tagKurz, tagLang, zahl, type Punkt, type Serie } from "../components/charts.js";
+import { POST_ARTEN, type PostArt } from "../../shared/postarten.js";
 
 const ZEITRAEUME = [7, 30, 90] as const;
 
@@ -248,6 +249,46 @@ export function UebersichtPage() {
         )}
       </Card>
 
+      {/* 5b. Welche Sorte, welche Stunde */}
+      {(view.nachSorte.length > 0 || view.nachStunde.length > 0) && (
+        <Card>
+          <div className="mp-card-head">
+            <h2>Nach Sorte und Uhrzeit <span className="mp-muted mp-small">Ø Aufrufe je Beitrag, je Kanal · n = Beiträge</span></h2>
+            <Link className="mp-small" to={`/projects/${id}/pipeline`}>Slots anpassen</Link>
+          </div>
+          <div className="mp-schnitte">
+            {[...new Set([...view.nachSorte, ...view.nachStunde].map((x) => x.platform))].map((pf) => {
+              const sorten = view.nachSorte.filter((x) => x.platform === pf);
+              const stunden = view.nachStunde.filter((x) => x.platform === pf).sort((a, b) => a.schluessel.localeCompare(b.schluessel));
+              const wert = (x: { aufrufe: number | null; reichweite: number | null }) => x.aufrufe ?? x.reichweite ?? 0;
+              const max = Math.max(1, ...sorten.map(wert), ...stunden.map(wert));
+              const zeile = (x: typeof sorten[number], label: ReactNode) => (
+                <tr key={x.schluessel} className={x.n < 3 ? "mp-muted" : ""}>
+                  <td>{label}</td>
+                  <td className="mp-num-cell">{x.n}</td>
+                  <td className="mp-num-cell"><span className="mp-balken-mini" style={{ width: `${Math.max(2, (wert(x) / max) * 100)}%` }} />{zahl(wert(x))}</td>
+                  <td className="mp-num-cell">{x.quote !== null ? prozent(x.quote) : "–"}</td>
+                </tr>
+              );
+              return (
+                <div key={pf}>
+                  <h3 className="mp-h3"><span className="mp-chart-key" style={{ background: kanalFarbe(pf) }} aria-hidden="true" /> {pf}</h3>
+                  <table className="mp-table mp-table--schnitt">
+                    <thead><tr><th>Sorte</th><th className="mp-num-cell">n</th><th className="mp-num-cell">Ø Aufrufe</th><th className="mp-num-cell">Quote</th></tr></thead>
+                    <tbody>{sorten.map((x) => zeile(x, <><span className={`mp-art mp-art--${(POST_ARTEN[x.schluessel as PostArt] ?? POST_ARTEN.X).farbe} mp-art--mini`}>{x.schluessel}</span> {(POST_ARTEN[x.schluessel as PostArt] ?? POST_ARTEN.X).name}</>))}</tbody>
+                    {stunden.length > 0 && <>
+                      <thead><tr><th>Uhrzeit</th><th className="mp-num-cell">n</th><th className="mp-num-cell">Ø Aufrufe</th><th className="mp-num-cell">Quote</th></tr></thead>
+                      <tbody>{stunden.map((x) => zeile(x, <>{x.schluessel} Uhr</>))}</tbody>
+                    </>}
+                  </table>
+                </div>
+              );
+            })}
+          </div>
+          <p className="mp-small mp-muted" style={{ marginTop: 10 }}>Unter n = 3 ist ein Schnitt Zufall. Stories zählen nicht mit. Die Slot-Analyse in der Pipeline nennt die besten Stunden je Kanal und schlägt Slots vor.</p>
+        </Card>
+      )}
+
       {/* 6. Welcher Beitrag */}
       <Card>
         <div className="mp-card-head">
@@ -263,7 +304,7 @@ export function UebersichtPage() {
           const tabelle2 = (zeilen: typeof view.beitraege) => (
             <div className="mp-table-wrap">
               <table className="mp-table">
-                <thead><tr><th>Beitrag</th><th>Kanal</th><th className="mp-num-cell">Aufrufe</th><th className="mp-num-cell">Reichw.</th><th className="mp-num-cell">Likes</th><th className="mp-num-cell">Komm.</th><th className="mp-num-cell">Saves</th><th className="mp-num-cell">Quote</th><th className="mp-num-cell">Klicks</th></tr></thead>
+                <thead><tr><th>Beitrag</th><th>Kanal</th><th>Sorte</th><th className="mp-num-cell">Aufrufe</th><th className="mp-num-cell">Reichw.</th><th className="mp-num-cell">Likes</th><th className="mp-num-cell">Komm.</th><th className="mp-num-cell">Saves</th><th className="mp-num-cell">Quote</th><th className="mp-num-cell">Folgen</th><th className="mp-num-cell">Klicks</th></tr></thead>
                 <tbody>{zeilen.map((b) => (
                   <tr key={b.id}>
                     <td>
@@ -271,12 +312,14 @@ export function UebersichtPage() {
                       <br /><span className="mp-small mp-muted">{b.postedAt ? tagKurz(b.postedAt.slice(0, 10)) : "–"}{b.externalUrl && <> · <a href={b.externalUrl} target="_blank" rel="noreferrer">ansehen</a></>}{b.fehler && <> · {b.fehler}</>}</span>
                     </td>
                     <td className="mp-small"><span className="mp-chart-key" style={{ background: kanalFarbe(b.platform) }} aria-hidden="true" /> {b.platform}</td>
+                    <td>{b.postArt && <span className={`mp-art mp-art--${(POST_ARTEN[b.postArt as PostArt] ?? POST_ARTEN.X).farbe} mp-art--mini`} title={(POST_ARTEN[b.postArt as PostArt] ?? POST_ARTEN.X).name}>{b.postArt}</span>}{b.stunde !== null && <span className="mp-small mp-muted"> {String(b.stunde).padStart(2, "0")} Uhr</span>}</td>
                     <td className="mp-num-cell">{zahl(b.aufrufe)}</td>
                     <td className="mp-num-cell">{zahl(b.reichweite)}</td>
                     <td className="mp-num-cell">{zahl(b.likes)}</td>
                     <td className="mp-num-cell">{zahl(b.kommentare)}</td>
                     <td className="mp-num-cell">{zahl(b.saves)}</td>
                     <td className="mp-num-cell">{prozent(b.quote)}</td>
+                    <td className="mp-num-cell" title={b.profilbesuche !== null ? `${b.profilbesuche} Profilbesuche` : ""}>{b.folgen !== null ? zahl(b.folgen) : "–"}</td>
                     <td className="mp-num-cell">{b.klicks || "–"}</td>
                   </tr>
                 ))}</tbody>

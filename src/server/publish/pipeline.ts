@@ -18,7 +18,7 @@ import type { HostUser } from "../../host-adapter.js";
 import { berlinInstant, berlinParts } from "../agents/series/time.js";
 import { loadProfiles, stageOf } from "../channels.js";
 import { stageAtLeast, PLATFORMS } from "../../shared/channels.js";
-import { drehbuchOf, postArtOf } from "../../shared/postarten.js";
+import { drehbuchOf, postArtOf, type PostArt } from "../../shared/postarten.js";
 import { writeAudit } from "../audit.js";
 import { credentialsFor, posterFor } from "./index.js";
 import { schedulePiece } from "./schedule.js";
@@ -88,6 +88,11 @@ export interface PipelineSlot {
   /** Post-Art aus dem Playbook (A–G, T, S, X); leer bei leerem Slot. */
   postArt: string;
   drehbuch: string;
+  /** Die Sorte, die dieser Slot laut Kanalplan haben soll — leer, wenn beliebig. */
+  slotArt: string;
+  /** Termin-Eintrag hinter einem belegten Slot, zum Absagen oder Abhaken. */
+  scheduledId: string | null;
+  externalUrl: string | null;
 }
 
 export interface PipelineRow {
@@ -154,7 +159,7 @@ export function pipelineView(db: Db, projectId: string, opts: { days?: number; n
       const tag = berlinParts(new Date(start.getTime() + i * DAY + 12 * 3_600_000));
       for (const sl of [...profile.slots].filter((x) => x.day === tag.day).sort((a, b) => a.hour - b.hour)) {
         const at = berlinInstant(tag.date, sl.hour);
-        slots.push({ at: at.toISOString(), date: tag.date, hour: sl.hour, state: "empty", pieceId: null, title: "", format: "", error: "", missed: at.getTime() < now.getTime(), extern: false, postArt: "", drehbuch: "" });
+        slots.push({ at: at.toISOString(), date: tag.date, hour: sl.hour, state: "empty", pieceId: null, title: "", format: "", error: "", missed: at.getTime() < now.getTime(), extern: false, postArt: "", drehbuch: "", slotArt: sl.art ?? "", scheduledId: null, externalUrl: null });
       }
     }
 
@@ -165,33 +170,46 @@ export function pipelineView(db: Db, projectId: string, opts: { days?: number; n
     for (const sp of mine) {
       const piece = byId.get(sp.pieceId);
       const state: SlotState = sp.status === "posted" ? "published" : sp.status === "failed" ? "failed" : "queued";
-      const eintrag = { state, pieceId: sp.pieceId, title: piece?.title ?? "", format: piece?.format ?? "", error: sp.error ?? "", extern: sp.origin === "extern", ...artOf(piece) };
+      const eintrag = { state, pieceId: sp.pieceId, title: piece?.title ?? "", format: piece?.format ?? "", error: sp.error ?? "", extern: sp.origin === "extern", ...artOf(piece), scheduledId: sp.id, externalUrl: sp.externalUrl ?? null };
       // Eine Story teilt sich den Slot mit ihrem Beitrag — sie ersetzt ihn nicht.
       if (piece?.format === "story") continue;
       const frei = slots.find((x) => x.state === "empty" && Math.abs(Date.parse(x.at) - Date.parse(sp.scheduledAt)) < 30 * 60_000);
       if (frei) Object.assign(frei, eintrag, { missed: false });
       else {
         const p = berlinParts(new Date(sp.scheduledAt));
-        slots.push({ at: sp.scheduledAt, date: p.date, hour: p.hour, ...eintrag, missed: false });
+        slots.push({ at: sp.scheduledAt, date: p.date, hour: p.hour, ...eintrag, missed: false, slotArt: "" });
       }
     }
     slots.sort((a, b) => a.at.localeCompare(b.at));
 
     // 3) Projektion: was freigegeben, aber nicht eingeplant ist, und was noch
-    //    in der Freigabe wartet — in dieser Reihenfolge auf die freien, künftigen Slots.
+    //    in der Freigabe wartet — auf die freien, künftigen Slots. Ein Slot mit
+    //    Sorte nimmt nur ein Stück dieser Sorte (sonst bleibt er offen und
+    //    sagt, was fehlt); ein Slot ohne Sorte nimmt das älteste Stück einer
+    //    Sorte, die an diesem Tag noch nicht dran war — so bleibt der Feed
+    //    abwechslungsreich, statt viermal dieselbe Rangliste zu zeigen.
     const geplant = new Set(mine.map((x) => x.pieceId));
     const kandidaten = pieces
       .filter((p) => p.channel === platform && p.format !== "story" && !geplant.has(p.id))
       .filter((p) => p.status === "approved" || p.status === "review")
-      .sort((a, b) => (a.status === b.status ? a.createdAt.localeCompare(b.createdAt) : a.status === "approved" ? -1 : 1));
-    let k = 0;
+      .sort((a, b) => (a.status === b.status ? a.createdAt.localeCompare(b.createdAt) : a.status === "approved" ? -1 : 1))
+      .map((p) => ({ p, art: artOf(p).postArt as PostArt }));
+    const vergeben = new Set<string>();
+    const artenAmTag = new Map<string, Set<string>>();
+    for (const s of slots) if (s.postArt) artenAmTag.set(s.date, new Set([...(artenAmTag.get(s.date) ?? []), s.postArt]));
     for (const slot of slots) {
       if (slot.state !== "empty" || slot.missed) continue;
-      const p = kandidaten[k];
-      if (!p) break;
-      k++;
-      Object.assign(slot, { state: p.status === "approved" ? "approved" : "review", pieceId: p.id, title: p.title, format: p.format, extern: false, ...artOf(p) });
+      const frei = kandidaten.filter((k) => !vergeben.has(k.p.id));
+      const heute = artenAmTag.get(slot.date) ?? new Set<string>();
+      const wahl = slot.slotArt
+        ? frei.find((k) => k.art === slot.slotArt)
+        : frei.find((k) => !heute.has(k.art)) ?? frei[0];
+      if (!wahl) continue;
+      vergeben.add(wahl.p.id);
+      heute.add(wahl.art); artenAmTag.set(slot.date, heute);
+      Object.assign(slot, { state: wahl.p.status === "approved" ? "approved" : "review", pieceId: wahl.p.id, title: wahl.p.title, format: wahl.p.format, extern: false, ...artOf(wahl.p) });
     }
+    const k = vergeben.size;
 
     return { platform, label: PLATFORMS[platform]?.label ?? platform, stage: profile.stage, automatic, slots, backlog: Math.max(0, kandidaten.length - k), ohneSlots: profile.slots.length === 0 };
   });

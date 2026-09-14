@@ -754,3 +754,64 @@ button, input { font: inherit; color: inherit; }
   .mp-kalender { grid-template-columns: repeat(var(--tage, 7), minmax(132px, 1fr)); min-width: calc(var(--tage, 7) * 132px); }
   .mp-art-legende { grid-template-columns: 1fr; }
 }
+
+/* --- Pipeline: sieben Zustände, sieben Farben ------------------------------- */
+.mp-chip--frei { background: #F6E3D6; color: #8A4A1F; border-color: color-mix(in srgb, #8A4A1F 35%, transparent); border-style: dashed; }
+.mp-chip--blau { background: #E0EAF6; color: #274C7A; border-color: color-mix(in srgb, #274C7A 35%, transparent); }
+.mp-chip.is-gewaehlt { outline: 2px solid var(--mp-ink); outline-offset: 1px; }
+.mp-ampel--frei { background: #C97A3E; }
+.mp-ampel--blau { background: #3D6FA8; }
+.mp-ampel-eintrag { display: inline-flex; align-items: center; gap: 4px; }
+.mp-art--mini.is-soll { background: transparent; border-color: var(--art-fg); opacity: .6; }
+.mp-kal-chip.is-frei { border-style: dashed; }
+.mp-kal-chip.is-blau { box-shadow: inset 3px 0 0 #3D6FA8; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .mp-chip--frei { background: #43291A; color: #E8B48F; }
+  :root:not([data-theme="light"]) .mp-chip--blau { background: #1E2E44; color: #A9C4E6; }
+}
+:root[data-theme="dark"] .mp-chip--frei { background: #43291A; color: #E8B48F; }
+:root[data-theme="dark"] .mp-chip--blau { background: #1E2E44; color: #A9C4E6; }
+.mp-timeline-layout:has(.mp-drawer) { grid-template-columns: minmax(0, 1fr) 380px; }
+.mp-drawer { display: flex; flex-direction: column; gap: var(--mp-gap); max-height: calc(100vh - 32px); overflow-y: auto; }
+.mp-drawer h2 .mp-ampel { margin: 0 6px 0 0; vertical-align: -1px; }
+.mp-lade-aktionen { margin-top: 4px; }
+.mp-lade-feld { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; }
+.mp-lade-feldkopf { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.mp-lade-wert { font-size: var(--mp-text-sm); line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+.mp-lade-paket .mp-thema-body { max-height: 260px; overflow-y: auto; }
+@media (max-width: 1000px) {
+  .mp-timeline-layout:has(.mp-drawer) { grid-template-columns: minmax(0, 1fr); }
+  .mp-drawer { position: fixed; inset: auto 0 0 0; z-index: 70; max-height: 78vh; padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px)); background: var(--mp-bg); border-top: var(--mp-border); box-shadow: var(--mp-shadow-float); border-radius: 14px 14px 0 0; }
+}
+
+/* --- Slot-Analyse --------------------------------------------------------- */
+.mp-slotanalyse { display: flex; flex-direction: column; gap: 10px; }
+.mp-slot-kanal { border: 1px solid var(--mp-grid-line); border-radius: var(--mp-radius-sm); padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
+.mp-slot-kopf { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.mp-slot-knoepfe { margin-left: auto; gap: 10px; }
+.mp-slot-zeile { display: flex; flex-direction: column; gap: 3px; }
+.mp-slot-zeile .mp-art--mini { margin-right: 3px; }
+.mp-slot-details { display: flex; flex-direction: column; gap: 6px; padding-top: 6px; border-top: 1px dashed var(--mp-grid-line); }
+.mp-slot-details p { margin: 0; }
+.mp-slot-plan { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 4px 10px; }
+.mp-slot-plan > div { display: flex; flex-wrap: wrap; gap: 3px; align-items: center; }
+.mp-slot-plan .mp-label { width: 22px; }
+
+/* --- Navigation: „Mehr" eingeklappt ---------------------------------------- */
+.mp-nav-mehr > summary { cursor: pointer; list-style: none; }
+.mp-nav-mehr > summary::-webkit-details-marker { display: none; }
+.mp-nav-mehr > summary::after { content: " ▸"; }
+.mp-nav-mehr[open] > summary::after { content: " ▾"; }
+.mp-subnav-mehr { position: relative; }
+.mp-subnav-mehr > summary { cursor: pointer; list-style: none; }
+.mp-subnav-mehr > summary::-webkit-details-marker { display: none; }
+.mp-subnav-mehr-liste { position: absolute; z-index: 30; top: 100%; left: 0; min-width: 180px; display: flex; flex-direction: column; gap: 2px; padding: 6px; background: var(--mp-surface); border: var(--mp-border); border-radius: var(--mp-radius-sm); box-shadow: var(--mp-shadow-float); }
+
+/* --- Übersicht: nach Sorte und Uhrzeit ------------------------------------ */
+.mp-schnitte { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: var(--mp-gap); }
+.mp-schnitt-balken { display: grid; grid-template-columns: 64px 1fr auto; gap: 4px 8px; align-items: center; font-size: var(--mp-text-sm); }
+.mp-schnitt-balken .mp-balken-spur { height: 10px; background: var(--mp-grid-line); border-radius: 5px; overflow: hidden; }
+.mp-schnitt-balken .mp-balken-fuell { height: 100%; background: var(--mp-accent); border-radius: 5px; }
+.mp-table--schnitt { margin-bottom: 8px; }
+.mp-table--schnitt thead + tbody + thead th { padding-top: 10px; }
+.mp-balken-mini { display: inline-block; height: 8px; max-width: 70px; margin-right: 6px; vertical-align: middle; background: var(--mp-accent); opacity: .55; border-radius: 4px; }

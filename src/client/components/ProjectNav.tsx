@@ -3,18 +3,18 @@ import { useEffect } from "react";
 import { NavLink } from "react-router";
 
 /**
- * Die Reiter in der Reihenfolge des Arbeitswegs: Heute → Freigaben → Pipeline →
- * Handarbeit → Kanäle. Freigaben und Pipeline fehlten hier bis zum 14.09.2026,
- * obwohl sie der tägliche Weg sind — man musste dafür in die Seitenleiste,
- * die auf dem Handy hinter „Mehr" liegt. Der Produkt-Brief (Analyse) ist der
- * einmalige Einrichtungsschritt und steht deshalb hinten.
+ * Vier Reiter, die täglich gebraucht werden — der Rest hinter „Mehr". Bis zum
+ * 14.09.2026 standen hier sieben gleichrangig; benutzt wurden Pipeline,
+ * Freigaben, Medien und die Zahlen.
  */
 const TABS = [
-  { to: "", label: "Heute" }, { to: "/review", label: "Freigaben" }, { to: "/pipeline", label: "Pipeline" },
-  // TikTok und YouTube haben keine Veroeffentlichungs-API — ihre Warteschlange
-  // braucht einen eigenen Ort, sonst liegt fertiger Inhalt ungenutzt herum.
-  { to: "/handarbeit", label: "Handarbeit" }, { to: "/channels", label: "Kanäle" },
-  { to: "/uebersicht", label: "Übersicht" }, { to: "/analysis", label: "Produkt-Brief" },
+  { to: "/pipeline", label: "Pipeline" }, { to: "/review", label: "Freigaben" },
+  { to: "/uebersicht", label: "Zahlen" },
+];
+const MEHR = [
+  { to: "", label: "Heute" }, { to: "/handarbeit", label: "Handarbeit" }, { to: "/channels", label: "Kanäle" },
+  { to: "/studio", label: "Erstellen" }, { to: "/series", label: "Serien" }, { to: "/analysis", label: "Produkt-Brief" },
+  { to: "/community", label: "Community" }, { to: "/insights", label: "Wochenbericht" },
 ];
 
 export function rememberProject(id: string): void { try { localStorage.setItem("mp_project", id); } catch { /* ignore */ } }
@@ -24,7 +24,14 @@ export function ProjectNav({ id }: { id: string }) {
   useEffect(() => rememberProject(id), [id]);
   return (
     <nav className="mp-subnav" aria-label="Projektbereiche">
-      {TABS.map((t) => <NavLink key={t.to} to={`/projects/${id}${t.to}`} end={t.to === ""} className={({ isActive }) => `mp-subnav-item${isActive ? " is-active" : ""}`}>{t.label}</NavLink>)}
+      {TABS.map((t) => <NavLink key={t.to} to={`/projects/${id}${t.to}`} className={({ isActive }) => `mp-subnav-item${isActive ? " is-active" : ""}`}>{t.label}</NavLink>)}
+      <NavLink to="/media" className={({ isActive }) => `mp-subnav-item${isActive ? " is-active" : ""}`}>Medien</NavLink>
+      <details className="mp-subnav-mehr">
+        <summary className="mp-subnav-item">Mehr ▾</summary>
+        <div className="mp-subnav-mehr-liste">
+          {MEHR.map((t) => <NavLink key={t.to} to={`/projects/${id}${t.to}`} end={t.to === ""} className={({ isActive }) => `mp-subnav-item${isActive ? " is-active" : ""}`}>{t.label}</NavLink>)}
+        </div>
+      </details>
     </nav>
   );
 }

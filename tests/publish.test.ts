@@ -168,6 +168,34 @@ describe("Pipeline: Freigabe = Einplanen", () => {
     expect(danach.slots[0]!.extern).toBe(true);
     expect(danach.backlog).toBe(0);
   });
+  it("füllt einen Slot mit Sorte nur mit dieser Sorte und meldet sonst, was fehlt", async () => {
+    const { pipelineView } = await import("../src/server/publish/pipeline.js");
+    // Pinterest von Hand, ein Slot je Tag, der Binderseite (A) vorbehalten.
+    patchChannel(built.db, pid, "pinterest", { stage: "prepare", slots: [{ day: "mon", hour: 20, art: "A" }, { day: "tue", hour: 20, art: "A" }, { day: "wed", hour: 20, art: "A" }, { day: "thu", hour: 20, art: "A" }, { day: "fri", hour: 20, art: "A" }, { day: "sat", hour: 20, art: "A" }, { day: "sun", hour: 20, art: "A" }] });
+    built.db.run(`INSERT INTO mp_content_pieces (id, project_id, task_id, channel, format, title, body, assets, status, human_edited, published_at, external_url, utm, meta, ai_tell_score, ai_tell_notes, rejection_reason, created_at, updated_at)
+      VALUES ('pipe-pin-b', '${pid}', NULL, 'pinterest', 'data_carousel', 'Rangliste', 'Text', '[]', 'approved', 0, NULL, NULL, '{}', '{"platform":"pinterest","dataQuery":{"kind":"top","set":"sv1"}}', NULL, '', '', '2026-09-01T00:00:00.000Z', '2026-09-01T00:00:00.000Z')` as never);
+    const ohneA = pipelineView(built.db, pid).rows.find((r) => r.platform === "pinterest")!;
+    // Die Rangliste (B) darf nicht in den A-Slot — der Slot bleibt offen und trägt die gewünschte Sorte.
+    expect(ohneA.slots.every((s) => s.state === "empty" && s.slotArt === "A")).toBe(true);
+    expect(ohneA.backlog).toBe(1);
+    built.db.run(`INSERT INTO mp_content_pieces (id, project_id, task_id, channel, format, title, body, assets, status, human_edited, published_at, external_url, utm, meta, ai_tell_score, ai_tell_notes, rejection_reason, created_at, updated_at)
+      VALUES ('pipe-pin-a', '${pid}', NULL, 'pinterest', 'artwork_carousel', 'Kunstseite', 'Text', '[]', 'approved', 0, NULL, NULL, '{}', '{"platform":"pinterest"}', NULL, '', '', '2026-09-02T00:00:00.000Z', '2026-09-02T00:00:00.000Z')` as never);
+    const mitA = pipelineView(built.db, pid).rows.find((r) => r.platform === "pinterest")!;
+    const belegt = mitA.slots.filter((s) => s.pieceId);
+    expect(belegt).toHaveLength(1);
+    expect(belegt[0]!.pieceId).toBe("pipe-pin-a");
+    expect(belegt[0]!.postArt).toBe("A");
+    patchChannel(built.db, pid, "pinterest", { stage: "off", slots: [] });
+  });
+  it("liefert die Slot-Analyse mit Vorschlag und Vorrat je Sorte", async () => {
+    const res = await built.app.inject({ method: "GET", url: `/api/mp/projects/${pid}/pipeline/slotanalyse`, headers: auth });
+    expect(res.statusCode).toBe(200);
+    const yt = (res.json().kanaele as { platform: string; vorschlag: unknown[]; vorrat: { art: string; n: number }[]; empfehlung: { proTag: number } }[]).find((k) => k.platform === "youtube")!;
+    expect(yt).toBeDefined();
+    expect(yt.vorschlag).toHaveLength(yt.empfehlung.proTag * 7);
+    // pipe-yt (Drehbuch slab → A) hat inzwischen einen Termin und zählt nicht mehr zum Vorrat.
+    expect(yt.vorrat.find((v) => v.art === "A")).toBeUndefined();
+  });
   it("lässt Kanäle auf „Vorbereiten“ in Ruhe — dort postet der Mensch", async () => {
     const { autoScheduleOnApprove } = await import("../src/server/publish/pipeline.js");
     patchChannel(built.db, pid, "instagram", { stage: "prepare" });
