@@ -18,7 +18,7 @@ import type { HostUser } from "../../host-adapter.js";
 import { berlinInstant, berlinParts } from "../agents/series/time.js";
 import { loadProfiles, stageOf } from "../channels.js";
 import { stageAtLeast, PLATFORMS } from "../../shared/channels.js";
-import { drehbuchOf, postArtOf, type PostArt } from "../../shared/postarten.js";
+import { drehbuchOf, kanalEmpfehlung, postArtOf, type PostArt } from "../../shared/postarten.js";
 import { writeAudit } from "../audit.js";
 import { credentialsFor, posterFor } from "./index.js";
 import { schedulePiece } from "./schedule.js";
@@ -130,8 +130,8 @@ export function pipelineView(db: Db, projectId: string, opts: { days?: number; n
   const ende = new Date(start.getTime() + days * DAY);
 
   const alle = loadProfiles(db, projectId).filter((p) => p.stage !== "off");
-  const scheduled = db.select().from(t.mpScheduledPosts).where(eq(t.mpScheduledPosts.projectId, projectId)).all()
-    .filter((x) => x.scheduledAt >= start.toISOString() && x.scheduledAt < ende.toISOString());
+  const alleTermine = db.select().from(t.mpScheduledPosts).where(eq(t.mpScheduledPosts.projectId, projectId)).all();
+  const scheduled = alleTermine.filter((x) => x.scheduledAt >= start.toISOString() && x.scheduledAt < ende.toISOString());
   const pieces = db.select().from(t.mpContentPieces).where(eq(t.mpContentPieces.projectId, projectId)).all();
   const byId = new Map(pieces.map((p) => [p.id, p]));
   const metaOf = (p: { meta: string }) => parseJson<Record<string, unknown>>(p.meta, {});
@@ -164,9 +164,14 @@ export function pipelineView(db: Db, projectId: string, opts: { days?: number; n
     }
 
     // 2) Wirklich Eingeplantes und Gepostetes auf die Slots legen. Ein Post ohne
-    //    passenden Slot (von Hand angestossen) bekommt einen eigenen Eintrag.
+    //    passenden Slot bekommt einen eigenen Eintrag — außer er ist ein
+    //    **verwaister** Pilot-Termin: vom Piloten auf einen Slot gelegt, den es
+    //    nicht mehr gibt (Kanalplan geändert). Der zählt als „freigegeben ohne
+    //    Termin", wird neu projiziert, und `nachplanen` schiebt den Eintrag auf
+    //    den neuen Slot. Von Hand gesetzte Termine (`extern`) bleiben, wo sie sind.
     const mine = scheduled.filter((x) => x.platform === platform && x.status !== "cancelled")
       .sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt));
+    const verwaist = new Set<string>();
     for (const sp of mine) {
       const piece = byId.get(sp.pieceId);
       const state: SlotState = sp.status === "posted" ? "published" : sp.status === "failed" ? "failed" : "queued";
@@ -175,6 +180,7 @@ export function pipelineView(db: Db, projectId: string, opts: { days?: number; n
       if (piece?.format === "story") continue;
       const frei = slots.find((x) => x.state === "empty" && Math.abs(Date.parse(x.at) - Date.parse(sp.scheduledAt)) < 30 * 60_000);
       if (frei) Object.assign(frei, eintrag, { missed: false });
+      else if (state === "queued" && sp.origin !== "extern" && profile.slots.length > 0 && Date.parse(sp.scheduledAt) > now.getTime()) verwaist.add(sp.pieceId);
       else {
         const p = berlinParts(new Date(sp.scheduledAt));
         slots.push({ at: sp.scheduledAt, date: p.date, hour: p.hour, ...eintrag, missed: false, slotArt: "" });
@@ -188,7 +194,8 @@ export function pipelineView(db: Db, projectId: string, opts: { days?: number; n
     //    sagt, was fehlt); ein Slot ohne Sorte nimmt das älteste Stück einer
     //    Sorte, die an diesem Tag noch nicht dran war — so bleibt der Feed
     //    abwechslungsreich, statt viermal dieselbe Rangliste zu zeigen.
-    const geplant = new Set(mine.map((x) => x.pieceId));
+    const geplant = new Set(alleTermine.filter((x) => x.platform === platform && (x.status === "queued" || x.status === "posted")).map((x) => x.pieceId));
+    for (const id of verwaist) geplant.delete(id);
     const kandidaten = pieces
       .filter((p) => p.channel === platform && p.format !== "story" && !geplant.has(p.id))
       .filter((p) => p.status === "approved" || p.status === "review")
@@ -197,6 +204,13 @@ export function pipelineView(db: Db, projectId: string, opts: { days?: number; n
     const vergeben = new Set<string>();
     const artenAmTag = new Map<string, Set<string>>();
     for (const s of slots) if (s.postArt) artenAmTag.set(s.date, new Set([...(artenAmTag.get(s.date) ?? []), s.postArt]));
+    const lege = (slot: PipelineSlot, wahl: { p: (typeof pieces)[number]; art: PostArt }) => {
+      vergeben.add(wahl.p.id);
+      const heute = artenAmTag.get(slot.date) ?? new Set<string>();
+      heute.add(wahl.art); artenAmTag.set(slot.date, heute);
+      Object.assign(slot, { state: wahl.p.status === "approved" ? "approved" : "review", pieceId: wahl.p.id, title: wahl.p.title, format: wahl.p.format, extern: false, ...artOf(wahl.p) });
+    };
+    // Erster Durchgang: jeder Slot bekommt seine Sorte, Slots ohne Sorte Abwechslung.
     for (const slot of slots) {
       if (slot.state !== "empty" || slot.missed) continue;
       const frei = kandidaten.filter((k) => !vergeben.has(k.p.id));
@@ -204,10 +218,20 @@ export function pipelineView(db: Db, projectId: string, opts: { days?: number; n
       const wahl = slot.slotArt
         ? frei.find((k) => k.art === slot.slotArt)
         : frei.find((k) => !heute.has(k.art)) ?? frei[0];
-      if (!wahl) continue;
-      vergeben.add(wahl.p.id);
-      heute.add(wahl.art); artenAmTag.set(slot.date, heute);
-      Object.assign(slot, { state: wahl.p.status === "approved" ? "approved" : "review", pieceId: wahl.p.id, title: wahl.p.title, format: wahl.p.format, extern: false, ...artOf(wahl.p) });
+      if (wahl) lege(slot, wahl);
+    }
+    // Zweiter Durchgang: ein leerer Slot ist schlechter als ein Beitrag der
+    // falschen Sorte — außer beim Pflicht-Slot des Tages (die Binderseite zur
+    // besten Stunde), der bleibt sichtbar offen und sagt, was fehlt. Am
+    // 14.09.2026 standen auf Pinterest 17 von 21 Slots leer, weil dort nur
+    // Ranglisten vorrätig waren und der Plan Kunstseiten wollte.
+    const pflicht = kanalEmpfehlung(platform).pflicht;
+    for (const slot of slots) {
+      if (slot.state !== "empty" || slot.missed || slot.slotArt === pflicht) continue;
+      const frei = kandidaten.filter((k) => !vergeben.has(k.p.id));
+      const heute = artenAmTag.get(slot.date) ?? new Set<string>();
+      const wahl = frei.find((k) => !heute.has(k.art)) ?? frei[0];
+      if (wahl) lege(slot, wahl);
     }
     const k = vergeben.size;
 
@@ -215,4 +239,33 @@ export function pipelineView(db: Db, projectId: string, opts: { days?: number; n
   });
 
   return { from: heute, days, today: heute, rows, withoutSlots };
+}
+
+
+// --- Nachplanen: Freigegebenes auf freie Slots legen ------------------------
+
+/**
+ * Freigegebene Stücke ohne Termin auf Kanälen, die der Pilot selbst bedient,
+ * in die Slots legen, die die Projektion ihnen zuweist.
+ *
+ * `autoScheduleOnApprove` plant nur im Moment der Freigabe — und findet dann
+ * keinen Slot, wenn die Woche voll ist. Kommen später Slots dazu (mehr je
+ * Tag, ein neuer Kanalplan), blieben die Stücke orange stehen, bis jemand
+ * jedes einzeln einplant. Am 14.09.2026 waren das 13 auf Instagram. Diese
+ * Funktion läuft im Takt des Schedulers und nimmt genau die Slots, die die
+ * Ampel zeigt — Sorte und Abwechslung inklusive.
+ */
+export function nachplanen(db: Db, projectId: string, opts: { days?: number; now?: Date } = {}): { pieceId: string; platform: string; at: string }[] {
+  const view = pipelineView(db, projectId, { days: opts.days ?? 14, ...(opts.now ? { now: opts.now } : {}) });
+  const out: { pieceId: string; platform: string; at: string }[] = [];
+  for (const row of view.rows) {
+    if (!row.automatic) continue;
+    for (const slot of row.slots) {
+      if (slot.state !== "approved" || !slot.pieceId) continue;
+      const planned = schedulePiece(db, projectId, { pieceId: slot.pieceId, platforms: [row.platform], at: slot.at, ...(opts.now ? { now: opts.now } : {}) });
+      const e = planned[0];
+      if (e) out.push({ pieceId: slot.pieceId, platform: row.platform, at: e.scheduledAt });
+    }
+  }
+  return out;
 }

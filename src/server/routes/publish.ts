@@ -23,6 +23,7 @@ import { loadCredentials, platformStatus, posterFor, saveCredentials } from "../
 import { cancelScheduled, listScheduled, nextFreeSlot, postedToday, recordExternPost, schedulePiece } from "../publish/schedule.js";
 import { pipelineView } from "../publish/pipeline.js";
 import { slotAnalyse } from "../publish/slotanalyse.js";
+import { nachplanen } from "../publish/pipeline.js";
 import { METRICS_STEPS, PUBLISH_STEPS } from "../publish/job.js";
 import { metrikenVonHand } from "../publish/metrics.js";
 import { loadBio, saveBio } from "../publish/bio.js";
@@ -71,6 +72,12 @@ export function publishRoutes(app: FastifyInstance, db: Db, env: Env): void {
     }
     const before = stageOf(db, req.params.projectId, platform);
     const next = patchChannel(db, req.params.projectId, platform, req.body);
+    // Neue Slots: Freigegebenes und verwaiste Pilot-Termine sofort auf den
+    // neuen Plan legen, nicht erst im nächsten Zehn-Minuten-Takt.
+    if (req.body.slots) {
+      try { nachplanen(db, req.params.projectId); }
+      catch (e) { req.log.warn(`nachplanen nach Slot-Änderung: ${e instanceof Error ? e.message : String(e)}`); }
+    }
     if (req.body.stage && req.body.stage !== before) {
       writeAudit(db, { user: req.user, action: "channel.stage", entityType: "project", entityId: req.params.projectId, projectId: req.params.projectId, content: { platform, from: before, to: next.stage } });
     }

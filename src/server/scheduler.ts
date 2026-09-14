@@ -14,6 +14,7 @@ import { dueSeries } from "./agents/series/series.js";
 import { SERIES_STEPS } from "./agents/series/job.js";
 import { berlinParts } from "./agents/series/time.js";
 import { duePosts } from "./publish/schedule.js";
+import { nachplanen } from "./publish/pipeline.js";
 import { KANAL_STEPS, METRICS_STEPS, PUBLISH_STEPS } from "./publish/job.js";
 import { faelligeMetriken } from "./publish/metrics.js";
 import { CLEANUP_STEPS } from "./cleanup.js";
@@ -52,6 +53,14 @@ export function dueJobs(db: Db, now = new Date()): Due[] {
     const last = lastRun(db, `series:${series.id}`, series.projectId);
     if (last && berlinParts(new Date(last)).date === berlinParts(now).date) continue;
     due.push({ kind: "series.run", projectId: series.projectId, seriesId: series.id });
+  }
+  // Freigegebenes ohne Termin auf die Slots legen, die die Ampel ihm zuweist —
+  // vor der Fälligkeitsprüfung, damit ein gerade erst gefüllter Slot, der
+  // schon dran ist, im selben Takt gepostet wird. Ein Fehler hier (Zugang
+  // weg, Kanal umgestellt) darf den Takt nicht anhalten.
+  for (const p of projects) {
+    try { nachplanen(db, p.id, { now }); }
+    catch (e) { console.error(`[scheduler] nachplanen ${p.id}: ${e instanceof Error ? e.message : String(e)}`); }
   }
   // Faellige Beitraege (Shot 10). Ohne Eintraege entsteht auch kein Job - der
   // Takt laeuft ohnehin alle zehn Minuten, das reicht fuer Redaktionsslots.

@@ -187,6 +187,56 @@ describe("Pipeline: Freigabe = Einplanen", () => {
     expect(belegt[0]!.postArt).toBe("A");
     patchChannel(built.db, pid, "pinterest", { stage: "off", slots: [] });
   });
+  it("füllt Slots im zweiten Durchgang mit der falschen Sorte, nur den Pflicht-Slot nicht", async () => {
+    const { pipelineView } = await import("../src/server/publish/pipeline.js");
+    // Pinterest: Pflicht ist A (20 Uhr), dazu B um 14 und G um 21 — vorrätig ist aber nur eine Rangliste (B) und ein Text (T).
+    patchChannel(built.db, pid, "pinterest", { stage: "prepare", slots: [{ day: "mon", hour: 20, art: "A" }, { day: "mon", hour: 14, art: "B" }, { day: "mon", hour: 21, art: "G" }, { day: "tue", hour: 20, art: "A" }, { day: "tue", hour: 14, art: "B" }, { day: "tue", hour: 21, art: "G" }, { day: "wed", hour: 20, art: "A" }, { day: "wed", hour: 14, art: "B" }, { day: "wed", hour: 21, art: "G" }, { day: "thu", hour: 20, art: "A" }, { day: "thu", hour: 14, art: "B" }, { day: "thu", hour: 21, art: "G" }, { day: "fri", hour: 20, art: "A" }, { day: "fri", hour: 14, art: "B" }, { day: "fri", hour: 21, art: "G" }, { day: "sat", hour: 20, art: "A" }, { day: "sat", hour: 14, art: "B" }, { day: "sat", hour: 21, art: "G" }, { day: "sun", hour: 20, art: "A" }, { day: "sun", hour: 14, art: "B" }, { day: "sun", hour: 21, art: "G" }] });
+    built.db.run(`DELETE FROM mp_content_pieces WHERE id IN ('pipe-pin-a')` as never);
+    built.db.run(`INSERT INTO mp_content_pieces (id, project_id, task_id, channel, format, title, body, assets, status, human_edited, published_at, external_url, utm, meta, ai_tell_score, ai_tell_notes, rejection_reason, created_at, updated_at)
+      VALUES ('pipe-pin-t', '${pid}', NULL, 'pinterest', 'text', 'Meinung', 'Text', '[]', 'approved', 0, NULL, NULL, '{}', '{"platform":"pinterest"}', NULL, '', '', '2026-09-03T00:00:00.000Z', '2026-09-03T00:00:00.000Z')` as never);
+    const row = pipelineView(built.db, pid).rows.find((r) => r.platform === "pinterest")!;
+    const belegt = row.slots.filter((s) => s.pieceId);
+    // Beide Stücke liegen — die Rangliste in ihrem B-Slot, der Text in einem G-Slot (Ersatz) …
+    expect(belegt.map((s) => s.pieceId).sort()).toEqual(["pipe-pin-b", "pipe-pin-t"]);
+    expect(belegt.find((s) => s.pieceId === "pipe-pin-b")!.slotArt).toBe("B");
+    expect(belegt.find((s) => s.pieceId === "pipe-pin-t")!.slotArt).toBe("G");
+    // … und kein A-Slot wurde mit etwas anderem gefüllt: er bleibt offen und sagt „A fehlt".
+    expect(row.slots.filter((s) => s.slotArt === "A").every((s) => s.state === "empty")).toBe(true);
+    patchChannel(built.db, pid, "pinterest", { stage: "off", slots: [] });
+  });
+  it("plant Freigegebenes ohne Termin nach, sobald ein Slot frei ist", async () => {
+    const { nachplanen, pipelineView } = await import("../src/server/publish/pipeline.js");
+    // Bluesky steht auf „Freigeben" mit täglichem 9-Uhr-Slot (Test oben). Ein
+    // zweites freigegebenes Stück ohne Termin muss in den nächsten freien Slot.
+    built.db.run(`INSERT INTO mp_content_pieces (id, project_id, task_id, channel, format, title, body, assets, status, human_edited, published_at, external_url, utm, meta, ai_tell_score, ai_tell_notes, rejection_reason, created_at, updated_at)
+      VALUES ('pipe-nach', '${pid}', NULL, 'bluesky', 'data_carousel', 'Nachzügler', 'Text', '["a1"]', 'approved', 0, NULL, NULL, '{}', '{"platform":"bluesky"}', NULL, '', '', '2026-09-06T00:00:00.000Z', '2026-09-06T00:00:00.000Z')` as never);
+    const vorher = pipelineView(built.db, pid).rows.find((r) => r.platform === "bluesky")!;
+    const projiziert = vorher.slots.find((s) => s.pieceId === "pipe-nach");
+    expect(projiziert?.state).toBe("approved");
+    const geplant = nachplanen(built.db, pid);
+    expect(geplant.map((g) => g.pieceId)).toContain("pipe-nach");
+    expect(geplant.find((g) => g.pieceId === "pipe-nach")!.at).toBe(projiziert!.at);
+    const nachher = pipelineView(built.db, pid).rows.find((r) => r.platform === "bluesky")!;
+    expect(nachher.slots.find((s) => s.pieceId === "pipe-nach")?.state).toBe("queued");
+    // Ein zweiter Lauf legt nichts doppelt.
+    expect(nachplanen(built.db, pid).some((g) => g.pieceId === "pipe-nach")).toBe(false);
+    // Ein Stück mit Termin jenseits des Fensters wird im kurzen Blick nicht noch einmal projiziert.
+    const kurz = pipelineView(built.db, pid, { days: 1 }).rows.find((r) => r.platform === "bluesky");
+    expect(kurz?.slots.some((s) => s.pieceId === "pipe-nach" && s.state === "approved")).toBe(false);
+  });
+  it("schiebt verwaiste Pilot-Termine auf den neuen Kanalplan, lässt Hand-Termine liegen", async () => {
+    const { nachplanen, pipelineView } = await import("../src/server/publish/pipeline.js");
+    const { mpScheduledPosts } = await import("../src/server/db/schema.js");
+    // Bluesky bekommt einen neuen Plan: nur noch 18 Uhr. Die 9-Uhr-Termine von oben sind damit verwaist.
+    patchChannel(built.db, pid, "bluesky", { slots: [{ day: "mon", hour: 18 }, { day: "tue", hour: 18 }, { day: "wed", hour: 18 }, { day: "thu", hour: 18 }, { day: "fri", hour: 18 }, { day: "sat", hour: 18 }, { day: "sun", hour: 18 }] });
+    const vorher = pipelineView(built.db, pid, { days: 14 }).rows.find((r) => r.platform === "bluesky")!;
+    expect(vorher.slots.find((s) => s.pieceId === "pipe-nach")?.state).toBe("approved");   // verwaist → wie ohne Termin
+    const bewegt = nachplanen(built.db, pid, { days: 14 });
+    expect(bewegt.map((b) => b.pieceId)).toContain("pipe-nach");
+    const eintraege = built.db.select().from(mpScheduledPosts).all().filter((x) => x.pieceId === "pipe-nach" && x.status === "queued");
+    expect(eintraege).toHaveLength(1);   // verschoben, nicht verdoppelt
+    expect(new Date(eintraege[0]!.scheduledAt).toLocaleTimeString("de-DE", { timeZone: "Europe/Berlin", hour: "2-digit" })).toContain("18");
+  });
   it("liefert die Slot-Analyse mit Vorschlag und Vorrat je Sorte", async () => {
     const res = await built.app.inject({ method: "GET", url: `/api/mp/projects/${pid}/pipeline/slotanalyse`, headers: auth });
     expect(res.statusCode).toBe(200);
