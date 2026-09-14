@@ -259,11 +259,14 @@ export function offeneAuftraege(db: Db, env: Env, projectId: string): { auftraeg
 
 // --- Der Lauf im Studio ----------------------------------------------------
 
-/** Berliner Datum und Uhrzeit aus einem ISO-Zeitpunkt (UTC+2 im Sommer). */
-function berlin(iso: string): { datum: string; uhrzeit: string } {
-  const d = new Date(new Date(iso).getTime() + 2 * 3600_000);
-  const s = d.toISOString();
-  return { datum: `${s.slice(8, 10)}-${s.slice(5, 7)}-${s.slice(0, 4)}`, uhrzeit: s.slice(11, 16) };
+/**
+ * Berliner Datum und Uhrzeit aus einem ISO-Zeitpunkt (UTC+2 im Sommer).
+ * Das Datum in der Schreibweise, die das Studio im Feld zeigt (2026-09-15),
+ * damit die Gegenprobe direkt vergleichen kann.
+ */
+function berlin(iso: string): { datum: string; stunde: string; minute: string } {
+  const s = new Date(new Date(iso).getTime() + 2 * 3600_000).toISOString();
+  return { datum: s.slice(0, 10), stunde: s.slice(11, 13), minute: s.slice(14, 16) };
 }
 
 async function schuss(seite: Page, env: Env, name: string): Promise<void> {
@@ -293,6 +296,11 @@ async function einesPlanen(seite: Page, env: Env, auftrag: Auftrag, probe: boole
   await textKasten.waitFor({ state: "visible", timeout: 180_000 });
   await seite.waitForTimeout(2000);
 
+  // TikTok schiebt gelegentlich ein Hinweisfenster ueber die Maske.
+  const verstanden = seite.getByRole("button", { name: /^(Verstanden|Got it|OK)$/i }).first();
+  if (await verstanden.count()) await verstanden.click().catch(() => {});
+  await seite.waitForTimeout(1000);
+
   // 3. Beschreibung setzen: alten Inhalt (TikTok füllt den Dateinamen ein) leeren,
   //    dann tippen. Nach Hashtags schlägt TikTok Begriffe vor — Escape schließt das.
   await textKasten.click();
@@ -306,54 +314,78 @@ async function einesPlanen(seite: Page, env: Env, auftrag: Auftrag, probe: boole
   await seite.keyboard.press("Escape");
   await seite.waitForTimeout(1000);
 
-  // 4. Auf „terminieren" umschalten
-  const terminSchalter = seite.getByText(/^(Terminieren|Schedule|Geplant|Zeitplan)$/i).first();
-  if (await terminSchalter.count()) {
-    await terminSchalter.click({ timeout: 10_000 }).catch(() => {});
-    await seite.waitForTimeout(1500);
-  } else {
+  // 4. Auf „Zeitplan" umschalten. Der Schalter heisst so — nicht
+  //    „Terminieren", wie zuerst geraten (am 14.09. am Objekt nachgesehen).
+  const zeitplan = seite.getByText(/^Zeitplan$/).first();
+  if (!(await zeitplan.count())) {
     await schuss(seite, env, `fehler-${auftrag.pieceId}-schalter`);
-    return zeile("fehler", "Umschalter „Terminieren“ nicht gefunden — Bildschirmfoto in tiktok-logs");
+    return zeile("fehler", "Umschalter „Zeitplan“ nicht gefunden — Bildschirmfoto in tiktok-logs");
   }
+  await zeitplan.scrollIntoViewIfNeeded();
+  await zeitplan.click();
+  await seite.waitForTimeout(2000);
 
-  // 5. Datum und Uhrzeit
-  const { datum, uhrzeit } = berlin(auftrag.geplantAm);
-  const zeitFeld = seite.locator('input[placeholder*=":"], input[value*=":"]').first();
-  if (await zeitFeld.count()) {
-    await zeitFeld.click();
-    await seite.waitForTimeout(800);
-    // Die Zeitauswahl ist eine Liste aus Stunden und Minuten, kein Textfeld.
-    const [std, min] = uhrzeit.split(":");
-    const stunde = seite.getByText(new RegExp(`^${std}$`)).last();
-    if (await stunde.count()) { await stunde.click().catch(() => {}); await seite.waitForTimeout(400); }
-    const minute = seite.getByText(new RegExp(`^${min}$`)).last();
-    if (await minute.count()) { await minute.click().catch(() => {}); await seite.waitForTimeout(400); }
-    await seite.keyboard.press("Escape");
+  // 5. Uhrzeit und Datum. Beide Felder sind keine Textfelder, sondern oeffnen
+  //    eine Auswahl: die Uhrzeit zwei Spalten (Stunde links, Minute rechts, in
+  //    Fuenf-Minuten-Schritten), das Datum einen Kalender, in dem nur Tage mit
+  //    der Klasse `valid` anklickbar sind.
+  const { datum, stunde, minute } = berlin(auftrag.geplantAm);
+  const felder = seite.locator("input.TUXTextInputCore-input");
+
+  await felder.nth(0).click();
+  await seite.waitForTimeout(1200);
+  const stundeWahl = seite.locator(".tiktok-timepicker-option-text.tiktok-timepicker-left", { hasText: new RegExp(`^${stunde}$`) }).first();
+  await stundeWahl.scrollIntoViewIfNeeded();
+  await stundeWahl.click();
+  await seite.waitForTimeout(800);
+  const minuteWahl = seite.locator(".tiktok-timepicker-option-text.tiktok-timepicker-right", { hasText: new RegExp(`^${minute}$`) }).first();
+  await minuteWahl.scrollIntoViewIfNeeded();
+  await minuteWahl.click();
+  await seite.waitForTimeout(800);
+
+  await felder.nth(1).click();
+  await seite.waitForTimeout(1200);
+  const tag = String(Number(datum.slice(8, 10)));
+  await seite.locator(".calendar-wrapper .day.valid").filter({ hasText: new RegExp(`^${tag}$`) }).last().click();
+  await seite.waitForTimeout(1200);
+
+  // Gegenprobe: lieber nichts abschicken als etwas auf den falschen Tag legen.
+  const gesetztZeit = await felder.nth(0).inputValue();
+  const gesetztDatum = await felder.nth(1).inputValue();
+  if (gesetztDatum !== datum || gesetztZeit !== `${stunde}:${minute}`) {
+    await schuss(seite, env, `fehler-${auftrag.pieceId}-termin`);
+    return zeile("fehler", `Termin sitzt nicht: Studio zeigt ${gesetztDatum} ${gesetztZeit} statt ${datum} ${stunde}:${minute}`);
   }
-  const datumFeld = seite.locator(`input[value*="-"]`).first();
-  if (await datumFeld.count()) {
-    await datumFeld.click();
-    await seite.waitForTimeout(800);
-    const tag = String(Number(datum.slice(0, 2)));
-    const tagFeld = seite.locator(`div[class*="calendar"] >> text=/^${tag}$/`).first();
-    if (await tagFeld.count()) { await tagFeld.click().catch(() => {}); }
-    await seite.keyboard.press("Escape");
-    await seite.waitForTimeout(500);
-  }
+  await seite.keyboard.press("Escape");
+  await seite.waitForTimeout(600);
   await schuss(seite, env, `vor-absenden-${auftrag.pieceId}`);
 
   if (probe) return zeile("uebersprungen", "Probelauf — alles ausgefüllt, aber nicht abgeschickt");
 
-  // 6. Absenden
-  const knopf = seite.getByRole("button", { name: /^(Planen|Terminieren|Schedule|Post|Posten)$/i }).last();
+  // 6. Erst wenn die Inhaltspruefung durch ist. Sonst schiebt TikTok den Dialog
+  //    „Weiter und veroeffentlichen?" davor, dessen Knopf „Jetzt veroeffentlichen"
+  //    heisst — bei einem Termin will man den nie druecken. Am 19.09. genau so
+  //    passiert und deshalb abgebrochen.
+  const geprueft = seite.getByText(/Keine Probleme gefunden|No issues found/i).first();
+  try { await geprueft.waitFor({ state: "visible", timeout: 300_000 }); }
+  catch {
+    await schuss(seite, env, `fehler-${auftrag.pieceId}-pruefung`);
+    return zeile("fehler", "Inhaltsprüfung war nach fünf Minuten nicht durch — nichts abgeschickt");
+  }
+  await seite.waitForTimeout(1500);
+
+  const knopf = seite.getByRole("button", { name: /^Planen$/ }).first();
   if (!(await knopf.count())) {
     await schuss(seite, env, `fehler-${auftrag.pieceId}-knopf`);
     return zeile("fehler", "Absende-Knopf nicht gefunden — Bildschirmfoto in tiktok-logs");
   }
   await knopf.click({ timeout: 15_000 });
-  await seite.waitForTimeout(6000);
+  await seite.waitForTimeout(9000);
   await schuss(seite, env, `nach-absenden-${auftrag.pieceId}`);
-  return zeile("geplant", `im Studio terminiert auf ${datum} ${uhrzeit}`);
+  if (!seite.url().includes("/tiktokstudio/content")) {
+    return zeile("fehler", "nach dem Planen nicht auf der Beitragsliste gelandet — Bildschirmfoto in tiktok-logs");
+  }
+  return zeile("geplant", `im Studio terminiert auf ${datum} ${stunde}:${minute}`);
 }
 
 /**
