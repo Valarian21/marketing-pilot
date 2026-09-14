@@ -210,28 +210,35 @@ export function pipelineView(db: Db, projectId: string, opts: { days?: number; n
       heute.add(wahl.art); artenAmTag.set(slot.date, heute);
       Object.assign(slot, { state: wahl.p.status === "approved" ? "approved" : "review", pieceId: wahl.p.id, title: wahl.p.title, format: wahl.p.format, extern: false, ...artOf(wahl.p) });
     };
-    // Erster Durchgang: jeder Slot bekommt seine Sorte, Slots ohne Sorte Abwechslung.
-    for (const slot of slots) {
-      if (slot.state !== "empty" || slot.missed) continue;
-      const frei = kandidaten.filter((k) => !vergeben.has(k.p.id));
-      const heute = artenAmTag.get(slot.date) ?? new Set<string>();
-      const wahl = slot.slotArt
-        ? frei.find((k) => k.art === slot.slotArt)
-        : frei.find((k) => !heute.has(k.art)) ?? frei[0];
-      if (wahl) lege(slot, wahl);
-    }
-    // Zweiter Durchgang: ein leerer Slot ist schlechter als ein Beitrag der
-    // falschen Sorte — außer beim Pflicht-Slot des Tages (die Binderseite zur
-    // besten Stunde), der bleibt sichtbar offen und sagt, was fehlt. Am
-    // 14.09.2026 standen auf Pinterest 17 von 21 Slots leer, weil dort nur
-    // Ranglisten vorrätig waren und der Plan Kunstseiten wollte.
+    /**
+     * Gefüllt wird **Tag für Tag**, und innerhalb eines Tages erst nach Sorte.
+     *
+     * Über alle Tage hinweg zuerst die Sorten zu bedienen sieht ordentlicher
+     * aus, verhungert aber die nahe Woche: Am 14.09.2026 legten fünfzehn neue
+     * Threads-Texte zwei Wochen Pflicht-Slots voll, während die Lücken am
+     * Mittwoch und Donnerstag offen blieben. Ein Beitrag darf nicht über einen
+     * früheren Tag hinwegspringen — was näher liegt, wird zuerst bedient.
+     *
+     * Innerhalb eines Tages gilt weiter: erst die gewünschte Sorte, dann der
+     * Rest mit dem, was da ist (ein leerer Slot ist schlechter als die falsche
+     * Sorte) — nur der Pflicht-Slot bleibt sichtbar offen und sagt, was fehlt.
+     */
     const pflicht = kanalEmpfehlung(platform).pflicht;
-    for (const slot of slots) {
-      if (slot.state !== "empty" || slot.missed || slot.slotArt === pflicht) continue;
-      const frei = kandidaten.filter((k) => !vergeben.has(k.p.id));
-      const heute = artenAmTag.get(slot.date) ?? new Set<string>();
-      const wahl = frei.find((k) => !heute.has(k.art)) ?? frei[0];
-      if (wahl) lege(slot, wahl);
+    const frei = () => kandidaten.filter((x) => !vergeben.has(x.p.id));
+    for (const datum of [...new Set(slots.map((x) => x.date))].sort()) {
+      const tagSlots = slots.filter((x) => x.date === datum);
+      for (const slot of tagSlots) {
+        if (slot.state !== "empty" || slot.missed || !slot.slotArt) continue;
+        const wahl = frei().find((x) => x.art === slot.slotArt);
+        if (wahl) lege(slot, wahl);
+      }
+      for (const slot of tagSlots) {
+        if (slot.state !== "empty" || slot.missed || slot.slotArt === pflicht) continue;
+        const heute = artenAmTag.get(datum) ?? new Set<string>();
+        const offen = frei();
+        const wahl = offen.find((x) => !heute.has(x.art)) ?? offen[0];
+        if (wahl) lege(slot, wahl);
+      }
     }
     const k = vergeben.size;
 

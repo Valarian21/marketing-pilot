@@ -1095,6 +1095,108 @@ Welche Farbe als Nächstes?`,
    * Hier zählt nur die Passung, nicht der Preis — dass die acht zusammen
    * trotzdem 92 € kosten, ist ein Nebenbefund und steht in der Caption.
    */
+  /**
+   * „Bisasam bleibt im Dschungel." Die Entwicklungsreihe als Post-Art A.
+   *
+   * Die Seite aus der Vitrine trägt Bisasam, Bisaknosp und Bisaflor; das Grün
+   * wird von oben nach unten dichter, die Entwicklung läuft mit dem Bild. Der
+   * Nutzwert steht im Schluss: Nach Setnummer sortiert stehen die drei auf drei
+   * verschiedenen Seiten — der häufigste Fehler im Ordner und der einzige, der
+   * nichts kostet außer einem Abend.
+   */
+  bisaflor: {
+    titel: "Bisasam bleibt im Dschungel",
+    artworks: ["luFp3Ss3iCi_"],
+    musik: "absolutesound-background-no-copyright-music-561870.mp3",
+    clips: [
+      { art: "stand", bild: { art: "binder", seite: "luFp3Ss3iCi_", nur: [2] }, dauerMs: 2800, stil: "hook", zeig: "Eine Karte,\nacht Lücken." },
+      { art: "wandel", von: { art: "binder", seite: "luFp3Ss3iCi_", nur: [2] }, bis: { art: "binder", seite: "luFp3Ss3iCi_" }, haltMs: 700, dauerMs: 4000, zeig: "Oder die Seite\nwächst drumherum." },
+      { art: "fahrt", seite: "luFp3Ss3iCi_", vonFach: 6, bisFach: 2, dauerMs: 4000, zeig: "Bisasam, Bisaknosp,\nBisaflor." },
+      { art: "stand", bild: { art: "ganz", seite: "luFp3Ss3iCi_" }, dauerMs: 3400, zeig: "Ein Motiv,\nneun Fächer." },
+      { art: "stand", bild: { art: "binder", seite: "luFp3Ss3iCi_" }, dauerMs: 3200, stil: "schluss", zeig: "Welche Reihe\nliegt bei dir?" },
+    ],
+    caption: `Eine Karte, acht Lücken — so fängt jede Seite an.
+
+Drei Stufen, ein Motiv: oben das lichte Grün, unten das dichte Unterholz. Die Entwicklung läuft mit dem Bild, man liest sie, ohne die Nummern zu prüfen.
+
+Nach Setnummer sortiert stehen Bisasam, Bisaknosp und Bisaflor auf drei verschiedenen Seiten. Das halte ich für den häufigsten Fehler im Ordner — und für den einzigen, der nichts kostet außer einem Abend.
+
+Ausgedruckt in 63 × 88 mm, die Kartenfächer bleiben frei.
+
+Welche Entwicklungsreihe liegt bei dir zusammen?`,
+    captionKurz: `Drei Stufen, ein Motiv über neun Fächer. Nach Setnummer sortiert stünden sie auf drei Seiten.
+
+Welche Reihe liegt bei dir zusammen?`,
+    hashtags: ["#bisaflor", "#pokemon151", "#binderart", "#pokemonsammeln", "#binderplan"],
+  },
+
+  /**
+   * „Drei Mauzi, eine Gasse." Regionalformen auf einer Seite.
+   *
+   * Kanto, Alola und Galar tragen dasselbe Pokémon in drei Fassungen — im
+   * Katalog liegen sie Jahrzehnte auseinander, im Ordner deshalb auf drei
+   * Seiten. Die Vitrine-Seite legt sie über Eck in eine einzige Gasse. Der
+   * Beitrag ist der Beleg dafür, dass Zugehörigkeit nichts mit Setnummern zu
+   * tun hat.
+   */
+  mauzigasse: {
+    titel: "Drei Mauzi, eine Gasse",
+    artworks: ["oGTiqnIKyVjU"],
+    musik: "prettyjohn1-pop-pop-music-503314.mp3",
+    clips: [
+      { art: "stand", bild: { art: "binder", seite: "oGTiqnIKyVjU" }, dauerMs: 2800, stil: "hook", zeig: "Ein Pokémon.\nDrei Regionen." },
+      { art: "fahrt", seite: "oGTiqnIKyVjU", vonFach: 6, bisFach: 2, dauerMs: 4200, zeig: "Über Eck gelegt,\nnicht nach Nummer." },
+      { art: "stand", bild: { art: "ganz", seite: "oGTiqnIKyVjU" }, dauerMs: 3400, zeig: "Dazwischen läuft\neine ganze Gasse." },
+      { art: "wandel", von: { art: "ganz", seite: "oGTiqnIKyVjU" }, bis: { art: "binder", seite: "oGTiqnIKyVjU" }, haltMs: 600, dauerMs: 3800, zeig: "Sechs Fächer\nbleiben frei." },
+      { art: "stand", bild: { art: "binder", seite: "oGTiqnIKyVjU" }, dauerMs: 3200, stil: "schluss", zeig: "Welche drei\ngehören zusammen?" },
+    ],
+    caption: `Ein Pokémon. Drei Regionen.
+
+Kanto, Alola, Galar — im Katalog liegen die drei Mauzi Jahrzehnte auseinander, im Ordner deshalb meistens auf drei Seiten. Hier stehen sie über Eck in einer einzigen Gasse: Wäscheleinen, Treppen, Blumentöpfe dazwischen.
+
+Zugehörigkeit hat nichts mit Setnummern zu tun. Das ist der ganze Punkt einer geplanten Seite — du entscheidest vorher, welche Karten nebeneinander liegen, und lässt die restlichen Fächer frei.
+
+Welche drei Karten gehören bei dir zusammen, obwohl die Nummern es nicht sagen?`,
+    captionKurz: `Kanto, Alola, Galar — dasselbe Pokémon, im Ordner meistens auf drei Seiten. Hier über Eck in einer Gasse.
+
+Welche drei gehören bei dir zusammen?`,
+    hashtags: ["#mauzi", "#meowth", "#binderart", "#pokemonsammeln", "#binderplan"],
+  },
+
+  /**
+   * „Schiggy geht ins Wasser." Die dritte Starter-Seite als Post-Art A.
+   *
+   * Oben der Strand, in der Mitte flaches Wasser, unten das Riff: Das Motiv
+   * wird von oben nach unten dunkler, und die Entwicklung läuft mit. Man liest
+   * die Reihenfolge am Bild, nicht an den Nummern — genau der Punkt, den eine
+   * geplante Seite gegenüber der Sortierung nach Setnummer hat.
+   */
+  turtok: {
+    titel: "Schiggy geht ins Wasser",
+    artworks: ["oW6p_fCa7CgP"],
+    musik: "absolutesound-background-no-copyright-music-561870.mp3",
+    clips: [
+      { art: "stand", bild: { art: "binder", seite: "oW6p_fCa7CgP" }, dauerMs: 2800, stil: "hook", zeig: "Oben Strand.\nUnten Riff." },
+      { art: "fahrt", seite: "oW6p_fCa7CgP", vonFach: 0, bisFach: 8, dauerMs: 4200, zeig: "Dazwischen läuft\ndie Entwicklung." },
+      { art: "stand", bild: { art: "ganz", seite: "oW6p_fCa7CgP" }, dauerMs: 3400, zeig: "Hell nach dunkel,\nvon selbst lesbar." },
+      { art: "wandel", von: { art: "ganz", seite: "oW6p_fCa7CgP" }, bis: { art: "binder", seite: "oW6p_fCa7CgP" }, haltMs: 600, dauerMs: 3800, zeig: "Drei Stufen,\neine Seite." },
+      { art: "stand", bild: { art: "binder", seite: "oW6p_fCa7CgP" }, dauerMs: 3200, stil: "schluss", zeig: "Welcher Starter\nliegt vorn?" },
+    ],
+    caption: `Oben Strand. Unten Riff.
+
+Drei Stufen, ein Motiv: Schiggy am flachen Ufer, Schillok im offenen Wasser, Turtok unten am Riff. Das Bild wird von oben nach unten dunkler, und die Entwicklung läuft mit. Die Reihenfolge liest man, ohne eine einzige Nummer zu prüfen.
+
+Genau das kann eine Setliste nicht. Nach Nummer sortiert stehen die drei irgendwo, und die Seite erzählt nichts.
+
+Ausgedruckt in 63 × 88 mm, die Kartenfächer bleiben frei.
+
+Welcher Starter liegt bei dir auf Seite eins?`,
+    captionKurz: `Schiggy am Ufer, Schillok im Wasser, Turtok am Riff — die Reihenfolge liest man am Bild, nicht an den Nummern.
+
+Welcher Starter liegt bei dir vorn?`,
+    hashtags: ["#turtok", "#pokemon151", "#binderart", "#pokemonsammeln", "#binderplan"],
+  },
+
   feelinara: {
     titel: "Eine Karte, und die Seite drumherum",
     artworks: [],
@@ -1366,10 +1468,18 @@ if (!buch) throw new Error(`Kein Drehbuch „${name}". Bekannt: ${Object.keys(DR
  * zwischen den Rändern liegen 896 px — ab etwa 30 Zeichen bricht eine Zeile.
  * Am 11.09. stand deshalb „Das Set kommt am 16. September." dreizeilig im Reel.
  */
-const ZEICHEN_PX = 29.5, TEXT_PX = W - 88 - 96;
+/**
+ * Die Hook ist 86 px Bungee in Versalien und damit fast doppelt so breit wie
+ * eine Zwischenzeile — sie war von der Prüfung ausgenommen und brach deshalb
+ * unbemerkt um: am 14.09.2026 standen „ACHT LEERE FÄCHER." und „DASSELBE
+ * POKÉMON." dreizeilig im Bild. Gemessen passen rund 16 Zeichen, nicht die
+ * achtzehn aus dem Playbook.
+ */
+const ZEICHEN_PX = 29.5, HOOK_ZEICHEN_PX = 53, TEXT_PX = W - 88 - 96;
 for (const [i, c] of buch.clips.entries()) {
+  const breite = c.stil === "hook" ? HOOK_ZEICHEN_PX : ZEICHEN_PX;
   for (const zeile of (c.zeig ?? "").split("\n")) {
-    if (c.stil !== "hook" && zeile.length * ZEICHEN_PX > TEXT_PX) {
+    if (zeile.length * breite > TEXT_PX) {
       console.warn(`  ! Clip ${i}: „${zeile}" ist zu lang (${zeile.length} Zeichen) und bricht um.`);
     }
   }

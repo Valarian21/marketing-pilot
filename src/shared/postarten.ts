@@ -47,6 +47,7 @@ export const POST_ART_REIHE: readonly PostArt[] = ["A", "B", "C", "D", "E", "F",
  */
 export const DREHBUCH_ART: Record<string, PostArt> = {
   slab: "A", starter: "A", dreissig: "A", feelinara: "G",
+  bisaflor: "A", mauzigasse: "A", turtok: "A",
   neunfaecher: "F",
   pikachu: "B", preise: "B", futuristic: "B",
   aera: "C", exaera: "C",
@@ -67,6 +68,10 @@ export interface StueckFuerArt {
  * die Lücke auffällt und nicht als „A" durchgeht.
  */
 export function postArtOf(st: StueckFuerArt): PostArt {
+  // Ein Stück darf seine Sorte selbst nennen. Das brauchen Beiträge ohne
+  // Drehbuch und ohne Datenabfrage — ein Bildpost einer Kunstseite ist eine
+  // Binderseite (A), auch wenn sein Format „image" heißt.
+  if (isPostArt(st.meta["postArt"])) return st.meta["postArt"];
   const drehbuch = typeof st.meta["drehbuch"] === "string" ? st.meta["drehbuch"] : "";
   if (drehbuch && DREHBUCH_ART[drehbuch]) return DREHBUCH_ART[drehbuch]!;
   if (st.format === "story") return "S";

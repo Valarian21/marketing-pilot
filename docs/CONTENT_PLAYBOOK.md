@@ -84,7 +84,7 @@ erbt damit das Layout automatisch. Die Werte hier stehen im Code, nicht im Kopf.
 
 | Rolle | Schrift | Größe | Zeilen |
 |---|---|---|---|
-| Hook (Clip 1) | Bungee, Versalien | 86 px | 2, je ≤ 18 Zeichen |
+| Hook (Clip 1) | Bungee, Versalien | 86 px | 2, je ≤ **16** Zeichen |
 | Zwischenzeile | Archivo 800 | 62 px | 2, je ≤ 30 Zeichen |
 | Schluss (letzter Clip) | Archivo 800 | 72 px | 2, je ≤ 26 Zeichen |
 
@@ -93,6 +93,9 @@ erbt damit das Layout automatisch. Die Werte hier stehen im Code, nicht im Kopf.
 - Akzentfarbe ist das **Binderplan-Gelb `#F5C518`**, nicht das Blau: Blau über dunklen
   Bildern ist unsichtbar.
 - Das Skript warnt beim Bauen, wenn eine Zeile umbricht. Diese Warnung wird nicht ignoriert.
+  Bis zum 14.09.2026 prüfte es **die Hook nicht mit** — Bungee in Versalien ist fast doppelt so
+  breit wie eine Zwischenzeile, und „ACHT LEERE FÄCHER." (18 Zeichen) stand dreizeilig im Bild.
+  Gemessen passen 16 Zeichen, nicht die achtzehn, die hier vorher standen.
 - **Kennzeichnung** „Bild: KI · Karten: echt" läuft dauerhaft mit, außer das Reel zeigt
   ausschließlich echte Scans (`kennzeichnung: false`).
 
@@ -254,6 +257,9 @@ Eine einzelne Fassung ohne Basis geht weiter direkt:
 | `farbblau` | Neun Karten, ein Blau | G | Bildmotiv-Analyse, Ton 210° |
 | `farbgruen` | Dieselbe Idee in Grün | G | Bildmotiv-Analyse, Ton 130° |
 | `feelinara` | Eine Karte, und die Seite drumherum | G | Bildmotiv-Analyse, Anker cel30-153 |
+| `bisaflor` | Eine Karte, acht Lücken | A | Kunstseite `luFp3Ss3iCi_` |
+| `mauzigasse` | Ein Pokémon, drei Regionen | A | Kunstseite `oGTiqnIKyVjU` |
+| `turtok` | Oben Strand, unten Riff | A | Kunstseite `oW6p_fCa7CgP` |
 
 **Daten und Bilder für ein neues Drehbuch** holt `scripts/reel-daten.ts`: Es fragt den
 Produktkatalog ab, legt die Scans unter `assets/<projekt>/karten/` ab und gibt die
@@ -430,6 +436,16 @@ Für Post-Art A als Einzelbild. Aufbau von oben:
    14.09.2026 ein KI-Hinweis, der ersatzlos entfallen ist.
 
 Kein Logo oben *und* unten. Keine Rahmen um das Bild. Keine zweite Farbe außer Gelb.
+
+**Als Beitrag anlegen**, nicht nur als Datei: `scripts/stueck-anlegen.ts --plan <datei.json>`
+rendert den Bildpost und legt das Stück mit Kanal, Sorte, Text und Schlagworten an. Das reine
+Bild ohne Stück gibt `scripts/bildpost-seite.ts`; das Layout liegt für beide in
+`src/server/agents/studio/bildpost.ts`.
+
+**Pinterest ist eine Suchmaschine, kein Feed.** Dort beginnt die Beschreibung mit dem Motiv in
+Worten („Drei Vögel, eine Reihe: Arktos, Zapdos und Lavados …") und endet mit den Begriffen, unter
+denen jemand danach sucht — nicht mit einer Frage, und ohne ein einziges Hashtag. Das ist die
+einzige Stelle, an der die Regel „Zeile 1 = Hook, wortgleich" bewusst nicht gilt.
 
 ### Layout „Rangliste" (1080 × 1350)
 
