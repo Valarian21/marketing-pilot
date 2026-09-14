@@ -193,7 +193,11 @@ export async function sitzungBeenden(env: Env): Promise<void> {
 
 // --- Was ist zu planen? ----------------------------------------------------
 
-export type Auftrag = { pieceId: string; titel: string; text: string; video: string; geplantAm: string };
+export type Auftrag = {
+  pieceId: string; titel: string; text: string; video: string; geplantAm: string;
+  /** Titelkarte fuer das Cover — sonst nimmt TikTok das erste Bild, und das ist schwarz. */
+  cover: string | null;
+};
 
 /**
  * Der fertige Renderpfad eines Stücks — ohne mp4 kann nichts hochgeladen werden.
@@ -252,9 +256,38 @@ export function offeneAuftraege(db: Db, env: Env, projectId: string): { auftraeg
     if (!video) {
       uebersprungen.push(zeile("kein fertiges Video (Bild-Karussell bleibt Handarbeit)")); continue;
     }
-    auftraege.push({ pieceId: termin.pieceId, titel, text: stueck.body ?? "", video, geplantAm: String(termin.scheduledAt) });
+    auftraege.push({
+      pieceId: termin.pieceId, titel, text: stueck.body ?? "", video,
+      geplantAm: String(termin.scheduledAt), cover: coverPfad(db, env, termin.pieceId),
+    });
   }
   return { auftraege, uebersprungen };
+}
+
+/**
+ * Die Titelkarte eines Stuecks.
+ *
+ * Ohne Cover nimmt TikTok das erste Bild des Videos — und unsere Reels
+ * beginnen mit einem schwarzen Bild, die Titelkarte steht erst ab etwa 0,5 s.
+ * In der Beitragsliste sah das am 14.09. nach neun schwarzen Kacheln aus.
+ * Gibt es kein gerendertes `-thumb.png`, schneiden wir das Bild bei 1,0 s aus
+ * dem Video; dort steht die Karte sicher.
+ */
+function coverPfad(db: Db, env: Env, pieceId: string): string | null {
+  const stueck = db.select().from(t.mpContentPieces).where(eq(t.mpContentPieces.id, pieceId)).get();
+  let ids: string[] = [];
+  try { ids = JSON.parse(stueck?.assets ?? "[]") as string[]; } catch { ids = []; }
+  for (const assetId of ids) {
+    const asset = db.select().from(t.mpAssets).where(eq(t.mpAssets.id, assetId)).get();
+    if (!asset?.path?.endsWith("-thumb.png")) continue;
+    const voll = path.join(env.MP_DATA_DIR, asset.path);
+    if (fs.existsSync(voll)) return voll;
+  }
+  const video = videoPfad(db, env, pieceId);
+  if (!video) return null;
+  const ziel = path.join(logOrdner(env), `cover-${pieceId}.png`);
+  const r = spawnSync("ffmpeg", ["-y", "-ss", "1.0", "-i", video, "-frames:v", "1", "-q:v", "2", ziel, "-loglevel", "error"]);
+  return r.status === 0 && fs.existsSync(ziel) ? ziel : null;
 }
 
 // --- Der Lauf im Studio ----------------------------------------------------
@@ -313,6 +346,24 @@ async function einesPlanen(seite: Page, env: Env, auftrag: Auftrag, probe: boole
   }
   await seite.keyboard.press("Escape");
   await seite.waitForTimeout(1000);
+
+  // 3b. Coverbild setzen. Ohne das nimmt TikTok das erste Videobild — schwarz.
+  if (auftrag.cover) {
+    const coverKnopf = seite.getByText(/Cover bearbeiten|Edit cover/i).first();
+    if (await coverKnopf.count()) {
+      await coverKnopf.scrollIntoViewIfNeeded();
+      await coverKnopf.click();
+      await seite.waitForTimeout(3000);
+      await seite.locator('input[type="file"]').last().setInputFiles(auftrag.cover);
+      await seite.waitForTimeout(4500);
+      const speichern = seite.getByRole("button", { name: /^(Speichern|Save)$/ }).first();
+      if (await speichern.count()) { await speichern.click(); await seite.waitForTimeout(3000); }
+      else {
+        await schuss(seite, env, `fehler-${auftrag.pieceId}-cover`);
+        return zeile("fehler", "Cover ließ sich nicht speichern — Bildschirmfoto in tiktok-logs");
+      }
+    }
+  }
 
   // 4. Auf „Zeitplan" umschalten. Der Schalter heisst so — nicht
   //    „Terminieren", wie zuerst geraten (am 14.09. am Objekt nachgesehen).
