@@ -13,7 +13,7 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router";
 
-import { PLATTFORM_ALIAS, plattformName } from "../../shared/channels.js";
+import { PLATTFORM_ALIAS, plattformName, sichtbareZeichen } from "../../shared/channels.js";
 import { formatName, statusName } from "../../shared/labels.js";
 import { POST_ARTEN, type PostArt } from "../../shared/postarten.js";
 import { Button, Card, Pill } from "./ui.js";
@@ -40,15 +40,19 @@ export interface ThemenStueck {
  * Antippen zu sehen ist. Die Sichtgrenze ist der wichtigere Wert: Was dahinter
  * steht, liest im Feed niemand.
  */
-const GRENZEN: Record<string, { grenze: number; sicht: number; hinweis: string }> = {
-  instagram: { grenze: 2200, sicht: 125, hinweis: "Vor dem „mehr“ stehen rund 125 Zeichen." },
-  tiktok: { grenze: 2200, sicht: 100, hinweis: "Sichtbar sind etwa 100 Zeichen." },
-  youtube: { grenze: 1000, sicht: 100, hinweis: "Der Titel trägt, die Beschreibung liest kaum jemand." },
-  threads: { grenze: 500, sicht: 500, hinweis: "Kein Link — er kostet Reichweite." },
-  facebook: { grenze: 2200, sicht: 250, hinweis: "Die ersten Zeilen entscheiden." },
-  pinterest: { grenze: 500, sicht: 250, hinweis: "Beschreibung wird durchsucht — Begriffe hineinschreiben." },
+/** Die harte Grenze der Plattform und ein Satz dazu; die Sichtgrenze kommt aus `channels.ts`. */
+const GRENZEN: Record<string, { grenze: number; hinweis: string }> = {
+  instagram: { grenze: 2200, hinweis: "Vor dem „mehr“ stehen rund 125 Zeichen." },
+  tiktok: { grenze: 2200, hinweis: "Sichtbar sind etwa 100 Zeichen." },
+  youtube: { grenze: 1000, hinweis: "Der Titel trägt, die Beschreibung liest kaum jemand." },
+  threads: { grenze: 500, hinweis: "Kein Link — er kostet Reichweite." },
+  facebook: { grenze: 2200, hinweis: "Die ersten Zeilen entscheiden." },
+  pinterest: { grenze: 500, hinweis: "Beschreibung wird durchsucht — Begriffe hineinschreiben." },
 };
-const grenzeFuer = (p: string) => GRENZEN[p] ?? GRENZEN[PLATTFORM_ALIAS[p] ?? ""] ?? { grenze: 2200, sicht: 150, hinweis: "" };
+const grenzeFuer = (p: string) => ({
+  ...(GRENZEN[p] ?? GRENZEN[PLATTFORM_ALIAS[p] ?? ""] ?? { grenze: 2200, hinweis: "" }),
+  sicht: sichtbareZeichen(p),
+});
 
 const appName = (p: string) => plattformName(p);
 /** Kürzel für schmale Schirme — nebeneinander lesbar, statt dreimal untereinander. */

@@ -815,3 +815,29 @@ button, input { font: inherit; color: inherit; }
 .mp-table--schnitt { margin-bottom: 8px; }
 .mp-table--schnitt thead + tbody + thead th { padding-top: 10px; }
 .mp-balken-mini { display: inline-block; height: 8px; max-width: 70px; margin-right: 6px; vertical-align: middle; background: var(--mp-accent); opacity: .55; border-radius: 4px; }
+
+/* --- „In der App": der Beitrag im Format der Plattform ---------------------
+   Kein Nachbau der Oberfläche — nur Bildausschnitt, Reihenfolge und der
+   Schnitt, an dem die App „mehr" setzt. Alles andere altert mit dem nächsten
+   Layout-Wechsel der Plattform. */
+.mp-app { display: flex; flex-direction: column; gap: 0; max-width: 340px; margin: 0 auto; border: var(--mp-border); border-radius: 14px; overflow: hidden; background: var(--mp-surface); }
+.mp-app-kopf { display: flex; align-items: center; gap: 8px; padding: 8px 10px; }
+.mp-app-avatar { width: 28px; height: 28px; border-radius: 50%; flex: none; background: linear-gradient(135deg, var(--mp-accent), var(--mp-warn)); }
+.mp-app-wer { display: flex; flex-direction: column; line-height: 1.2; min-width: 0; }
+.mp-app-wer strong { font-size: var(--mp-text-sm); }
+.mp-app-buehne { position: relative; width: 100%; background: #0d0f12; display: flex; align-items: center; justify-content: center; }
+.mp-app-buehne--hoch { aspect-ratio: 9 / 16; }
+.mp-app-buehne video { width: 100%; height: 100%; object-fit: contain; display: block; }
+.mp-app-bild { display: block; width: 100%; height: 100%; padding: 0; border: 0; background: none; cursor: zoom-in; }
+.mp-app-bild img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.mp-app-pfeil { position: absolute; top: 50%; transform: translateY(-50%); width: 30px; height: 30px; border: 0; border-radius: 50%; cursor: pointer;
+  background: rgba(255, 255, 255, .82); color: #14161c; font-size: 20px; line-height: 1; display: flex; align-items: center; justify-content: center; }
+.mp-app-pfeil--links { left: 6px; } .mp-app-pfeil--rechts { right: 6px; }
+.mp-app-zaehler { position: absolute; top: 8px; right: 8px; padding: 2px 8px; border-radius: 999px; background: rgba(0, 0, 0, .6); color: #fff; font-size: var(--mp-text-xs); font-weight: 600; }
+.mp-app-punkte { display: flex; gap: 5px; justify-content: center; padding: 8px 0 2px; }
+.mp-app-punkte button { width: 6px; height: 6px; padding: 0; border: 0; border-radius: 50%; background: var(--mp-line); cursor: pointer; }
+.mp-app-punkte button.is-hier { background: var(--mp-accent); }
+.mp-app-text { padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 4px; }
+.mp-app-text p { margin: 0; font-size: var(--mp-text-sm); line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+.mp-app-text > .mp-linkbtn { align-self: flex-start; }
+.mp-lade-vorschau { padding-bottom: 14px; }

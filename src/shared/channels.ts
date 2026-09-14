@@ -253,6 +253,23 @@ export const captionZiel = (platform: string): number => CAPTION_ZIEL[platform.t
 /** Die erste Zeile ist alles, was ohne Antippen sichtbar ist. */
 export const HOOK_ZEICHEN = 60;
 
+/**
+ * Wie viel Text die App zeigt, bevor sie „mehr" setzt.
+ *
+ * Nicht zu verwechseln mit `PLATFORM_LIMITS` (was die Plattform *zulässt*) und
+ * `CAPTION_ZIEL` (was wir *anstreben*). Diese Zahl entscheidet, ob die Pointe
+ * gelesen wird: Auf Threads ist der ganze Beitrag sichtbar, auf Instagram
+ * enden 125 Zeichen mitten im zweiten Satz.
+ */
+export const SICHTBARE_ZEICHEN: Record<string, number> = {
+  instagram: 125, tiktok: 100, youtube: 100, shorts: 100,
+  threads: 500, facebook: 250, pinterest: 250, x: 280, bluesky: 300, linkedin: 210,
+};
+export const sichtbareZeichen = (platform: string): number => {
+  const k = platform.trim().toLowerCase();
+  return SICHTBARE_ZEICHEN[k] ?? SICHTBARE_ZEICHEN[PLATTFORM_ALIAS[k] ?? ""] ?? 150;
+};
+
 export function hashtagPolicy(platform: string): HashtagPolicy {
   return HASHTAG_POLICY[platform.trim().toLowerCase()] ?? DEFAULT_HASHTAG_POLICY;
 }

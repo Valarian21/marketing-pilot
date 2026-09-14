@@ -2,6 +2,14 @@
 
 Format: Datum · Entscheidung · Grund · Alternative, die verworfen wurde.
 
+## 2026-09-14 (Vorschau „In der App")
+
+- **Die Pipeline zeigt den Beitrag so, wie die App ihn zeigt** (`components/Appvorschau.tsx`): Reel im Hochformat mit Standbild, Carousel zum Durchblättern samt Zähler und Punkten, Einzelbild groß per Klick, Text ohne Bild als Beitrag. Vorher stand dort „⬇ Video" bzw. „⬇ Bild 1 ⬇ Bild 2" — wer sehen wollte, was rausgeht, musste jede Datei herunterladen. Der Wortlaut zum Kopieren bleibt im Paket darunter, jetzt eingeklappt.
+- **Kein Nachbau der Oberfläche.** Kein Herz, kein Kommentarfeld, kein fremdes Logo: Was zählt, ist Bildausschnitt, Reihenfolge und wie viel Text vor dem „mehr" steht. Alles andere altert, sobald eine Plattform ihr Layout ändert.
+- **Zwei Größen sind ein Beitrag.** Ein Carousel trägt oft 1080×1080 **und** 1080×1350 desselben Inhalts; die Vorschau zeigt nur eine Gruppe (die größere bei Gleichstand), sonst sähe es nach doppelt so vielen Slides aus.
+- **Gezeigt wird, was wirklich im Feed steht.** Der Pilot sendet `piece.body`; das Publish-Paket hängt für Handkanäle zusätzlich den Kurzlink an. Die erste Fassung der Vorschau nahm den Paket-Text und zeigte unter einem Threads-Beitrag eine Adresse, die dort nie steht. Automatische Kanäle sehen jetzt den Textkörper, Handkanäle den Text zum Kopieren.
+- `SICHTBARE_ZEICHEN` liegt jetzt in `shared/channels.ts` statt als Kopie in `Themen.tsx` — nicht zu verwechseln mit `PLATFORM_LIMITS` (was erlaubt ist) und `CAPTION_ZIEL` (was wir anstreben).
+
 ## 2026-09-14 (Redaktion der Woche 15.–20.09., Füllreihenfolge)
 
 - **Gefüllt wird tagweise, nicht sortenweise über alle Tage.** Erst die Wunschsorte des Tages, dann der Rest des Tages mit dem, was da ist. Grund: Über alle Tage hinweg zuerst die Sorten zu bedienen verhungert die nahe Woche — fünfzehn neue Threads-Texte legten zwei Wochen Pflicht-Slots voll, während Mittwoch und Donnerstag leer blieben. Ein Beitrag darf nicht über einen früheren Tag hinwegspringen.

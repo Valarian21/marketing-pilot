@@ -8,6 +8,7 @@ import { ProjectNav } from "../components/ProjectNav.js";
 import { ChannelTag, loadProfiles } from "../components/ChannelLink.js";
 import { STAGES, plattformName, stageAtLeast, type ChannelStage } from "../../shared/channels.js";
 import { POST_ARTEN, POST_ART_REIHE, WOCHENRHYTHMUS, wochentagOf, type PostArt } from "../../shared/postarten.js";
+import { Appvorschau } from "../components/Appvorschau.js";
 
 /**
  * Die Pipeline: je Kanal die Slots der nächsten Tage, und jeder Slot ist ein
@@ -328,6 +329,16 @@ function Lade({ sel, projectId, onClose, onChanged, onError }: { sel: Eintrag; p
         {k === "gelb" && !vonHand && <p className="mp-small mp-muted">Projektion: nach der Freigabe legt der Pilot das Stück auf den nächsten freien Slot — diesen, wenn vorher nichts anderes freigegeben wird.</p>}
       </Card>
 
+      {/* --- So sieht es in der App aus ------------------------------------- */}
+      {paket && (
+        <Card className="mp-lade-vorschau">
+          <div className="mp-card-head"><h2>In der App</h2>
+            <span className="mp-small mp-muted">{vonHand ? "Text wie im Paket zum Kopieren" : "genau das, was der Pilot sendet"}</span>
+          </div>
+          <Appvorschau paket={paket} automatisch={row.automatic} />
+        </Card>
+      )}
+
       {/* --- Das Paket: für Handkanäle die Arbeitsfläche, sonst zum Nachsehen -- */}
       {paket && (
         <Card className="mp-lade-paket">
@@ -342,7 +353,7 @@ function Lade({ sel, projectId, onClose, onChanged, onError }: { sel: Eintrag; p
           )}
           <div className="mp-lade-feld">
             <div className="mp-lade-feldkopf"><span className="mp-label">{platform === "youtube" ? "Beschreibung" : "Text"}</span><CopyButton text={tags ? `${rumpf}\n\n${tags}` : rumpf} label="Alles kopieren" variant="primary" /></div>
-            <pre className="mp-thema-body mp-lade-wert">{rumpf || "(kein Text)"}</pre>
+            <details className="mp-details"><summary className="mp-small mp-muted">Wortlaut ansehen</summary><pre className="mp-thema-body mp-lade-wert">{rumpf || "(kein Text)"}</pre></details>
           </div>
           {tags && (
             <div className="mp-lade-feld">
