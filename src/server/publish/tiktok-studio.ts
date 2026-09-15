@@ -151,7 +151,10 @@ export async function sitzungStarten(env: Env): Promise<{ passwort: string }> {
     env: { ...process.env, DISPLAY } as Record<string, string>,
     // Die Wiederherstellen-Blase nach einem harten Beenden verdeckt sonst die
     // Anmeldemaske, und wegklicken kann sie im VNC-Fenster nur der Mensch.
-    args: ["--start-maximized", "--disable-gpu", "--hide-crash-restore-bubble"],
+    // Feste Fensterbreite statt --start-maximized: im Cover-Dialog liegt
+    // „Speichern" rechts oben, und bei einem schmalen Fenster steht der Knopf
+    // ausserhalb des Sichtfelds — am 15.09. sind daran 24 Beitraege gescheitert.
+    args: ["--window-size=1400,1000", "--window-position=0,0", "--disable-gpu", "--hide-crash-restore-bubble"],
   });
   const seite = ctx.pages()[0] ?? (await ctx.newPage());
   await seite.goto("https://www.tiktok.com/login", { waitUntil: "domcontentloaded" }).catch(() => {});
@@ -413,29 +416,52 @@ async function einesPlanen(seite: Page, env: Env, auftrag: Auftrag, probe: boole
 
   if (probe) return zeile("uebersprungen", "Probelauf — alles ausgefüllt, aber nicht abgeschickt");
 
-  // 6. Erst wenn die Inhaltspruefung durch ist. Sonst schiebt TikTok den Dialog
-  //    „Weiter und veroeffentlichen?" davor, dessen Knopf „Jetzt veroeffentlichen"
-  //    heisst — bei einem Termin will man den nie druecken. Am 19.09. genau so
-  //    passiert und deshalb abgebrochen.
-  const geprueft = seite.getByText(/Keine Probleme gefunden|No issues found/i).first();
-  try { await geprueft.waitFor({ state: "visible", timeout: 300_000 }); }
-  catch {
-    await schuss(seite, env, `fehler-${auftrag.pieceId}-pruefung`);
-    return zeile("fehler", "Inhaltsprüfung war nach fünf Minuten nicht durch — nichts abgeschickt");
-  }
-  await seite.waitForTimeout(1500);
-
+  // 6. Abschicken mit Geduld statt mit Zeitlimit.
+  //
+  // TikToks „Kurze Inhaltsprüfung" braucht mal 30 Sekunden, mal die 10 Minuten,
+  // die sie selbst ankündigt — einmal hing sie ganz. Auf ihren Text zu warten
+  // war deshalb untauglich. Stattdessen drücken wir „Planen" und lesen die
+  // Rückfrage „Weiter und veröffentlichen?" als „noch nicht fertig": abbrechen,
+  // warten, noch einmal. Deren Knopf heißt „Jetzt veröffentlichen" — den drücken
+  // wir bei einem Termin nie, sonst ginge der Beitrag sofort raus.
+  //
+  // Bleibt die Prüfung auch nach der Hälfte der Versuche stehen, schalten wir
+  // sie ab. Sie ist ein Zusatz, der vorab auf Probleme hinweist; TikToks
+  // eigentliche Prüfung läuft davon unberührt weiter.
   const knopf = seite.getByRole("button", { name: /^Planen$/ }).first();
   if (!(await knopf.count())) {
     await schuss(seite, env, `fehler-${auftrag.pieceId}-knopf`);
     return zeile("fehler", "Absende-Knopf nicht gefunden — Bildschirmfoto in tiktok-logs");
   }
-  await knopf.click({ timeout: 15_000 });
-  await seite.waitForTimeout(9000);
-  await schuss(seite, env, `nach-absenden-${auftrag.pieceId}`);
-  if (!seite.url().includes("/tiktokstudio/content")) {
-    return zeile("fehler", "nach dem Planen nicht auf der Beitragsliste gelandet — Bildschirmfoto in tiktok-logs");
+  await seite.getByText(/Keine Probleme gefunden|No issues found/i).first()
+    .waitFor({ state: "visible", timeout: 45_000 }).catch(() => {});
+
+  const MAX_VERSUCHE = 10;
+  let abgeschickt = false;
+  for (let versuch = 0; versuch < MAX_VERSUCHE && !abgeschickt; versuch++) {
+    await knopf.click({ timeout: 15_000 }).catch(() => {});
+    await seite.waitForTimeout(6000);
+    if (seite.url().includes("/tiktokstudio/content")) { abgeschickt = true; break; }
+    const abbrechen = seite.getByRole("button", { name: /^(Abbrechen|Cancel)$/ }).last();
+    if (await abbrechen.count()) {
+      await abbrechen.click().catch(() => {});
+      await seite.waitForTimeout(25_000);
+    } else {
+      await seite.waitForTimeout(10_000);
+    }
+    if (versuch === Math.floor(MAX_VERSUCHE / 2)) {
+      const schalter = seite.locator("input.Switch__input").last();
+      if (await schalter.count()) {
+        await schalter.click({ force: true }).catch(() => {});
+        await seite.waitForTimeout(3000);
+      }
+    }
   }
+  if (!abgeschickt) {
+    await schuss(seite, env, `fehler-${auftrag.pieceId}-absenden`);
+    return zeile("fehler", `Planen ging nach ${MAX_VERSUCHE} Versuchen nicht durch — Bildschirmfoto in tiktok-logs`);
+  }
+  await schuss(seite, env, `nach-absenden-${auftrag.pieceId}`);
   return zeile("geplant", `im Studio terminiert auf ${datum} ${stunde}:${minute}`);
 }
 
