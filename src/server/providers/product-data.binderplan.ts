@@ -359,7 +359,41 @@ export class BinderplanProvider implements ProductDataProvider {
       if (!rows.length) throw new Error(`Kein Kartenbestand fuer Illustrator: ${q.scope.illustrator}`);
       return { rows, label: q.scope.illustrator, labelEn: q.scope.illustrator, sub: `Illustrator · ${rows.length} Karten`, subEn: `Illustrator · ${rows.length} cards`, official: 0 };
     }
-    throw new Error("Bereich fehlt: set, era oder illustrator angeben.");
+    if (q.scope.rarity) {
+      const region = q.scope.region ?? "intl";
+      // Seltenheiten stehen im Katalog in Langform ("Special Illustration Rare").
+      // Verglichen wird ohne Gross-/Kleinschreibung, damit "special illustration
+      // rare" auf der Kommandozeile genuegt.
+      const rows = this.sqlite.prepare(
+        `${select} WHERE lower(cards.rarity) = lower(?) AND cards.set_id IN (SELECT id FROM sets WHERE region = ?)`,
+      ).all(q.scope.rarity, region) as CardRow[];
+      if (!rows.length) throw new Error(`Kein Kartenbestand fuer Seltenheit: ${q.scope.rarity}`);
+      const sets = new Set(rows.map((r) => r.set_id)).size;
+      return {
+        rows, label: q.scope.rarity, labelEn: q.scope.rarity,
+        sub: `Seltenheit · ${sets} Sets · ${rows.length} Karten`,
+        subEn: `Rarity · ${sets} sets · ${rows.length} cards`, official: 0,
+      };
+    }
+    if (q.scope.pokemon) {
+      const region = q.scope.region ?? "intl";
+      // Ein Pokemon traegt viele Kartennamen: "Glurak ex", "M-Glurak-EX",
+      // "Gluraks Feuersturm". Gesucht wird deshalb als Wortanfang in beiden
+      // Sprachen — eine reine Gleichheit faende nur die Grundform.
+      const muster = `%${q.scope.pokemon}%`;
+      const rows = this.sqlite.prepare(
+        `${select} WHERE (cards.name_de LIKE ? OR cards.name_en LIKE ?)
+           AND cards.set_id IN (SELECT id FROM sets WHERE region = ?)`,
+      ).all(muster, muster, region) as CardRow[];
+      if (!rows.length) throw new Error(`Kein Kartenbestand fuer Pokemon: ${q.scope.pokemon}`);
+      const sets = new Set(rows.map((r) => r.set_id)).size;
+      return {
+        rows, label: q.scope.pokemon, labelEn: q.scope.pokemon,
+        sub: `${rows.length} Karten aus ${sets} Sets`,
+        subEn: `${rows.length} cards from ${sets} sets`, official: 0,
+      };
+    }
+    throw new Error("Bereich fehlt: set, era, illustrator, rarity oder pokemon angeben.");
   }
 
   /**

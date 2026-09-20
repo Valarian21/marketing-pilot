@@ -11,3 +11,5 @@ assets/music/*
 
 # Marken fertiger Reel-Bauläufe (bauen-alle.sh)
 .bau-fertig/
+# Etappenmarken der Bauskripte (bauen-*.sh) — reine Laufzeitspuren.
+.bau-*/

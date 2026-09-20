@@ -62,7 +62,7 @@ export interface RankedCard {
 
 export interface TopCardsQuery {
   /** Genau eines von `set`, `era` oder `illustrator` fuellt den Bereich. */
-  scope: { set?: string; era?: string; illustrator?: string; region?: "intl" | "jp" };
+  scope: { set?: string; era?: string; illustrator?: string; rarity?: string; pokemon?: string; region?: "intl" | "jp" };
   n: number;
   priceBasis?: PriceBasis;
   minPrice?: number;

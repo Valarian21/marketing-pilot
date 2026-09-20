@@ -57,14 +57,31 @@ if (!basisAsset) throw new Error(`Kein Video an der Basis ${basis.id}`);
 const basisDatei = path.join(env.MP_DATA_DIR, basisAsset.path);
 console.log(`Basis: ${basis.title} (${(Number(basisMeta["dauerMs"] ?? 0) / 1000).toFixed(1)} s)`);
 
+/**
+ * `--ersetzen` aktualisiert die vorhandene Fassung, statt eine neue anzulegen.
+ *
+ * Wichtig, sobald ein Stück im Kalender steht: Ein neues Stück hieße, dass der
+ * geplante Termin weiter auf die alte Datei zeigt. So bleibt die Planung heil
+ * und bekommt trotzdem das neue Video.
+ */
+const ersetzen = process.argv.includes("--ersetzen");
+const vorhandene = db.select().from(t.mpContentPieces).where(eq(t.mpContentPieces.projectId, PROJEKT)).all();
+
 for (const plattform of ziele) {
   if (!SITZE[plattform]) throw new Error(`Keine Plattform „${plattform}"`);
-  const pieceId = newId();
+  const alteFassung = ersetzen ? vorhandene
+    .filter((p) => { const m = parseJson<Record<string, unknown>>(p.meta, {});
+      return m["drehbuch"] === drehbuch && m["platform"] === plattform && m["basis"] !== true && p.status !== "rejected"; })
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0] : undefined;
+  const pieceId = alteFassung?.id ?? newId();
   const outDir = path.join(env.MP_DATA_DIR, "assets", PROJEKT, "pieces", pieceId);
   fs.mkdirSync(outDir, { recursive: true });
 
   const pille = path.join(outDir, "folgen.png");
-  await playwrightRenderer([{ html: folgenHtml(akzent, plattform), width: W, height: H, transparent: true, file: pille }]);
+  // Formate mit Text unter dem Bild geben einen Versatz mit — sonst läge die
+  // Pille dort mitten im Motiv statt beim Text.
+  const versatz = Number(basisMeta["folgenVersatz"] ?? 0);
+  await playwrightRenderer([{ html: folgenHtml(akzent, plattform, versatz), width: W, height: H, transparent: true, file: pille }]);
 
   const reel = path.join(outDir, "reel.mp4");
   if (zeit) {
@@ -74,7 +91,11 @@ for (const plattform of ziele) {
       `[1:v]format=rgba,setsar=1[p];[0:v][p]overlay=0:0:eof_action=pass:enable='between(t,${s3(zeit.startMs)},${s3(zeit.endMs)})'[v]`,
       "-map", "[v]", "-map", "0:a", "-c:a", "copy",
       "-c:v", "libx264", "-preset", "medium", "-crf", "20", "-pix_fmt", "yuv420p", "-movflags", "+faststart",
-      "-metadata", "comment=AI-generated: true (Binderplan Kunstseite, Marketing Pilot)",
+      // Die Kennzeichnung in den Dateidaten gilt nur, wenn im Bild wirklich etwas
+      // Gemaltes steckt. Eine Rangliste aus echten Scans als „AI-generated" zu
+      // markieren wäre schlicht falsch — und die Apps lesen das aus.
+      ...(basisMeta["kiBild"] === false ? []
+        : ["-metadata", "comment=AI-generated: true (Binderplan Kunstseite, Marketing Pilot)"]),
       "-metadata", `title=${basis.title}`, "-y", reel]);
   } else {
     fs.copyFileSync(basisDatei, reel);
@@ -91,7 +112,18 @@ for (const plattform of ziele) {
 
   const ts = nowIso();
   const assetId = newId();
-  db.insert(t.mpContentPieces).values({
+  if (alteFassung) {
+    // Nur Video und Text erneuern; Status und Termin des Stücks bleiben.
+    db.update(t.mpContentPieces).set({
+      body: `${caption}\n\n${hashtags.join(" ")}`, assets: toJson([assetId]),
+      meta: toJson({ ...parseJson<Record<string, unknown>>(alteFassung.meta, {}), ...basisMeta,
+        platform: plattform, caption, hashtags, basis: false, ausBasis: basis.id }),
+      updatedAt: ts,
+    }).where(eq(t.mpContentPieces.id, pieceId)).run();
+    for (const a of db.select().from(t.mpAssets).all().filter((a2) => a2.contentPieceId === pieceId)) {
+      db.delete(t.mpAssets).where(eq(t.mpAssets.id, a.id)).run();
+    }
+  } else db.insert(t.mpContentPieces).values({
     id: pieceId, projectId: PROJEKT, taskId: null, channel: KANAL[plattform], format: "artwork_reel",
     title: `${basis.title.replace(/ · \w+$/, "")} · ${plattform}`,
     body: `${caption}\n\n${hashtags.join(" ")}`,
@@ -106,5 +138,5 @@ for (const plattform of ziele) {
     meta: toJson({ aiGenerated: true, provenance: "reel-plattformen", drehbuch, plattform, size: `${W}x${H}` }),
     createdAt: ts,
   }).run();
-  console.log(`  ${plattform.padEnd(10)} → ${path.relative(env.MP_DATA_DIR, reel)}`);
+  console.log(`  ${plattform.padEnd(10)} ${alteFassung ? "aktualisiert" : "neu       "} → ${path.relative(env.MP_DATA_DIR, reel)}`);
 }

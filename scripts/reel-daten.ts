@@ -11,6 +11,8 @@
  *   --bereich set:cel30        Top-Karten eines Sets
  *   --bereich era:klassik      Top-Karten einer Ära
  *   --bereich illu:"Mitsuhiro Arita"
+ *   --bereich rar:"Special Illustration Rare"
+ *   --bereich poke:Glurak     Top-Karten eines Pokemon
  *   --pokemon Rayquaza         alle Karten eines Pokémon mit Preis, nach Ära
  *
  * `--n 9` setzt die Anzahl, `--basis avg30` die Preisgrundlage (Vorgabe: der
@@ -67,7 +69,12 @@ const basis = (arg("--basis") ?? "avg30") as "avg30" | "max" | "holo" | "normal"
 if (bereich) {
   const [art, ...rest] = bereich.split(":");
   const wert = rest.join(":");
-  const scope = art === "set" ? { set: wert } : art === "era" ? { era: wert } : { illustrator: wert };
+  const scope = art === "set" ? { set: wert }
+    : art === "era" ? { era: wert }
+    : art === "illu" ? { illustrator: wert }
+    : art === "rar" ? { rarity: wert }
+    : art === "poke" ? { pokemon: wert }
+    : { illustrator: wert };
   const res = await daten.topCards({ scope, n, priceBasis: basis });
   console.log(`\n${res.scopeLabel} — ${res.scopeSub}`);
   console.log(`Preisstand ${res.priceStand}, Summe ${eur(res.totalEur)}`);

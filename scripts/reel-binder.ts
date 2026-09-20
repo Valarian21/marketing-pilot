@@ -87,12 +87,34 @@ type Bild =
       /** Radius in px: das ganze Blatt samt Schildern unscharf — fuer den Teaser. */
       unscharf?: number;
       /** Dateiname unter assets/<projekt>/marke/ — liegt als Ebene ueber dem Blatt. */
-      logo?: string };
+      logo?: string }
+  /**
+   * Eine einzelne Karte auf farbigem Grund, ohne Binderseite — fuer Karten, von
+   * denen es noch kein Bild gibt (RGB-Mew). `seite` sagt, welche Flaeche vorn
+   * liegt: die echte Rueckseite oder die Platzhalter-Vorderseite.
+   */
+  | { art: "rgb"; farbe: RgbFarbe; seite: "rueck" | "vorn"; logo?: string; beleg?: string }
+  /** Alle drei nebeneinander, leicht gefaechert — das Schlussbild. */
+  | { art: "rgbdrei"; logo?: string }
+  /**
+   * Ein Beleg allein, gross auf Schwarz — der Blitz vor der Hook. Ein
+   * Ausschnitt aus einem eBay-Screenshot (Datei unter assets/<projekt>/belege/),
+   * nur die Textspalte: Datum, Titel, Preis, Herkunft. Keine Fremdfotos, keine
+   * Namen.
+   */
+  | { art: "beleg"; datei: string };
 
 type Clip =
   | { art: "fahrt"; seite: string; vonFach: number; bisFach: number; dauerMs: number; haltMs?: number; zeig?: string; stil?: Stil }
   | { art: "stand"; bild: Bild; dauerMs: number; zeig?: string; stil?: Stil }
   | { art: "wandel"; von: Bild; bis: Bild; haltMs: number; dauerMs: number; zeig?: string; stil?: Stil }
+  /**
+   * Eine Karte liegt mit der Rueckseite oben, wirbelt herum und bleibt auf der
+   * Vorderseite stehen. `haltMs` steht die Rueckseite, `wirbelMs` dreht sie,
+   * den Rest steht die Vorderseite.
+   */
+  | { art: "flip"; farbe: RgbFarbe; haltMs?: number; wirbelMs?: number;
+      dauerMs: number; zeig?: string; stil?: Stil }
   /** Das Blatt fuellt sich Karte fuer Karte — ein Bild je Schritt. */
   | { art: "fuellung"; karten: string[]; bis: number; spalten?: number; zeilen?: number;
       preise?: (string | null)[]; namen?: (string | null)[];
@@ -102,6 +124,14 @@ interface Drehbuch {
   titel: string;
   /** Kunstseiten-Ids in Binderplan, für die Herkunft im Stück. */
   artworks: string[];
+  /**
+   * Set-Logo, das über dem ganzen Stück steht (Dateiname unter `marke/`).
+   *
+   * Pflicht, sobald ein Beitrag über ein bestimmtes Set spricht — es beantwortet
+   * die häufigste Kommentarfrage („aus welchem Set?") im Bild. Siehe Playbook,
+   * Abschnitt 2. TCGdex liefert keine Set-Logos, die Datei kommt von Hand dazu.
+   */
+  setLogo?: string;
   clips: Clip[];
   caption: string;
   /**
@@ -137,6 +167,237 @@ const BLENDE_MS = 900;
  * verkleinert — ein Fach ist im Reel höchstens 288 px breit).
  */
 const PIKACHU = Array.from({ length: 30 }, (_, i) => `cel30-${String(23 + i).padStart(3, "0")}`);
+
+// --- RGB-Mew: drei Karten, die noch niemand gesehen hat -----------------------
+//
+// Im 30th Celebration stecken drei Mew in Rot, Grün und Blau — die Farben der
+// Spiele von 1996. Sie standen in keiner Ankündigung und in keinem ETB-Guide,
+// und es gibt **keinen Scan**: weder bei TCGdex noch bei Serebii, und im
+// Produkt tragen `cel30-RGB1..RGB3` seit dem 16.09.2026 einen Eintrag ohne Bild.
+//
+// Genau das trägt das Reel. Die Karte liegt mit der Rückseite oben, wirbelt
+// herum — und was zum Vorschein kommt, ist eine Silhouette auf farbigem Grund,
+// sichtbar als Platzhalter („noch kein Bild"), nicht als Karte.
+//
+// **Ein erfundenes Kartenbild wäre hier der einzige echte Fehler.** Wer eine
+// gemalte Vorderseite zeigt, behauptet „so sieht sie aus"; die Nische prüft das
+// in Minuten gegen die Kataloge, und der Fachlichkeits-Test im Playbook ist
+// genau dafür da. Die Silhouette sagt dieselbe Sache ehrlich — und ist als
+// Bildsprache in der Nische ohnehin besetzt: so sieht „noch nicht enthüllt" aus.
+type RgbFarbe = "rot" | "gruen" | "blau";
+/**
+ * Die Scans liegen unter `assets/<projekt>/karten/` und kommen aus derselben
+ * Quelle wie das ganze Vorab-Set: Serebii. Im Produkt stehen sie in
+ * cards.image_alt — nicht in image_de/image_en, die sind fuer cel30 leer, weil
+ * TCGdex das Set noch nicht fuehrt. Wer dort nachsieht, haelt die Karten
+ * faelschlich fuer bildlos (am 16.09.2026 genau so passiert).
+ *
+ * `nr` ist das Seltenheitskuerzel von der Karte selbst; `hell` und `dunkel`
+ * faerben ausserdem den Rauch hinter ihr.
+ */
+const RGB: Record<RgbFarbe, { hell: string; mitte: string; dunkel: string; wort: string; nr: string;
+                              karte: string }> = {
+  rot:   { hell: "#FF6A5A", mitte: "#C41E23", dunkel: "#2E050A", wort: "Rot",  nr: "R/RGB", karte: "cel30-rgb1" },
+  gruen: { hell: "#5BE08E", mitte: "#128A4C", dunkel: "#042C18", wort: "Grün", nr: "G/RGB", karte: "cel30-rgb2" },
+  blau:  { hell: "#6FA4FF", mitte: "#2450C4", dunkel: "#07153E", wort: "Blau", nr: "B/RGB", karte: "cel30-rgb3" },
+};
+
+/** Kartenmaß 63 × 88 mm, wie überall im Stück — hier als Einzelkarte. */
+const KARTE_B = 640, KARTE_H = Math.round((KARTE_B * 88) / 63);
+/**
+ * 410 statt der ersten 370: Beim Wirbeln kippt und wächst die Karte, und ihre
+ * obere Ecke lief dabei durch das Set-Logo. Mit 410 px bleibt bei 10° Neigung
+ * und 10 % Zuwachs ein Rest Abstand — und das Logo liegt zusätzlich darüber.
+ */
+const KARTE_X = Math.round((W - KARTE_B) / 2), KARTE_Y = 410;
+
+/**
+ * Der Wirbel: anderthalb Umdrehungen, die auf der Vorderseite einrasten.
+ *
+ * Start ist 180° (Rückseite vorn), der Weg **540°** — Ziel also 720°, ein
+ * Vielfaches von 360 und damit die Vorderseite.
+ *
+ * **Der Weg muss ein ungerades Vielfaches von 180° sein.** Am 16.09.2026 stand
+ * hier 720°: Die Drehung endete rechnerisch wieder auf der Rückseite, und das
+ * Standbild danach zeigte die Vorderseite — im Video sah das aus wie ein
+ * Schnitt, nach dem die Karte plötzlich richtig herum liegt. Wer die Zahl
+ * ändert, prüft (180 + Weg) mod 360 === 0.
+ *
+ * **Wie viel Drehung je Bild geht, ist eine gemessene Grenze.** Wir rendern
+ * ohne Bewegungsunschärfe: Was sich zwischen zwei Bildern um mehr als etwa 45°
+ * dreht, springt sichtbar, statt zu wirbeln. 540° auf 1,1 s (27 Bilder) liegen
+ * am schnellsten Punkt bei rund 39°.
+ *
+ * Die Kurve ist `smootherstep` (6p⁵ − 15p⁴ + 10p³). Entscheidend ist ihr Ende:
+ * Dort sind Geschwindigkeit **und** Beschleunigung null, die letzten Bilder
+ * rücken also nur noch um Bruchteile eines Grades weiter — die Karte kommt zur
+ * Ruhe, statt anzuhalten. Gemessen am 16.09.2026: Mit `smoothstep` lag der
+ * letzte Schritt noch bei 6,3°, mit `smootherstep` bei 0,4°.
+ *
+ * Ihre Spitze liegt beim 1,875-fachen des Durchschnitts (37,5° je Bild) und
+ * damit unter der 45°-Grenze. Eine kubische Ease-in-out-Kurve wäre dreimal so
+ * schnell wie der Schnitt (57,8° je Bild) und würde in der Mitte springen; eine
+ * reine Ease-out-Kurve legte zwei Drittel des Wegs im ersten Drittel der Zeit
+ * zurück und stand danach fast still.
+ *
+ * Kippen und Wachsen laufen als **quadratischer** Sinus mit: Er geht am Ende
+ * schneller auf null als ein einfacher, und genau darauf kommt es an — das
+ * letzte gerechnete Bild liegt bei p = 26/27, und mit `sin` wäre die Karte dort
+ * noch gut 1° gekippt, während das Standbild danach gerade steht. Sichtbar wäre
+ * das als kleiner Ruck am Schluss. Quadriert bleiben davon 0,13°.
+ */
+const flipLage = (p: number) => {
+  const e = p * p * p * (p * (6 * p - 15) + 10);
+  const schwung = Math.sin(p * Math.PI) ** 2;
+  return { drehung: 180 + 540 * e, neigung: schwung * 14, groesse: 1 + 0.14 * schwung };
+};
+
+/** Die beiden Flächen der Karte — beide echt: Rückseite und Scan. */
+function rgbFlaechenHtml(farbe: RgbFarbe): string {
+  return `<div class="flaeche rueck"></div>
+    <div class="flaeche vorn" style="background-image:${kartenUrl(RGB[farbe].karte)}"></div>`;
+}
+
+/** Grund, Logo und die Karte(n) — eine Bühne ohne Binderseite. */
+/**
+ * Der Grund — Farbverlauf und Lichtkegel, ohne Karte.
+ *
+ * Er ist vom Vordergrund getrennt, weil der Rauch dazwischen liegt: ffmpeg legt
+ * über diesen Grund zwei ziehende Rauchebenen und erst darüber die Karten
+ * (siehe `rgbClipFilter`). Als ein Bild gerendert ginge das nicht — der Rauch
+ * würde über der Karte liegen oder gar nicht ziehen.
+ */
+function rgbGrundHtml(farbe: RgbFarbe | "drei"): string {
+  const f = farbe === "drei" ? RGB.rot : RGB[farbe];
+  const grund = farbe === "drei"
+    // Alle drei Farben: Auf einem roten Grund sähe die blaue Karte aus, als
+    // gehörte sie nicht dazu.
+    ? `radial-gradient(circle at 18% 44%,${RGB.rot.mitte}dd 0%,transparent 48%),`
+      + `radial-gradient(circle at 50% 38%,${RGB.gruen.mitte}dd 0%,transparent 46%),`
+      + `radial-gradient(circle at 82% 44%,${RGB.blau.mitte}dd 0%,transparent 48%),`
+      + `radial-gradient(circle at 50% 52%,#15192480 0%,#05060A 78%)`
+    : `radial-gradient(circle at 50% 38%,${f.mitte} 0%,${f.dunkel} 54%,#05060A 100%)`;
+  const schein = farbe === "drei" ? "" :
+    `<div class="schein" style="background:radial-gradient(ellipse at center,${f.hell}66 0%,transparent 66%)"></div>`;
+  return `<!doctype html><html><head><meta charset="utf-8"><style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    html,body{width:${W}px;height:${H}px;background:#05060A;overflow:hidden}
+    .grund{position:absolute;inset:0;background:${grund}}
+    .schein{position:absolute;left:50%;top:${KARTE_Y - 80}px;width:960px;height:1080px;margin-left:-480px;
+            filter:blur(30px)}
+  </style></head><body><div class="grund"></div>${schein}</body></html>`;
+}
+
+/**
+ * Karten und Set-Logo — auf durchsichtigem Grund, damit der Rauch darunter zieht.
+ */
+function rgbBuehneHtml(inhalt: string, logo?: string): string {
+  const logoEbene = logo ? `<div class="setlogo" style="background-image:${markeUrl(logo)}"></div>` : "";
+  return `<!doctype html><html><head><meta charset="utf-8">${fontHead()}<style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    html,body{width:${W}px;height:${H}px;background:transparent;overflow:hidden}
+    /* Das Logo liegt über der Bühne: eine wirbelnde Karte darf davor nicht
+       herlaufen — es ist die Auskunft, um welches Set es geht. */
+    .setlogo{position:absolute;z-index:5;left:50%;transform:translateX(-50%);top:60px;width:44%;
+             aspect-ratio:2173/1200;background-size:contain;background-repeat:no-repeat;background-position:center;
+             filter:drop-shadow(0 10px 26px rgba(0,0,0,.75)) drop-shadow(0 2px 5px rgba(0,0,0,.6))}
+    .buehne{position:absolute;inset:0;perspective:1800px}
+    /* Kein Filter auf der Karte: er würde preserve-3d aufheben und beide
+       Flächen gleichzeitig zeigen. Der Schatten sitzt deshalb an der Fläche. */
+    .karte{position:absolute;transform-style:preserve-3d}
+    .flaeche{position:absolute;inset:0;backface-visibility:hidden;border-radius:26px;overflow:hidden;
+             background-size:cover;background-position:center;
+             box-shadow:0 34px 70px rgba(0,0,0,.65), 0 0 0 2px rgba(0,0,0,.45)}
+    .rueck{transform:rotateY(180deg);background-image:${kartenUrl(RUECK)}}${BELEG_CSS}
+  </style></head><body><div class="buehne">${inhalt}</div>${logoEbene}</body></html>`;
+}
+
+/**
+ * Der Beleg: ein Screenshot-Ausschnitt wie ein angepinnter Kassenzettel — weisser
+ * Rand, leicht schraeg, rechts ueber der Karte.
+ *
+ * Er sitzt rechts in der Mitte (x 520, y 700), nicht unten: Unten links steht
+ * der Text, und der reicht bei zwei Zeilen bis etwa y 1270 hoch — ein Zettel
+ * dort haette die Zeile verdeckt. So ueberlappt er die rechte Kartenhaelfte,
+ * und genau das soll er: Beleg auf der Karte, nicht neben ihr.
+ */
+const BELEG_CSS = `
+    .beleg{position:absolute;z-index:4;background:#fff;padding:10px;border-radius:16px;
+           box-shadow:0 30px 60px rgba(0,0,0,.65), 0 4px 10px rgba(0,0,0,.4)}
+    .beleg img{display:block;width:100%;height:auto;border-radius:8px}
+    .beleg.klein{left:520px;top:700px;width:520px;transform:rotate(-3deg)}
+    .beleg.gross{left:50%;top:50%;width:980px;transform:translate(-50%,-50%) rotate(-1.5deg)}`;
+function belegHtml(datei: string, lage: "klein" | "gross"): string {
+  return `<div class="beleg ${lage}"><img src="${belegUrl(datei)}"></div>`;
+}
+
+/** Ein Standbild: Rückseite oben oder Vorderseite oben, wahlweise mit Beleg. */
+function rgbBildHtml(farbe: RgbFarbe, seite: "rueck" | "vorn", logo?: string, beleg?: string): string {
+  const grad = seite === "rueck" ? 180 : 0;
+  return rgbBuehneHtml(
+    `<div class="karte" style="left:${KARTE_X}px;top:${KARTE_Y}px;width:${KARTE_B}px;height:${KARTE_H}px;
+        transform:rotateY(${grad}deg)">${rgbFlaechenHtml(farbe)}</div>` +
+    (beleg ? belegHtml(beleg, "klein") : ""), logo);
+}
+
+/** Der Blitz: nur der Beleg, gross, auf Schwarz — kein Logo, kein Rauch. */
+function blitzHtml(datei: string): string {
+  return `<!doctype html><html><head><meta charset="utf-8"><style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    html,body{width:${W}px;height:${H}px;background:#050609;overflow:hidden}${BELEG_CSS}
+  </style></head><body>${belegHtml(datei, "gross")}</body></html>`;
+}
+
+/** Ein einzelnes Bild des Wirbels. */
+function rgbFlipHtml(farbe: RgbFarbe, p: number, logo?: string): string {
+  const l = flipLage(p);
+  return rgbBuehneHtml(
+    `<div class="karte" style="left:${KARTE_X}px;top:${KARTE_Y}px;width:${KARTE_B}px;height:${KARTE_H}px;
+        transform:rotateY(${l.drehung.toFixed(2)}deg) rotateZ(${l.neigung.toFixed(2)}deg) scale(${l.groesse.toFixed(4)})">
+        ${rgbFlaechenHtml(farbe)}</div>`, logo);
+}
+
+/** Das Schlussbild: alle drei nebeneinander, leicht gefächert. */
+function rgbDreiHtml(logo?: string): string {
+  const B = 320, HK = Math.round((B * 88) / 63), Y = 700, LUECKE = 22;
+  const gesamt = 3 * B + 2 * LUECKE, x0 = Math.round((W - gesamt) / 2);
+  const karten = (["rot", "gruen", "blau"] as RgbFarbe[]).map((farbe, i) =>
+    `<div class="karte" style="left:${x0 + i * (B + LUECKE)}px;top:${Y + (i === 1 ? -34 : 0)}px;width:${B}px;height:${HK}px;
+        transform:rotateZ(${[-8, 0, 8][i]}deg)">${rgbFlaechenHtml(farbe)}</div>`).join("");
+  return rgbBuehneHtml(karten, logo);
+}
+
+/**
+ * Die Rauchtextur: einmal gerendert, dann von ffmpeg bewegt.
+ *
+ * `feTurbulence` erzeugt Perlin-Rauschen — dasselbe, woraus jedes Wolkenbild
+ * gemacht ist. Die Werte sind am 16.09.2026 aus drei Proben gewählt: Bei
+ * `baseFrequency` 0.0016 blieb ein weicher Farbnebel ohne erkennbare Schwaden,
+ * bei 0.0070 wurde er körnig und unruhig. 0.0040/0.0055 mit vier Oktaven gibt
+ * große Ballen mit Rand; der Kontrast dazwischen kommt aus der Gammakurve.
+ *
+ * Sie ist deutlich größer als das Bild (2040 × 3000 gegen 1080 × 1920): ffmpeg
+ * schneidet daraus ein wanderndes Fenster, und der Weg darf nie über den Rand
+ * laufen. Die erste Fassung war 1560 × 2480 und ließ nur ±180 px Weg zu — der
+ * Rauch bewegte sich dann so wenig, dass zwischen zwei Bildern kaum 8.000 Pixel
+ * überhaupt eine andere Helligkeit hatten. Sichtbar ist das nicht.
+ */
+const RAUCH_B = 2040, RAUCH_H = 3000;
+function rauchHtml(): string {
+  return `<!doctype html><html><head><meta charset="utf-8"><style>
+    *{margin:0;padding:0} html,body{width:${RAUCH_B}px;height:${RAUCH_H}px;background:#000;overflow:hidden}
+  </style></head><body>
+    <svg width="${RAUCH_B}" height="${RAUCH_H}" xmlns="http://www.w3.org/2000/svg">
+      <filter id="rauch" x="0" y="0" width="100%" height="100%">
+        <feTurbulence type="fractalNoise" baseFrequency="0.0040 0.0055" numOctaves="4" seed="30"/>
+        <feColorMatrix type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  1 0 0 0 0"/>
+        <feComponentTransfer><feFuncA type="gamma" exponent="2.6" amplitude="1.7"/></feComponentTransfer>
+      </filter>
+      <rect width="100%" height="100%" fill="#000"/>
+      <rect width="100%" height="100%" filter="url(#rauch)"/>
+    </svg>
+  </body></html>`;
+}
 
 /**
  * Die neun teuersten Karten des Sets am 13.09.2026, in Leserichtung des
@@ -512,6 +773,180 @@ Stand: Sonntag, 13.09. Die Preise ändern sich täglich.`,
 
 Zu teuer, oder greift ihr zu?`,
     hashtags: ["#30thcelebration", "#pokemon30", "#futuristicrare", "#cardmarket", "#pokemonsammeln", "#binderplan"],
+  },
+
+
+  /**
+   * „Die seltensten Karten aller Zeiten sind da!" — die drei RGB-Mew.
+   *
+   * Aufbau: drei Karten, sonst nichts. Jede liegt erst mit der Rückseite oben,
+   * wirbelt dann herum und bleibt auf ihrem Scan stehen; unter ihr zieht Rauch
+   * in der Farbe der Karte. Am Ende stehen alle drei nebeneinander, das
+   * Set-Logo läuft durchgehend mit.
+   *
+   * **Die Scans liegen in `cards.image_alt`, nicht in `image_de`/`image_en`.**
+   * Für cel30 sind die beiden TCGdex-Spalten leer, weil das Set dort noch nicht
+   * geführt wird — am 16.09.2026 hielt ich die drei Karten deshalb erst für
+   * bildlos und baute eine Silhouette. Die Bilder gibt es längst (Serebii,
+   * `…/card/30thcelebration/rgb1..3.jpg`), und es sind die einzigen, die das
+   * Stück zeigt.
+   *
+   * Was auf den Karten steht und das Stück trägt: dasselbe Motiv dreimal, nur
+   * die beiden Druckfarben tauschen (rot/blau, grün/rot, blau/grün), alle drei
+   * von YOSHIROTTEN, Nummer 30C statt einer Setnummer, Seltenheitskürzel
+   * R/RGB, G/RGB und B/RGB.
+   *
+   * **Zur Zahl:** Was kursiert, ist eine Pull-Rate — eine RGB-Mew auf rund
+   * 20.000 Boosterpacks —, nicht eine Auflage von 20.000 Stück. Beides zu
+   * verwechseln wäre der Fehler, den die Nische in den Kommentaren zerlegt;
+   * „Gerücht" steht deshalb in derselben Zeile wie die Zahl.
+   */
+  rgbmew: {
+    titel: "Die seltensten Karten aller Zeiten",
+    artworks: [],
+    setLogo: "cel30-setlogo.png",
+    musik: "absolutesound-background-no-copyright-music-561870.mp3",
+    clips: [
+      { art: "stand", bild: { art: "rgb", farbe: "rot", seite: "rueck", logo: "cel30-setlogo.png" },
+        dauerMs: 2200, stil: "hook", zeig: "DIE SELTENSTEN\nKARTEN ALLER\nZEITEN SIND DA!" },
+      // Die rote Rückseite stand schon im Hook — hier dreht sie früher.
+      { art: "flip", farbe: "rot", haltMs: 300, dauerMs: 2600,
+        zeig: "Mew in Rot.\nSeltenheit: R/RGB." },
+      { art: "flip", farbe: "gruen", haltMs: 400, dauerMs: 2400,
+        zeig: "Designs von YOSHIROTTEN,\nangelehnt an die Spiele 1996." },
+      { art: "flip", farbe: "blau", haltMs: 400, dauerMs: 2400,
+        zeig: "Dasselbe Bild, dreimal.\nNur die Farben tauschen." },
+      // Eine Zeile, nicht zwei: Bei 2,0 s liest niemand zwei Zeilen zu Ende.
+      { art: "stand", bild: { art: "rgbdrei", logo: "cel30-setlogo.png" }, dauerMs: 2000,
+        zeig: "Gerücht: 1 auf 20.000 Packs." },
+      // Der Clip für die Folgen-Pille trägt bewusst **keinen** Text: Im
+      // Pillenclip endet jede Zeile nach 90 ms (siehe Warnung weiter unten).
+      // Er zeigt dasselbe Schlussbild — eine eigene Einstellung dafür hat das
+      // Stück am 16.09. nur verlängert, ohne etwas zu erzählen.
+      { art: "stand", bild: { art: "rgbdrei", logo: "cel30-setlogo.png" }, dauerMs: 2800 },
+      { art: "stand", bild: { art: "rgbdrei", logo: "cel30-setlogo.png" }, dauerMs: 2200, stil: "schluss",
+        zeig: "Was denkt ihr,\nwas die drei kosten?" },
+    ],
+    folgenAbClip: 5,
+    caption: `Die seltensten Karten, die Pokémon je gedruckt hat — und die meisten wissen noch nicht mal, dass es sie gibt.
+
+Drei Mew im 30th Celebration: rot, grün, blau. Die Designs von YOSHIROTTEN sind an die Spiele von 1996 angelehnt — dreimal dasselbe Motiv, nur die beiden Druckfarben tauschen. Und statt einer Setnummer steht 30C auf der Karte, dazu R/RGB, G/RGB, B/RGB.
+
+Im Kartentext steht, Mew sei so selten, dass viele es für eine Fata Morgana halten. Passend dazu das Gerücht, das gerade kursiert: eine auf 20.000 Boosterpacks. Bestätigt ist nichts.
+
+Was denkt ihr, was die drei kosten werden — und was haltet ihr von ihnen?`,
+    captionKurz: `Drei Mew in Rot, Grün und Blau — dasselbe Motiv, nur die Druckfarben tauschen. Gerücht: eine auf 20.000 Packs.
+
+Was denkt ihr, was die kosten?`,
+    hashtags: ["#30thcelebration", "#rgbmew", "#pokemon30", "#chasecards", "#pokemonsammeln", "#binderplan"],
+  },
+
+
+  /**
+   * „Die hässlichste Karte des Jahres ist die teuerste." — Meinung zur RGB-Mew.
+   *
+   * Zweiter Beitrag zu den drei Karten, einen Tag nach dem Wirbel-Reel: kein
+   * Umdrehen mehr, die Scans stehen von Anfang an offen da. Der Beitrag nimmt
+   * Partei — über Geschmack, das ist laut Playbook das einzige Feld dafür —
+   * und legt die Zahlen daneben, die keiner sonst hat: Sofortkauf-Forderungen
+   * gegen die laufenden Auktionen mit echten Geboten (eBay Browse API,
+   * 17.09.2026 01:20: höchste Forderung 53.490 $, höchstes Gebot 3.209 $ bei
+   * 45 Geboten, Auktionsende 19.09.).
+   *
+   * Der Vergleich ist bewusst so benannt: „verlangt" gegen „geboten". Ein
+   * Verkauf zu 20.000 $ ist gemeldet, aber mit Preisvorschlag — was gezahlt
+   * wurde, weiß niemand. Wir zeigen deshalb nur, was messbar ist.
+   */
+  haesslich: {
+    titel: "Die hässlichste Karte des Jahres",
+    artworks: [],
+    setLogo: "cel30-setlogo.png",
+    musik: "alex-morgan-no-copyright-music-528321.mp3",
+    clips: [
+      { art: "stand", bild: { art: "rgb", farbe: "rot", seite: "vorn", logo: "cel30-setlogo.png" },
+        dauerMs: 2200, stil: "hook", zeig: "DIE HÄSSLICHSTE\nKARTE DES JAHRES\nIST DIE TEUERSTE" },
+      { art: "stand", bild: { art: "rgb", farbe: "gruen", seite: "vorn", logo: "cel30-setlogo.png" },
+        dauerMs: 2200, zeig: "Deep-Fried-Look.\nDrei Druckfarben, mehr nicht." },
+      { art: "stand", bild: { art: "rgb", farbe: "blau", seite: "vorn", logo: "cel30-setlogo.png" },
+        dauerMs: 2600, zeig: "Verlangt: bis 53.490 $.\nGeboten: 3.209 $." },
+      { art: "stand", bild: { art: "rgbdrei", logo: "cel30-setlogo.png" }, dauerMs: 2400,
+        zeig: "Hässlich ist Geschmack.\nSelten ist Mathematik." },
+      { art: "stand", bild: { art: "rgbdrei", logo: "cel30-setlogo.png" }, dauerMs: 2000,
+        zeig: "Ich find sie großartig.\nGerade deshalb." },
+      // Pillenclip ohne Text (siehe Warnung weiter unten).
+      { art: "stand", bild: { art: "rgbdrei", logo: "cel30-setlogo.png" }, dauerMs: 2800 },
+      { art: "stand", bild: { art: "rgbdrei", logo: "cel30-setlogo.png" }, dauerMs: 2400, stil: "schluss",
+        zeig: "Sag mir, dass ich\nfalsch liege." },
+    ],
+    folgenAbClip: 5,
+    caption: `Die hässlichste Karte des Jahres ist die teuerste.
+
+Drei Druckfarben, Deep-Fried-Look, keine Feinheit — die RGB-Mew sieht aus wie ein Druckfehler von 1996. Und genau das ist der Punkt: Sie zitiert die Spiele Rot, Grün und Blau, nicht die Kartenkunst von heute.
+
+Auf eBay werden bis zu 53.490 $ verlangt. Die Auktionen mit echten Geboten stehen bei 3.209 $, 45 Gebote, Ende Samstag. Hässlich ist Geschmack. Selten ist Mathematik.
+
+Ich find sie großartig. Sag mir, dass ich falsch liege.
+
+Stand: 17.09., nachts. Gebote ändern sich stündlich.`,
+    captionKurz: `Deep-Fried-Look, drei Druckfarben — und die teuerste Karte des Jahres. Verlangt: 53.490 $. Geboten: 3.209 $.
+
+Sag mir, dass ich falsch liege.`,
+    hashtags: ["#30thcelebration", "#rgbmew", "#pokemon30", "#chasecards", "#pokemonsammeln", "#binderplan"],
+  },
+
+
+  /**
+   * „8.229 Euro. Für ein Mew. Verkauft." — die ersten sechs Verkäufe der RGB-Mew.
+   *
+   * Nachfolger von `haesslich`: Marcel wollte keine Forderungen und Gebote
+   * („klingt generisch"), sondern **echte Verkäufe**. Die Zahlen kommen aus
+   * seinen Screenshots der eBay-Verkaufsliste vom 17.09.2026, 00:03 und 01:49
+   * Uhr — die API gibt uns Verkäufe nicht (Insights: 403). Die Ausschnitte
+   * liegen unter `belege/` und zeigen nur die Textspalte.
+   *
+   *   Englisch:  Rot 8.229 € (USA, Preisvorschlag) · Grün 3.577 € (AU, 1 Gebot)
+   *              · Grün 2.968 € (GB, Preisvorschlag, +142 € Versand)
+   *   Japanisch: Rot 6.384 € · Blau 5.180 € · Grün 4.747 € (alle Händler, JP)
+   *
+   * Der Blitz vorneweg (0,8 s, nur der 8.229-€-Beleg auf Schwarz) ist der
+   * Beweis vor der Behauptung: erst der Zettel, dann die Karte. Die Hook nennt
+   * die krumme Zahl, nicht „fast 10.000" — die Nische rechnet nach, und 8.229
+   * klingt nach Beleg, 10.000 nach Hype.
+   */
+  verkauft: {
+    titel: "8.229 Euro. Für ein Mew. Verkauft.",
+    artworks: [],
+    setLogo: "cel30-setlogo.png",
+    musik: "alex-morgan-no-copyright-music-528321.mp3",
+    clips: [
+      { art: "stand", bild: { art: "beleg", datei: "en-rot-us.png" }, dauerMs: 800 },
+      { art: "stand", bild: { art: "rgb", farbe: "rot", seite: "vorn", logo: "cel30-setlogo.png" },
+        dauerMs: 2200, stil: "hook", zeig: "8.229 EURO.\nFÜR EIN MEW.\nVERKAUFT." },
+      { art: "stand", bild: { art: "rgb", farbe: "rot", seite: "vorn", logo: "cel30-setlogo.png", beleg: "en-rot-us.png" },
+        dauerMs: 2200, zeig: "Englisch, Rot, aus den USA.\nVerkauft am 17. September." },
+      { art: "stand", bild: { art: "rgb", farbe: "gruen", seite: "vorn", logo: "cel30-setlogo.png", beleg: "en-gruen-au.png" },
+        dauerMs: 2200, zeig: "Grün: 3.577 € und 2.968 €.\nZwei Verkäufe, ein Tag." },
+      { art: "stand", bild: { art: "rgb", farbe: "blau", seite: "vorn", logo: "cel30-setlogo.png", beleg: "jp-blau.png" },
+        dauerMs: 2200, zeig: "Japanisch, Blau: 5.180 €.\nRot 6.384 €, Grün 4.747 €." },
+      { art: "stand", bild: { art: "rgbdrei", logo: "cel30-setlogo.png" }, dauerMs: 2200,
+        zeig: "Sechs Verkäufe in 24 Stunden.\nRot ist überall die teuerste." },
+      // Pillenclip ohne Text (siehe Warnung weiter unten).
+      { art: "stand", bild: { art: "rgbdrei", logo: "cel30-setlogo.png" }, dauerMs: 2800 },
+      { art: "stand", bild: { art: "rgbdrei", logo: "cel30-setlogo.png" }, dauerMs: 2200, stil: "schluss",
+        zeig: "Kaufen, halten,\noder Finger weg?" },
+    ],
+    folgenAbClip: 6,
+    caption: `8.229 Euro. Für ein Mew. Verkauft.
+
+Sechs RGB-Mew haben in den ersten 24 Stunden den Besitzer gewechselt — eBay-Verkaufsliste, nicht Forderungen. Englisch: Rot 8.229 €, Grün 3.577 € und 2.968 €. Japanisch: Rot 6.384 €, Blau 5.180 €, Grün 4.747 €.
+
+Rot ist in beiden Sprachen die teuerste Farbe, Grün die günstigste. Die blaue englische — die mit dem 20.000-$-Gerücht — taucht in der Liste noch gar nicht auf.
+
+Hässlich? Vielleicht. Der Markt hat abgestimmt. Kaufen, halten oder Finger weg?
+
+Stand: 17.09., 1 Uhr, eBay-Verkaufsliste. Teils per Preisvorschlag, Versand nicht eingerechnet.`,
+    captionKurz: `Sechs RGB-Mew in 24 Stunden verkauft: 2.968 bis 8.229 €. Rot ist überall die teuerste, Grün die günstigste. Kaufen, halten oder Finger weg?`,
+    hashtags: ["#30thcelebration", "#rgbmew", "#pokemon30", "#chasecards", "#pokemonsammeln", "#binderplan"],
   },
 
 
@@ -1377,6 +1812,10 @@ const DREI_B = 340, DREI_LUECKE = 20, DREI_Y = 600;
 
 function bildHtml(bild: Bild, varName: (seite: string) => string, vars: () => string,
                   kartenVars?: (karten: string[], sichtbar: number) => { def: string; name: (i: number) => string }): string {
+  // Die RGB-Bühne kennt keine Kunstseite und kein Blatt — sie baut ihr Bild selbst.
+  if (bild.art === "rgb") return rgbBildHtml(bild.farbe, bild.seite, bild.logo, bild.beleg);
+  if (bild.art === "rgbdrei") return rgbDreiHtml(bild.logo);
+  if (bild.art === "beleg") return blitzHtml(bild.datei);
   if (bild.art === "karten") {
     const spalten = bild.spalten ?? 3, zeilen = bild.zeilen ?? 3;
     const k = kartenVars!(bild.karten, bild.sichtbar);
@@ -1485,6 +1924,25 @@ for (const [i, c] of buch.clips.entries()) {
   }
 }
 
+/**
+ * Der Clip, in dem die Folgen-Pille steht, darf keinen Text tragen.
+ *
+ * Die Pille beginnt 400 ms nach dem Schnitt, der Text 160 ms danach und endet
+ * 150 ms vor ihr — **er steht also 90 ms, egal wie lang der Clip ist**. Am
+ * 16.09.2026 wäre so die stärkste Zeile des RGB-Stücks („eine auf 20.000
+ * Boosterpacks") unsichtbar geblieben; im fertigen Video war an ihrer Stelle
+ * nichts. Wer dort etwas sagen will, schiebt es einen Clip nach vorn und gibt
+ * der Pille ein eigenes Bild.
+ */
+{
+  const pillenClip = DREHBUECHER[name]?.folgenAbClip;
+  const clips2 = DREHBUECHER[name]?.clips ?? [];
+  const nr = pillenClip === null ? -1 : Math.min(pillenClip ?? clips2.length - 2, clips2.length - 1);
+  if (nr >= 0 && clips2[nr]?.zeig) {
+    console.warn(`  ! Clip ${nr} trägt die Folgen-Pille — sein Text steht nur 90 ms und ist praktisch unsichtbar.`);
+  }
+}
+
 const env = loadEnv();
 const { db } = openDatabase(env.MP_DATA_DIR);
 const kit = loadBrandKit(db, PROJEKT);
@@ -1515,11 +1973,11 @@ fs.mkdirSync(arbeit, { recursive: true });
 
 // Verkleinerte Arbeitskopien für die Standbilder — siehe `buehneHtml`.
 const seitenVon = (b: Bild): string[] =>
-  b.art === "drei" ? b.seiten : b.art === "karten" ? [] : [b.seite];
+  b.art === "drei" ? b.seiten : (b.art === "ganz" || b.art === "binder") ? [b.seite] : [];
 const seitenImBuch = [...new Set(buch.clips.flatMap((c) =>
   c.art === "fahrt" ? [c.seite]
   : c.art === "stand" ? seitenVon(c.bild)
-  : c.art === "fuellung" ? []
+  : c.art === "fuellung" || c.art === "flip" ? []
   : [c.von, c.bis].flatMap(seitenVon)))];
 const varNr = new Map(seitenImBuch.map((s, i) => [s, `--s${i}`]));
 const varName = (seite: string) => varNr.get(seite) ?? "--s0";
@@ -1550,6 +2008,16 @@ const markeUrl = (name: string) => {
     markeUrls.set(name, `url('${dataUrlFor(datei) ?? ""}')`);
   }
   return markeUrls.get(name)!;
+};
+/** Belege (Screenshot-Ausschnitte) liegen in einem eigenen Ordner. */
+const belegUrls = new Map<string, string>();
+const belegUrl = (name: string) => {
+  if (!belegUrls.has(name)) {
+    const datei = path.join(env.MP_DATA_DIR, "assets", PROJEKT, "belege", name);
+    if (!fs.existsSync(datei)) throw new Error(`Beleg fehlt: ${datei}`);
+    belegUrls.set(name, dataUrlFor(datei) ?? "");
+  }
+  return belegUrls.get(name)!;
 };
 const kartenUrls = new Map<string, string>();
 const kartenUrl = (id: string) => {
@@ -1582,9 +2050,70 @@ function merkeBild(bild: Bild): string {
   if (!bildDateien.has(schluessel)) {
     const datei = path.join(arbeit, `bild-${bildDateien.size}.png`);
     bildDateien.set(schluessel, datei);
-    bildJobs.push({ html: bildHtml(bild, varName, vars, kartenVars), width: W, height: H, file: datei });
+    // RGB-Bilder tragen nur Karten und Logo — Grund und Rauch legt ffmpeg darunter.
+    const durchsichtig = bild.art === "rgb" || bild.art === "rgbdrei";
+    bildJobs.push({ html: bildHtml(bild, varName, vars, kartenVars), width: W, height: H,
+                    transparent: durchsichtig, file: datei });
   }
   return bildDateien.get(schluessel)!;
+}
+/**
+ * Ein Wirbel ist eine Bildfolge, kein ffmpeg-Filter.
+ *
+ * Eine 3D-Drehung mit Perspektive kann ffmpeg nicht: `scale` und `rotate`
+ * rechnen flach, und eine gestauchte Karte sieht aus wie eine gestauchte Karte,
+ * nicht wie eine gedrehte. Der Browser kann es — also rendert er je Bild eine
+ * Lage, und ffmpeg setzt die Bilder nur noch aneinander. Bei 25 fps sind das
+ * rund 27 Bilder je Karte.
+ */
+const rgbBild = (farbe: RgbFarbe, seite: "rueck" | "vorn"): Bild =>
+  ({ art: "rgb", farbe, seite, logo: buch.setLogo });
+
+/**
+ * Grund und Rauch — die beiden Ebenen unter den Karten.
+ *
+ * Je Farbe ein Grundbild, dazu **eine** Rauchtextur für das ganze Stück: Sie
+ * wird je Clip anders eingefärbt und anders beschnitten, das reicht.
+ */
+const gruende = new Map<string, string>();
+function grundDatei(welche: RgbFarbe | "drei"): string {
+  if (!gruende.has(welche)) {
+    const datei = path.join(arbeit, `grund-${welche}.png`);
+    gruende.set(welche, datei);
+    bildJobs.push({ html: rgbGrundHtml(welche), width: W, height: H, file: datei });
+  }
+  return gruende.get(welche)!;
+}
+/** Welchen Grund ein Clip braucht — oder `null`, wenn er keine RGB-Bühne ist. */
+function rgbGrundVon(c: Clip): RgbFarbe | "drei" | null {
+  if (c.art === "flip") return c.farbe;
+  if (c.art === "stand" && c.bild.art === "rgb") return c.bild.farbe;
+  if (c.art === "stand" && c.bild.art === "rgbdrei") return "drei";
+  return null;
+}
+const brauchtRauch = buch.clips.some((c) => rgbGrundVon(c) !== null);
+const rauchBild = path.join(arbeit, "rauch.png");
+if (brauchtRauch) bildJobs.push({ html: rauchHtml(), width: RAUCH_B, height: RAUCH_H, file: rauchBild });
+
+const flipFrames = new Map<number, string[]>();
+for (const [i, c] of buch.clips.entries()) {
+  // Gründe hier anmelden, nicht erst beim Schneiden: Gerendert wird einmal für
+  // alle Bilder, und wer später dazukommt, fehlt auf der Platte.
+  const welche = rgbGrundVon(c);
+  if (welche !== null) grundDatei(welche);
+  if (c.art === "flip") {
+    merkeBild(rgbBild(c.farbe, "rueck"));
+    merkeBild(rgbBild(c.farbe, "vorn"));
+    const anzahl = Math.max(6, Math.round(((c.wirbelMs ?? 1100) / 1000) * OUTPUT_FPS));
+    const dateien: string[] = [];
+    for (let k = 1; k < anzahl; k++) {
+      const datei = path.join(arbeit, `flip-${i}-${String(k).padStart(2, "0")}.png`);
+      bildJobs.push({ html: rgbFlipHtml(c.farbe, k / anzahl, buch.setLogo), width: W, height: H,
+                      transparent: true, file: datei });
+      dateien.push(datei);
+    }
+    flipFrames.set(i, dateien);
+  }
 }
 for (const c of buch.clips) {
   if (c.art === "stand") merkeBild(c.bild);
@@ -1623,11 +2152,71 @@ if (folgenClip !== null && folgenClip >= 0 && !ohneFolgen) {
 
 await playwrightRenderer([...bildJobs, ...textJobs]);
 
+/**
+ * Ziehender Rauch zwischen Grund und Karte.
+ *
+ * Zwei Fenster wandern über dieselbe Textur: Das erste wird zur Deckkraft einer
+ * hellen Farbe (die Schwaden), das zweite umgekehrt zur Deckkraft eines fast
+ * schwarzen Tons (die Schatten dazwischen). Erst der Gegenlauf macht daraus
+ * Rauch — eine Ebene allein sieht aus wie ein verschobener Farbverlauf.
+ *
+ * **Die Farbe kommt aus einer Alphamaske, nicht aus `blend`.** Der erste Versuch
+ * mischte graue Wolken per `screen`/`multiply` über den farbigen Grund: Das
+ * Ergebnis war schmutziges Grau, weil `screen` mit Grau in Richtung Weiß zieht
+ * und `multiply` die Sättigung frisst. Mit `alphamerge` liegt echte Farbe im
+ * Bild, und die Wolkenhelligkeit steuert nur, wie dicht sie steht.
+ *
+ * **Die Wege sind Sinusbahnen, keine geraden Fahrten.** Eine gerade Fahrt läuft
+ * nach wenigen Sekunden aus der Textur heraus; ein Sinus bleibt für immer
+ * innerhalb und wiederholt sich trotzdem nicht sichtbar, weil die vier Perioden
+ * (9, 13, 7, 11 s) teilerfremd liegen.
+ *
+ * **Geschwindigkeit ist Pflicht, nicht Geschmack:** Am schnellsten Punkt legen
+ * die Ebenen 12 bzw. 12 px je Bild zurück. Mit den ersten 5 px war die Bewegung
+ * messbar, aber nicht sichtbar: Eine weiche Wolke, um fünf Pixel verschoben,
+ * ändert kaum eine Helligkeit. Und alles unter rund 2 px je Bild rundet der
+ * Renderer ohnehin auf ganze Pixel — dann steht der Rauch und ruckelt nur
+ * (dieselbe Grenze wie beim Abspann-Logo am 11.09.2026).
+ *
+ * `versatzMs` ist die Stelle des Clips im fertigen Stück: Ohne sie finge der
+ * Rauch bei jedem Schnitt von vorn an und spränge sichtbar.
+ */
+function rauchFilter(versatzMs: number, dauerMs: number, farbe: RgbFarbe | "drei"): string {
+  const off = (versatzMs / 1000).toFixed(3), d = s3(dauerMs);
+  // Keine Kommas in den Ausdrücken — ffmpeg liest sie als Filtergrenze.
+  const bahn = (mitte: number, weite: number, periode: number, phase: number) =>
+    `${mitte}+${weite}*sin(2*PI*(t+${off})/${periode}+${phase})`;
+  // Beim Schlussbild liegen alle drei Farben im Grund; farbige Schwaden würden
+  // eine davon bevorzugen. Dort zieht heller Dunst, keine Farbe.
+  const schwaden = farbe === "drei" ? "0xAEB8C8" : RGB[farbe].hell.replace("#", "0x");
+  const schatten = farbe === "drei" ? "0x05060A" : RGB[farbe].dunkel.replace("#", "0x");
+  const deckungHell = farbe === "drei" ? 0.30 : 0.48;
+  const deckungDunkel = farbe === "drei" ? 0.46 : 0.42;
+  return [
+    `[1:v]split=2[ra][rb]`,
+    `[ra]crop=${W}:${H}:x=${bahn(480, 380, 8, 0)}:y=${bahn(620, 420, 13, 1.1)},format=gray[m1]`,
+    `[rb]crop=${W}:${H}:x=${bahn(480, -420, 9, 2.2)}:y=${bahn(620, -380, 11, 0.6)},format=gray,negate[m2]`,
+    `color=c=${schwaden}:s=${W}x${H}:r=${OUTPUT_FPS}:d=${d},format=rgba[c1]`,
+    `color=c=${schatten}:s=${W}x${H}:r=${OUTPUT_FPS}:d=${d},format=rgba[c2]`,
+    `[c1][m1]alphamerge,colorchannelmixer=aa=${deckungHell}[s1]`,
+    `[c2][m2]alphamerge,colorchannelmixer=aa=${deckungDunkel}[s2]`,
+    `[0:v]format=rgba,setsar=1[g0]`,
+    `[g0][s1]overlay=0:0[g1]`,
+    `[g1][s2]overlay=0:0[g2]`,
+    `[2:v]format=rgba,setsar=1[k]`,
+    `[g2][k]overlay=0:0:eof_action=pass[v]`,
+  ].join(";");
+}
+
 // 3. Bildspur: je Clip ein Schnipsel, am Ende der Abspann.
 const clipDateien: string[] = [];
 for (const [i, c] of buch.clips.entries()) {
   const datei = path.join(arbeit, `clip-${i}.mp4`);
   const schluss = ["-r", String(OUTPUT_FPS), "-c:v", "libx264", "-preset", "veryfast", "-crf", "18", "-pix_fmt", "yuv420p", "-an", datei];
+  /** Wo dieser Clip im fertigen Stück beginnt — der Rauch läuft durch. */
+  const beginntMs = buch.clips.slice(0, i).reduce((n, c2) => n + c2.dauerMs, 0);
+  const grundArt = rgbGrundVon(c);
+  const dauerEin = (d: string) => ["-loop", "1", "-framerate", String(OUTPUT_FPS), "-t", s3(c.dauerMs), "-i", d];
 
   if (c.art === "fahrt") {
     // Erst stehen bleiben, dann fahren, am Ziel wieder stehen.
@@ -1661,6 +2250,33 @@ for (const [i, c] of buch.clips.entries()) {
     fs.writeFileSync(liste, bilder.map((d) => `file '${d}'\nduration ${s3(jeMs)}`).join("\n") +
       `\nfile '${bilder[bilder.length - 1]}'\n`);
     await runFfmpeg(["-f", "concat", "-safe", "0", "-i", liste, "-vf", "setsar=1", "-t", s3(c.dauerMs), ...schluss]);
+  } else if (c.art === "flip") {
+    // Rückseite steht, Karte wirbelt, Vorderseite steht. Die Standzeiten tragen
+    // den Text — eine Drehung allein ist nach einer Sekunde vorbei und der Satz
+    // darunter noch nicht gelesen.
+    const bildMs = 1000 / OUTPUT_FPS;
+    const frames = flipFrames.get(i) ?? [];
+    const halt = c.haltMs ?? 1300;
+    const wirbel = (frames.length + 1) * bildMs;
+    const rest = Math.max(600, c.dauerMs - halt - wirbel);
+    const liste = path.join(arbeit, `flip-${i}.txt`);
+    const zeilen = [`file '${merkeBild(rgbBild(c.farbe, "rueck"))}'`, `duration ${s3(halt)}`];
+    for (const datei2 of frames) zeilen.push(`file '${datei2}'`, `duration ${s3(bildMs)}`);
+    const vorn = merkeBild(rgbBild(c.farbe, "vorn"));
+    // Der letzte Eintrag steht ohne Dauer noch einmal da: der concat-Demuxer
+    // schneidet die Dauer des letzten Bildes sonst auf null.
+    zeilen.push(`file '${vorn}'`, `duration ${s3(rest)}`, `file '${vorn}'`);
+    fs.writeFileSync(liste, zeilen.join("\n") + "\n");
+    await runFfmpeg([
+      ...dauerEin(grundDatei(c.farbe)), ...dauerEin(rauchBild),
+      "-f", "concat", "-safe", "0", "-i", liste,
+      "-filter_complex", rauchFilter(beginntMs, c.dauerMs, grundArt!), "-map", "[v]", "-t", s3(c.dauerMs), ...schluss]);
+  } else if (c.art === "stand" && grundArt !== null) {
+    // Standbild auf der RGB-Bühne: dieselben drei Ebenen, nur bewegt sich die
+    // Karte nicht — der Rauch zieht trotzdem weiter.
+    await runFfmpeg([
+      ...dauerEin(grundDatei(grundArt)), ...dauerEin(rauchBild), ...dauerEin(merkeBild(c.bild)),
+      "-filter_complex", rauchFilter(beginntMs, c.dauerMs, grundArt!), "-map", "[v]", "-t", s3(c.dauerMs), ...schluss]);
   } else if (c.art === "stand") {
     await runFfmpeg(["-loop", "1", "-framerate", String(OUTPUT_FPS), "-t", s3(c.dauerMs), "-i", merkeBild(c.bild), "-vf", "setsar=1", ...schluss]);
   } else {
@@ -1743,7 +2359,10 @@ await runFfmpeg([...eingang, "-filter_complex", f.join(";"),
   "-map", "[vout]", "-map", "[aout]", "-r", String(OUTPUT_FPS), "-t", s3(gesamtMs),
   "-c:v", "libx264", "-preset", "medium", "-crf", "20", "-pix_fmt", "yuv420p",
   "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart",
-  "-metadata", "comment=AI-generated: true (Binderplan Kunstseite, Marketing Pilot)",
+  // Die Kennzeichnung gilt nur, wenn im Bild wirklich eine gemalte Seite steckt.
+  // Eine Rangliste aus echten Kartenscans als „AI-generated" zu markieren wäre
+  // falsch — und die Apps lesen das aus.
+  ...(buch.artworks.length ? ["-metadata", "comment=AI-generated: true (Binderplan Kunstseite, Marketing Pilot)"] : []),
   "-metadata", `title=${buch.titel}`, reel]);
 
 // 5. Als Stück eintragen, damit es durch Freigabe und Zeitplan laufen kann.
@@ -1795,6 +2414,9 @@ db.insert(t.mpContentPieces).values({
     // Für den nachträglichen Abspann-Tausch: sonst weiß `reel-abspann.ts` nicht,
     // wie viel es hinten abschneiden darf, wenn sich `ABSPANN_MS` ändert.
     abspannMs: ABSPANN_MS,
+    // Steckt eine gemalte Seite im Bild? Danach richtet sich die Kennzeichnung
+    // in den Dateidaten, die `reel-plattformen.ts` setzt.
+    kiBild: buch.artworks.length > 0,
     // Wann die Folgen-Pille steht — `reel-plattformen.ts` legt sie später an
     // genau diese Stelle, wenn die Basis ohne sie gebaut wurde.
     folgenZeit, basis: ohneFolgen,

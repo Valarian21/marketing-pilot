@@ -12,7 +12,7 @@
  * Menschen, hier für die Ansicht. Ändert sich der Katalog, ändern sich beide.
  */
 
-export type PostArt = "A" | "B" | "C" | "D" | "E" | "F" | "G" | "T" | "S" | "X";
+export type PostArt = "A" | "B" | "C" | "D" | "E" | "F" | "G" | "P" | "T" | "S" | "X";
 
 export interface PostArtDef {
   /** Kurzname, wie er im Playbook steht. */
@@ -32,13 +32,14 @@ export const POST_ARTEN: Record<PostArt, PostArtDef> = {
   D: { name: "Vintage vs. Modern", kurz: "Zwei Karten desselben Pokémon, Preis gegen Preis", takt: "1 × pro Woche", farbe: "d" },
   E: { name: "Sets der Woche", kurz: "Stärkstes und schwächstes Set der letzten sieben Tage", takt: "1 × pro Woche, fester Tag", farbe: "e" },
   F: { name: "Werkzeug", kurz: "Eigenwerbung: wie eine Seite entsteht", takt: "höchstens 1 von 7", farbe: "f" },
-  G: { name: "Farbseite", kurz: "Neun Karten, die farblich zusammenpassen", takt: "1–2 × pro Woche", farbe: "g" },
+  G: { name: "Binder Art", kurz: "Seiten, die als Bild funktionieren — Matching Cards und Artwork Pages", takt: "1–2 × pro Woche", farbe: "g" },
+  P: { name: "Preis-Rangliste", kurz: "Top 10 / Top 20 auf der Binderseite, Spitze zuletzt einzeln", takt: "1–2 × pro Woche", farbe: "p" },
   T: { name: "Threads-Text", kurz: "Kurzer Meinungs- oder Fragebeitrag ohne Bild", takt: "nach Bedarf", farbe: "t" },
   S: { name: "Story", kurz: "Begleitet ihren Beitrag, 24 h sichtbar", takt: "zu B/C", farbe: "s" },
   X: { name: "Versuch", kurz: "Einzelbeitrag außerhalb des Katalogs", takt: "—", farbe: "x" },
 };
 
-export const POST_ART_REIHE: readonly PostArt[] = ["A", "B", "C", "D", "E", "F", "G", "T", "S", "X"];
+export const POST_ART_REIHE: readonly PostArt[] = ["A", "B", "C", "D", "E", "F", "G", "P", "T", "S", "X"];
 
 /**
  * Drehbuch → Post-Art, aus der Tabelle in Abschnitt 3a des Playbooks. Die dort
@@ -54,7 +55,49 @@ export const DREHBUCH_ART: Record<string, PostArt> = {
   vintagemodern: "D", glurakduell: "D",
   farbblau: "G", farbgruen: "G",
   illustrator: "X", sugimori: "X", duell: "X", seitenwert: "X", raketen: "X", billigseite: "X",
+  // Die beiden fertigen Bühnen-Formate (Playbook H und I) und die Preis-Ranglisten (J).
+  "einschub-coolshit": "G",
+  "einschub-harmonie1": "G", "einschub-harmonie2": "G", "einschub-harmonie3": "G", "einschub-harmonie4": "G",
+  "einschub-harmonie5": "G", "einschub-harmonie6": "G", "einschub-harmonie7": "G", "einschub-harmonie8": "G",
+  "einschub-kunstseite151": "G",
+  "preis-set151": "P", "preis-aeraklassik": "P", "preis-illuarita": "P",
+  "preis-raritysir": "P", "preis-pokeglurak": "P",
 };
+
+/**
+ * Die **Kategorie** eines Drehbuchs — der Name, unter dem wir das Format
+ * besprechen. Die Post-Art (`DREHBUCH_ART`) sagt, in welchen Slot der Woche ein
+ * Stück gehört; die Kategorie sagt, welches Layout dahintersteckt.
+ *
+ * Seit dem 15.09.2026 sind die drei fertigen Layouts benannt und liegen alle
+ * auf derselben Bühne (`agents/video/binderbuehne.ts`):
+ *
+ * - **Matching Cards** — neun Karten, die farblich zusammenpassen, gleiten
+ *   nacheinander in die Fächer (Playbook H).
+ * - **Artwork Pages** — echte Karten zuerst, danach die gemalten Teile der
+ *   Kunstseite (Playbook I).
+ * - **Preis-Rangliste** — Top 10 oder Top 20, die Spitze zuletzt einzeln
+ *   (Playbook J), in fünf Bereichen: Set, Ära, Illustrator, Seltenheit, Pokémon.
+ */
+export const DREHBUCH_KATEGORIE: Record<string, string> = {
+  "einschub-coolshit": "Matching Cards",
+  "einschub-harmonie1": "Matching Cards", "einschub-harmonie2": "Matching Cards",
+  "einschub-harmonie3": "Matching Cards", "einschub-harmonie4": "Matching Cards",
+  "einschub-harmonie5": "Matching Cards", "einschub-harmonie6": "Matching Cards",
+  "einschub-harmonie7": "Matching Cards", "einschub-harmonie8": "Matching Cards",
+  farbblau: "Matching Cards", farbgruen: "Matching Cards", feelinara: "Matching Cards",
+  "einschub-kunstseite151": "Artwork Pages",
+  turtok: "Artwork Pages", bisaflor: "Artwork Pages", mauzigasse: "Artwork Pages",
+  "preis-set151": "Preis-Rangliste · Set",
+  "preis-aeraklassik": "Preis-Rangliste · Ära",
+  "preis-illuarita": "Preis-Rangliste · Illustrator",
+  "preis-raritysir": "Preis-Rangliste · Seltenheit",
+  "preis-pokeglurak": "Preis-Rangliste · Pokémon",
+};
+
+/** Die Kategorie eines Stücks, falls sein Drehbuch eine hat. */
+export const kategorieOf = (st: StueckFuerArt): string =>
+  DREHBUCH_KATEGORIE[drehbuchOf(st)] ?? "";
 
 /** Was ein Stück über sich weiß — mehr braucht die Zuordnung nicht. */
 export interface StueckFuerArt {

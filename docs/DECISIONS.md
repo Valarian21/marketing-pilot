@@ -39,6 +39,14 @@ Format: Datum · Entscheidung · Grund · Alternative, die verworfen wurde.
 - **Filterlisten der Mediathek kommen aus `/media/facets`**, nicht aus dem gefilterten Ergebnis: vorher schrumpften Projekt- und Kanalliste mit jedem Filter, und eine Kombination ohne Treffer ließ die eigene Auswahl verschwinden. Eigene Schlüssel wie `shorts` heißen im UI „YouTube Shorts" (`plattformName`). Suche wartet 300 ms Tipp-Pause.
 - **Projekt-Reiter in Arbeitsreihenfolge**: Heute · Freigaben · Pipeline · Handarbeit · Kanäle · Übersicht · Produkt-Brief. Freigaben und Pipeline fehlten dort, obwohl sie der tägliche Weg sind.
 
+## 2026-09-15 (Einschub-Reels)
+
+- **Neues Format „die Seite füllt sich"** (`scripts/reel-einschub.ts`): echte Binderseite, Karten gleiten einzeln in die Fächer. Gebaut als CSS-Animation, die **Bild für Bild gerendert** wird — eine abgefilmte Animation landete bei 1,6 Mbit/s, und das sah man an den Kartentexten. Gerendert wird nur die Bewegung, die Standzeit hängt ffmpeg als Standbild an: 155 statt 351 Renders, knapp vier statt sechs Minuten.
+- **Taschen sind seitlich offen** — linke und mittlere Spalte von rechts, rechte von links. Oben offene Hüllen gibt es praktisch nicht; daraus fallen die Karten. (Dreimal gebaut, bis die Richtung stimmte.)
+- **Kein Streifen an der Öffnungskante, keine Ringe.** Beides sah nach Aufkleber aus; die Lochreihe im Rand genügt.
+- **Text unter der Seite, alle Zeilen gleich groß**, mit automatischer Verkleinerung gegen Umbrüche. Die Folgen-Pille folgt der letzten Textzeile und sitzt ebenfalls unter der Seite (`folgenVersatz`, von `reel-plattformen.ts` übernommen). Die Länge rechnet immer mit der Pille — auch die Basis, sonst ragt sie in den Abspann.
+- **Neun Stücke in der Serie**: Seite 14 aus „Cool Shit" und alle acht Seiten aus „Harmonie", je drei App-Fassungen.
+
 ## 2026-09-14 (Themen-Ansicht, Nachbesserung)
 
 - **Basis-Stücke sind Entwürfe, keine Beiträge.** `reel-binder.ts --ohne-folgen` legt sie jetzt mit `status: "draft"` an, und `listMedia` blendet alles mit `meta.basis` aus. Vorher standen sie als viertes Stück je Thema in der Freigabe (79 statt 59 offene Beiträge) — ein Zwischenstand ohne Folgen-Pille, den niemand ansieht oder freigibt. 20 vorhandene wurden einmalig umgestellt.
