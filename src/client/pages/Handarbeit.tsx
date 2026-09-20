@@ -18,6 +18,7 @@ import { api } from "../api.js";
 import { ProjectNav } from "../components/ProjectNav.js";
 import { Button, Card, CopyButton, Notice, PageHeader, Pill } from "../components/ui.js";
 import { TiktokStudio } from "../components/TiktokStudio.js";
+import { YoutubeStudio } from "../components/YoutubeStudio.js";
 
 const heuteIso = () => new Date(Date.now() + 2 * 3600_000).toISOString().slice(0, 10);
 
@@ -98,6 +99,7 @@ export function HandarbeitPage() {
       </Card>
 
       {platform === "tiktok" && <TiktokStudio projectId={id} />}
+      {platform === "youtube" && <YoutubeStudio projectId={id} />}
 
       <Card>
         <div className="mp-card-head"><h2>Termine vergeben</h2></div>

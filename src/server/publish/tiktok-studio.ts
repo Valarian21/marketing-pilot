@@ -18,153 +18,43 @@
  * - Bild-Karussells (data_carousel) gehen einen anderen Upload-Weg; sie werden
  *   hier übersprungen und bleiben Handarbeit.
  */
-import { spawn, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { and, eq } from "drizzle-orm";
-import patchright from "patchright";
-import type { BrowserContext, Page } from "playwright";
+import type { Page } from "playwright";
 import * as t from "../db/schema.js";
 import type { Db } from "../db/index.js";
 import type { Env } from "../env.js";
+import {
+  aktuelleSitzung, berlin, logOrdner as logOrdnerAllgemein, schuss as schussAllgemein, sitzungOeffnen, sitzungSchliessen,
+  type Lauf, type PlanStatus, type PlanZeile,
+} from "./studio-browser.js";
 
-const { chromium } = patchright as unknown as typeof import("playwright");
+export type { Lauf, PlanStatus, PlanZeile } from "./studio-browser.js";
 
-const DISPLAY = ":99";
-const VNC_PORT = 5901;
-const WEB_PORT = 6080;
+const DIENST = "tiktok" as const;
 /** TikTok plant nicht weiter als zehn Tage voraus. */
 const MAX_TAGE_VORAUS = 10;
 
-export type PlanStatus = "geplant" | "uebersprungen" | "fehler";
-
-export type PlanZeile = {
-  pieceId: string;
-  titel: string;
-  geplantAm: string | null;
-  status: PlanStatus;
-  meldung: string;
-};
-
-export type Lauf = {
-  laeuft: boolean;
-  probe: boolean;
-  gestartetAm: string;
-  fertigAm: string | null;
-  gesamt: number;
-  erledigt: number;
-  aktuell: string | null;
-  zeilen: PlanZeile[];
-};
-
-type Sitzung = {
-  passwort: string;
-  gestartetAm: string;
-  ctx: BrowserContext | null;
-  lauf: Lauf | null;
-};
-
-let sitzung: Sitzung | null = null;
-
-// --- Bildschirm, VNC, Web-Brücke -------------------------------------------
-
-function laeuftProzess(muster: string): boolean {
-  return spawnSync("pgrep", ["-f", muster], { encoding: "utf8" }).stdout.trim().length > 0;
-}
-
-function starteHintergrund(befehl: string, args: string[], logDatei: string): void {
-  const log = fs.openSync(logDatei, "a");
-  const p = spawn(befehl, args, { detached: true, stdio: ["ignore", log, log] });
-  p.unref();
-}
-
-function logOrdner(env: Env): string {
-  const d = path.join(env.MP_DATA_DIR, "tiktok-logs");
-  fs.mkdirSync(d, { recursive: true });
-  return d;
-}
-
-/** Virtuellen Bildschirm, VNC-Server und die noVNC-Brücke hochziehen. */
-function bildschirmStarten(env: Env): string {
-  const logs = logOrdner(env);
-  if (!laeuftProzess(`Xvfb ${DISPLAY}`)) {
-    starteHintergrund("Xvfb", [DISPLAY, "-screen", "0", "1400x1000x24"], path.join(logs, "xvfb.log"));
-    spawnSync("sleep", ["2"]);
-  }
-  // Passwort je Sitzung neu würfeln: es schützt die VNC-Sicht zusätzlich zur
-  // Anmeldung des Piloten, falls jemand die Adresse errät.
-  const passwort = Math.random().toString(36).slice(2, 10);
-  const passDatei = path.join(logs, "vncpass");
-  spawnSync("x11vnc", ["-storepasswd", passwort, passDatei]);
-  fs.chmodSync(passDatei, 0o600);
-
-  toeten("x11vnc -display");
-  starteHintergrund("x11vnc", [
-    "-display", DISPLAY, "-rfbport", String(VNC_PORT), "-localhost",
-    "-rfbauth", passDatei, "-forever", "-shared", "-quiet",
-  ], path.join(logs, "x11vnc.log"));
-
-  if (!laeuftProzess(`websockify --web /usr/share/novnc ${WEB_PORT}`)) {
-    starteHintergrund("websockify", ["--web", "/usr/share/novnc", String(WEB_PORT), `localhost:${VNC_PORT}`],
-      path.join(logs, "websockify.log"));
-  }
-  spawnSync("sleep", ["1"]);
-  return passwort;
-}
-
-/** Prozesse beenden, ohne den eigenen Dienst zu treffen. */
-function toeten(muster: string): void {
-  const pids = spawnSync("pgrep", ["-f", muster], { encoding: "utf8" }).stdout.trim().split(/\s+/).filter(Boolean);
-  for (const pid of pids) {
-    if (Number(pid) === process.pid) continue;
-    try { process.kill(Number(pid), "SIGTERM"); } catch { /* schon weg */ }
-  }
-}
+const logOrdner = (env: Env) => logOrdnerAllgemein(env, DIENST);
 
 // --- Sitzung ---------------------------------------------------------------
-
-function profilOrdner(env: Env): string {
-  const d = path.join(env.MP_DATA_DIR, "tiktok-profil");
-  fs.mkdirSync(d, { recursive: true });
-  return d;
-}
+// Bildschirm, VNC und Chrome-Profil liegen in studio-browser.ts — YouTube
+// nutzt denselben Weg. Hier bleibt nur, was TikTok-spezifisch ist.
 
 /**
  * Anmelde-Sitzung starten: Bildschirm hoch, Chrome mit dem dauerhaften Profil
  * öffnen, TikTok laden. Läuft schon eine, wird sie ersetzt.
  */
 export async function sitzungStarten(env: Env): Promise<{ passwort: string }> {
-  await sitzungBeenden(env);
-  const passwort = bildschirmStarten(env);
-  const profil = profilOrdner(env);
-  // Reste einer abgestürzten Sitzung: sonst meldet Chrome „profile already in use“.
-  for (const datei of fs.readdirSync(profil)) {
-    if (datei.startsWith("Singleton")) fs.rmSync(path.join(profil, datei), { force: true });
-  }
-
-  const ctx = await chromium.launchPersistentContext(profil, {
-    channel: "chrome",
-    headless: false,
-    viewport: null,
-    locale: "de-DE",
-    timezoneId: "Europe/Berlin",
-    env: { ...process.env, DISPLAY } as Record<string, string>,
-    // Die Wiederherstellen-Blase nach einem harten Beenden verdeckt sonst die
-    // Anmeldemaske, und wegklicken kann sie im VNC-Fenster nur der Mensch.
-    // Feste Fensterbreite statt --start-maximized: im Cover-Dialog liegt
-    // „Speichern" rechts oben, und bei einem schmalen Fenster steht der Knopf
-    // ausserhalb des Sichtfelds — am 15.09. sind daran 24 Beitraege gescheitert.
-    args: ["--window-size=1400,1000", "--window-position=0,0", "--disable-gpu", "--hide-crash-restore-bubble"],
-  });
-  const seite = ctx.pages()[0] ?? (await ctx.newPage());
-  await seite.goto("https://www.tiktok.com/login", { waitUntil: "domcontentloaded" }).catch(() => {});
-
-  sitzung = { passwort, gestartetAm: new Date().toISOString(), ctx, lauf: null };
-  return { passwort };
+  const s = await sitzungOeffnen(env, DIENST, "https://www.tiktok.com/login");
+  return { passwort: s.passwort };
 }
 
 /** Ist im laufenden Profil jemand angemeldet? Entscheidet das sessionid-Cookie. */
-async function angemeldet(ctx: BrowserContext | null): Promise<boolean> {
+async function angemeldet(): Promise<boolean> {
+  const ctx = aktuelleSitzung(DIENST)?.ctx;
   if (!ctx) return false;
   try {
     const cookies = await ctx.cookies("https://www.tiktok.com");
@@ -175,23 +65,20 @@ async function angemeldet(ctx: BrowserContext | null): Promise<boolean> {
 export async function sitzungStatus(env: Env): Promise<{
   laeuft: boolean; angemeldet: boolean; passwort: string | null; gestartetAm: string | null; lauf: Lauf | null;
 }> {
-  const laeuft = !!sitzung?.ctx;
+  void env;
+  const s = aktuelleSitzung(DIENST);
   return {
-    laeuft,
-    angemeldet: await angemeldet(sitzung?.ctx ?? null),
-    passwort: sitzung?.passwort ?? null,
-    gestartetAm: sitzung?.gestartetAm ?? null,
-    lauf: sitzung?.lauf ?? null,
+    laeuft: !!s?.ctx,
+    angemeldet: await angemeldet(),
+    passwort: s?.passwort ?? null,
+    gestartetAm: s?.gestartetAm ?? null,
+    lauf: s?.lauf ?? null,
   };
 }
 
 export async function sitzungBeenden(env: Env): Promise<void> {
-  if (sitzung?.lauf?.laeuft) throw new Error("Es läuft gerade ein Planungslauf.");
-  try { await sitzung?.ctx?.close(); } catch { /* egal */ }
-  sitzung = null;
-  toeten(`user-data-dir=${profilOrdner(env)}`);
-  toeten("x11vnc -display");
-  toeten(`websockify --web /usr/share/novnc ${WEB_PORT}`);
+  if (!aktuelleSitzung(DIENST)) return;
+  await sitzungSchliessen(env);
 }
 
 // --- Was ist zu planen? ----------------------------------------------------
@@ -295,19 +182,7 @@ function coverPfad(db: Db, env: Env, pieceId: string): string | null {
 
 // --- Der Lauf im Studio ----------------------------------------------------
 
-/**
- * Berliner Datum und Uhrzeit aus einem ISO-Zeitpunkt (UTC+2 im Sommer).
- * Das Datum in der Schreibweise, die das Studio im Feld zeigt (2026-09-15),
- * damit die Gegenprobe direkt vergleichen kann.
- */
-function berlin(iso: string): { datum: string; stunde: string; minute: string } {
-  const s = new Date(new Date(iso).getTime() + 2 * 3600_000).toISOString();
-  return { datum: s.slice(0, 10), stunde: s.slice(11, 13), minute: s.slice(14, 16) };
-}
-
-async function schuss(seite: Page, env: Env, name: string): Promise<void> {
-  try { await seite.screenshot({ path: path.join(logOrdner(env), `${name}.png`) }); } catch { /* egal */ }
-}
+const schuss = (seite: Page, env: Env, name: string) => schussAllgemein(seite, env, DIENST, name);
 
 /**
  * Ein Stück hochladen und terminieren. Die Oberfläche des Studios ändert sich
@@ -467,22 +342,23 @@ async function einesPlanen(seite: Page, env: Env, auftrag: Auftrag, probe: boole
 
 /**
  * Den ganzen Stapel durchgehen. Läuft im Hintergrund; der Fortschritt steht in
- * `sitzung.lauf` und wird von der Status-Abfrage mitgeliefert.
+ * der Sitzung und wird von der Status-Abfrage mitgeliefert.
  */
 export async function planenStarten(db: Db, env: Env, projectId: string, probe: boolean): Promise<Lauf> {
-  if (!sitzung?.ctx) throw new Error("Keine Sitzung — bitte zuerst anmelden.");
-  if (!(await angemeldet(sitzung.ctx))) throw new Error("Im Browser ist niemand bei TikTok angemeldet.");
-  if (sitzung.lauf?.laeuft) throw new Error("Es läuft schon ein Planungslauf.");
+  const s = aktuelleSitzung(DIENST);
+  if (!s?.ctx) throw new Error("Keine Sitzung — bitte zuerst anmelden.");
+  if (!(await angemeldet())) throw new Error("Im Browser ist niemand bei TikTok angemeldet.");
+  if (s.lauf?.laeuft) throw new Error("Es läuft schon ein Planungslauf.");
 
   const { auftraege, uebersprungen } = offeneAuftraege(db, env, projectId);
   const lauf: Lauf = {
     laeuft: true, probe, gestartetAm: new Date().toISOString(), fertigAm: null,
     gesamt: auftraege.length, erledigt: 0, aktuell: null, zeilen: [...uebersprungen],
   };
-  sitzung.lauf = lauf;
+  s.lauf = lauf;
 
   void (async () => {
-    const ctx = sitzung?.ctx;
+    const ctx = s.ctx;
     if (!ctx) return;
     const seite = ctx.pages()[0] ?? (await ctx.newPage());
     for (const auftrag of auftraege) {
@@ -517,7 +393,7 @@ export async function planenStarten(db: Db, env: Env, projectId: string, probe: 
  * hochgeladen werden muss.
  */
 export function laufVermerken(db: Db, projectId: string): number {
-  const lauf = sitzung?.lauf;
+  const lauf = aktuelleSitzung(DIENST)?.lauf;
   if (!lauf || lauf.laeuft || lauf.probe) return 0;
   let n = 0;
   for (const zeile of lauf.zeilen.filter((z) => z.status === "geplant")) {
