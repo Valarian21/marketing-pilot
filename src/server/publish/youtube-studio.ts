@@ -85,6 +85,8 @@ export type Auftrag = {
   beschreibung: string;
   schlagworte: string[];
   video: string;
+  /** Titelkarte fürs Upload-Video — das Video selbst wird erst im Lauf gerechnet. */
+  cover: string | null;
   geplantAm: string;
 };
 
@@ -181,7 +183,7 @@ export function offeneAuftraege(db: Db, env: Env, projectId: string): { auftraeg
       pieceId: termin.pieceId, titel,
       beschreibung: beschreibungAus(stueck.body ?? ""),
       schlagworte: schlagworteAus(stueck.body ?? ""),
-      video: uploadVideo(env, termin.pieceId, video, cover),
+      video, cover,
       geplantAm: String(termin.scheduledAt),
     });
   }
@@ -238,7 +240,14 @@ async function einesPlanen(seite: Page, env: Env, auftrag: Auftrag, probe: boole
     dateiFeld = seite.locator('input[type="file"]').first();
   }
   if (!(await dateiFeld.count())) return fehlt("Upload-Dialog nicht gefunden", "upload");
-  await dateiFeld.setInputFiles(auftrag.video);
+  /**
+   * Das Upload-Video erst hier rechnen, nicht in der Ansicht: `uploadVideo()`
+   * ruft ffmpeg synchron und blockiert damit den ganzen Dienst. Am 21.09.2026
+   * hing der Pilot beim ersten Öffnen der YouTube-Karte minutenlang, weil die
+   * Ansicht 29 wartende Shorts auf einmal vorbereitete — der Anmelde-Knopf
+   * wirkte tot, weil keine Anfrage mehr durchkam.
+   */
+  await dateiFeld.setInputFiles(uploadVideo(env, auftrag.pieceId, auftrag.video, auftrag.cover));
 
   // 2. Details: Titel, Beschreibung. Das Titelfeld erscheint, sobald der
   //    Upload angenommen ist — YouTube füllt es mit dem Dateinamen vor.
