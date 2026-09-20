@@ -25,6 +25,7 @@ import { seriesRoutes } from "./routes/series.js";
 import { publishRoutes } from "./routes/publish.js";
 import { tiktokRoutes } from "./routes/tiktok.js";
 import { youtubeRoutes } from "./routes/youtube.js";
+import { pinterestRoutes } from "./routes/pinterest.js";
 import { loopRoutes, EVENTS_PUBLIC_PATH } from "./routes/loop.js";
 import { storageRoutes } from "./routes/storage.js";
 import { mediaRoutes } from "./routes/media.js";
@@ -103,6 +104,7 @@ export async function buildApp(env: Env, opts: { host?: HostAdapter; dbFile?: st
   publishRoutes(app, db, env);
   tiktokRoutes(app, db, env);
   youtubeRoutes(app, db, env);
+  pinterestRoutes(app, db, env);
   // Die Sicht auf den Anmelde-Browser (noVNC). Liegt unter /api/mp/, damit die
   // Anmeldung des Piloten davor steht — ein eigener nginx-Pfad waere offen im
   // Netz gestanden. Der Aufstieg auf WebSocket braucht websocket: true.
@@ -118,6 +120,13 @@ export async function buildApp(env: Env, opts: { host?: HostAdapter; dbFile?: st
   await app.register(httpProxy, {
     upstream: "http://127.0.0.1:6080",
     prefix: "/api/mp/youtube/vnc",
+    rewritePrefix: "",
+    websocket: true,
+    httpMethods: ["GET", "POST"],
+  });
+  await app.register(httpProxy, {
+    upstream: "http://127.0.0.1:6080",
+    prefix: "/api/mp/pinterest/vnc",
     rewritePrefix: "",
     websocket: true,
     httpMethods: ["GET", "POST"],

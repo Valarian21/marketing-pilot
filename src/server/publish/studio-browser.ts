@@ -1,6 +1,6 @@
 /**
- * Der Anmelde-Browser für Kanäle ohne Veröffentlichungs-API — TikTok und YouTube
- * teilen sich ihn.
+ * Der Anmelde-Browser für Kanäle ohne Veröffentlichungs-API — TikTok, YouTube
+ * und (seit 21.09.2026) Pinterest teilen sich ihn.
  *
  * Auf dem VPS läuft ein echter Chrome auf einem virtuellen Bildschirm (:99).
  * Der Mensch sieht ihn über noVNC im Piloten und meldet sich **selbst** an;
@@ -26,7 +26,7 @@ export const DISPLAY = ":99";
 const VNC_PORT = 5901;
 export const WEB_PORT = 6080;
 
-export type Dienst = "tiktok" | "youtube";
+export type Dienst = "tiktok" | "youtube" | "pinterest";
 
 export type PlanStatus = "geplant" | "uebersprungen" | "fehler";
 

@@ -29,7 +29,10 @@ export function handKanaele(db: Db, projectId: string): string[] {
   const ausStuecken = db.select({ c: t.mpContentPieces.channel }).from(t.mpContentPieces)
     .where(eq(t.mpContentPieces.projectId, projectId)).all()
     .map((r) => platformKey(r.c ?? "") ?? "").filter(Boolean);
-  return [...new Set([...ausProfilen, ...ausStuecken])].filter((p) => p && !posterFor(p));
+  // Pinterest hat zwar einen API-Poster, aber der braucht ein Entwickler-Token,
+  // das niemand hat. Bespielt wird es seit dem 21.09.2026 über den Anmelde-
+  // Browser (pinterest-studio.ts) — also von hier aus.
+  return [...new Set([...ausProfilen, ...ausStuecken])].filter((p) => p && (!posterFor(p) || p === "pinterest"));
 }
 
 /**

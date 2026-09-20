@@ -1,5 +1,5 @@
 /**
- * Handarbeit — die Warteschlange für TikTok und YouTube Shorts.
+ * Handarbeit — die Warteschlange für TikTok, YouTube Shorts und Pinterest.
  *
  * Diese Kanäle haben keine Veröffentlichungs-API. Bisher führte der Weg über
  * die Publish-Seite, und die zeigt genau ein Stück: für eine Woche TikTok wären
@@ -19,6 +19,7 @@ import { ProjectNav } from "../components/ProjectNav.js";
 import { Button, Card, CopyButton, Notice, PageHeader, Pill } from "../components/ui.js";
 import { TiktokStudio } from "../components/TiktokStudio.js";
 import { YoutubeStudio } from "../components/YoutubeStudio.js";
+import { PinterestStudio } from "../components/PinterestStudio.js";
 
 const heuteIso = () => new Date(Date.now() + 2 * 3600_000).toISOString().slice(0, 10);
 
@@ -76,7 +77,7 @@ export function HandarbeitPage() {
   return (
     <>
       <ProjectNav id={id} />
-      <PageHeader label="Handarbeit" title="TikTok & YouTube vorbereiten"
+      <PageHeader label="Handarbeit" title="TikTok, YouTube & Pinterest vorbereiten"
         actions={kanal?.profilUrl ? <a className="mp-btn" href={kanal.profilUrl} target="_blank" rel="noreferrer">Profil öffnen ↗</a> : null} />
       {fehler && <Notice kind="bad">{fehler}</Notice>}
 
@@ -100,6 +101,7 @@ export function HandarbeitPage() {
 
       {platform === "tiktok" && <TiktokStudio projectId={id} />}
       {platform === "youtube" && <YoutubeStudio projectId={id} />}
+      {platform === "pinterest" && <PinterestStudio projectId={id} />}
 
       <Card>
         <div className="mp-card-head"><h2>Termine vergeben</h2></div>
