@@ -34,15 +34,20 @@ export function dueJobs(db: Db, now = new Date()): Due[] {
     const meta = s.BriefMeta.safeParse(parseJson<Record<string, unknown>>(p.briefMeta, {}));
     const confirmed = meta.success && Boolean(meta.data.confirmedAt);
     const hasPlan = Boolean(currentVersion(db, p.id));
-    if (!confirmed) continue;
-    if (now.getTime() - lastRun(db, "community.scan", p.id) > DAY) due.push({ kind: "community.scan", projectId: p.id });
-    if (now.getTime() - lastRun(db, "geo.measure", p.id) > 7 * DAY) due.push({ kind: "geo.measure", projectId: p.id });
+    // Messen hängt nicht am bestätigten Auftrag: Binderplan lief wochenlang mit
+    // `confirmedAt: null`, und die Kanal- und Beitragszahlen kamen nur, wenn
+    // jemand im Piloten auf „Abrufen" klickte (17.–19.09.2026 niemand — die
+    // YouTube-Tage sind weg, der Feed kennt keine Vergangenheit). Beides
+    // braucht kein LLM, nur die Kanalzugänge, also läuft es für jedes Projekt.
     // Plattform-Zahlen einmal am Tag. Welcher Beitrag wirklich dran ist,
     // entscheidet `faelligeMetriken` — hier steht nur der Takt.
     if (now.getTime() - lastRun(db, "metrics.fetch", p.id) > DAY && faelligeMetriken(db, p.id, now).length > 0) due.push({ kind: "metrics.fetch", projectId: p.id });
     // Kanalzahlen taeglich, unabhaengig davon, ob gepostet wurde: ein Konto
     // waechst und bekommt Aufrufe auch an Tagen ohne neuen Beitrag.
     if (now.getTime() - lastRun(db, "kanal.stats", p.id) > DAY) due.push({ kind: "kanal.stats", projectId: p.id });
+    if (!confirmed) continue;
+    if (now.getTime() - lastRun(db, "community.scan", p.id) > DAY) due.push({ kind: "community.scan", projectId: p.id });
+    if (now.getTime() - lastRun(db, "geo.measure", p.id) > 7 * DAY) due.push({ kind: "geo.measure", projectId: p.id });
     // Sunday from 18:00 UTC on, once per week
     if (hasPlan && now.getUTCDay() === 0 && now.getUTCHours() >= 18 && now.getTime() - lastRun(db, "weekly.report", p.id) > 6 * DAY) due.push({ kind: "weekly.report", projectId: p.id });
   }
