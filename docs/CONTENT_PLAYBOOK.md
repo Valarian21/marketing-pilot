@@ -5,7 +5,7 @@ Reel, Bildpost, Caption — arbeitet sie ab, statt sich in jeder Sitzung neu zu 
 wie ein Reel aussieht. Abweichungen sind erlaubt, aber sie werden hier eingetragen,
 wenn sie sich bewährt haben. Sonst ist in vier Wochen wieder alles anders.
 
-Stand: 16.09.2026. Gilt für Instagram, TikTok, Threads, YouTube Shorts.
+Stand: 21.09.2026. Gilt für Instagram, TikTok, Threads, YouTube Shorts.
 
 ---
 
@@ -229,8 +229,16 @@ Bauen, wenn der Pillen-Clip ein `zeig` trägt.
 ### Abspann
 
 Variante **d („Aufbauen")**, **3200 ms**: Das leere Logoraster fällt ein, die drei Felder
-füllen sich (550/680/810 ms), kurzer Puls, dann `binderplan.app` (ab 1150 ms), der Claim
+füllen sich (550/680/810 ms), kurzer Puls, dann die Adresse (ab 1150 ms), der Claim
 „Plane deine Seite, bevor du kaufst." und die Pille „Kostenlos, ohne Anmeldung".
+
+**Die Adresse ist je Plattform der Kurzlink** (seit 21.09.2026): `binderplan.app/ig`,
+`binderplan.app/tt`, `binderplan.app/yt`. Die Basis trägt weiter `binderplan.app`;
+`reel-plattformen.ts` schneidet ihren Abspann ab (`meta.abspannMs`) und hängt den der
+Plattform an (`abspannClip(dir, variante, adresse)`, `ABSPANN_ADRESSE` in
+`abspann-binderplan.ts`). Grund: Die Herkunftsmessung im Produkt läuft über genau diese
+Kurzlinks; mit der nackten Domain kamen 64 Besuche als „binderplan.de" an, und niemand
+wusste, aus welchem Kanal. Die Schrift folgt der Länge (17 Zeichen → 88 px statt 106).
 
 Die 3200 ms sind kein Geschmack, sondern eine Korrektur: Das Ausblenden beginnt bei
 `ABSPANN_MS − 420`. Bei den früheren 2000 ms verschwand der Abspann bei 1580 ms — die
@@ -266,8 +274,12 @@ allein.
    geteilt wird.
 4. **Keine Fußnoten.** Kein Wort über KI, kein Markenhinweis, kein Haftungssatz — der
    Beitrag endet mit seiner Frage (siehe Abschnitt 1).
-5. **Eine Frage am Schluss.** Keine Aufforderung zum Liken — eine echte Frage, auf die ein
-   Sammler eine Meinung hat.
+5. **Eine Frage — oder eine Person, der man es schickt.** Keine Aufforderung zum Liken:
+   entweder eine echte Frage, auf die ein Sammler eine Meinung hat, oder die Send-Zeile
+   („Schick das dem, der Nachtara nie bekommen hat."). Die Send-Zeile ist bei Sorte A
+   Pflicht — sie ist der Unterschied zwischen 40 Sends und 2 (Top-20-Reel, 14.09.2026).
+   Und: **keine Adresse mitten im Text.** Der Weg zur Seite ist immer derselbe Satz
+   („Link in der Bio"); auf YouTube hängt der Studio-Lauf `binderplan.app/yt` selbst an.
 6. Hashtags erst danach, durch eine Leerzeile getrennt.
 
 **Der Stil ist „meinungsstark"** (am 14.09.2026 aus fünf Mustern gewählt). Das heißt: eine
@@ -310,7 +322,9 @@ nach Verzweiflung aus.
 - **TikTok:** Zeile 1 plus ein Satz, maximal drei Tags. Lange Captions werden abgeschnitten.
 - **Threads:** kein Link (Reichweite bricht ein), **ein** Topic-Tag, 2–4 Sätze, offene
   Frage. Antworten zählen dort mehr als Likes — auf jede Antwort wird geantwortet.
-- **YouTube Shorts:** Titel = Hook, Beschreibung zwei Sätze plus Adresse.
+- **YouTube Shorts:** Titel = Hook, **deutsch, ohne Emoji und Ausrufezeichen**
+  (die englischen Handtitel „WOW! …", „This how …" liefen mit 7 und 27 Aufrufen);
+  Beschreibung zwei Sätze, `binderplan.app/yt` hängt der Studio-Lauf in Zeile 2 an.
 
 ---
 
@@ -363,6 +377,11 @@ Eine einzelne Fassung ohne Basis geht weiter direkt:
 | `bisaflor` | Eine Karte, acht Lücken | A | Kunstseite `luFp3Ss3iCi_` |
 | `mauzigasse` | Ein Pokémon, drei Regionen | A | Kunstseite `oGTiqnIKyVjU` |
 | `turtok` | Oben Strand, unten Riff | A | Kunstseite `oW6p_fCa7CgP` |
+| `kunst-mew30`, `kunst-nutzer`, `kunst-reshizek`, `kunst-kirsch` | Ein Mew · Nicht meine Seite · Schwarz. Weiß. · Neun Fächer. Ein Baum. | A | Kunstseiten `6Wb7ebbU-H7B`, `PuXX18XATHs5` (Nutzerseite), `rZ2MM1TdFyP9`, `aM86Tvkh0cB5` — Plan 21.09. |
+| `duell-lugia`, `duell-nachtara`, `duell-mew` | Gleiches Bild, 12× der Preis · Welche ist teurer? | D | Katalog, Bauart `duell` |
+| `seitenwert-schimmernd` | 9 Schimmernde. Eine Seite. 6.916 € | — | Katalog, Bauart `seitenwert` |
+| `lugia-nachdruck`, `karpador` (`reel-hook.ts`) | Von 899 auf 241 € · 297 € für ein Karpador | K | Hook-Layout, Stück `<name>-hook` |
+| `pokenachtara`, `pokepikachu` (`reel-preis.ts`) | Die teuersten Nachtara-/Pikachu-Karten | J/P | Katalog, Bereich `pokemon` |
 
 **Daten und Bilder für ein neues Drehbuch** holt `scripts/reel-daten.ts`: Es fragt den
 Produktkatalog ab, legt die Scans unter `assets/<projekt>/karten/` ab und gibt die
@@ -526,15 +545,26 @@ Was am Format nicht verhandelbar ist — jeder Punkt ist einmal falsch gebaut wo
   1,6 Mbit/s, und das sieht man an den Kartentexten. Gerendert wird nur die Bewegung; die
   Standzeit danach hängt ffmpeg als Standbild an (155 statt 351 Renders).
 
-**Der Textsatz der Serie** (gleich für jede Seite, nur die Zahl wechselt):
+**Der Textsatz der Serie** (seit 21.09.2026; gleich für jede Seite, nur Farbe, Zahl und
+Summe wechseln):
 
-> So sieht eine geplante Seite aus.
-> Farben, die harmonieren. Aus **N** Sets.
-> Zusammengestellt von Binderplan.
-> Bau deine eigene.
+> Eine Seite, eine Farbe.
+> **Farbe**. Aus **N** Sets.
+> Zusammen **S €**.
+> Welche Farbe als Nächstes?
+
+Der Text erklärt die **Seite**, nicht das Werkzeug. Die erste Fassung („Zusammengestellt von
+Binderplan. Bau deine eigene.") war Werbung im Bild — Content-Plan 21.09., Abschnitt 1.4.
+Der Toolname fällt einmal, in der Caption („Der Planer findet sie, ich entscheide, welche
+bleibt."). Das Farbwort wird von der fertigen Seite **abgelesen**, nicht gerechnet: Die
+Bildmotiv-Töne lagen bei zwei von acht Seiten daneben. YouTube-Titel:
+„Eine Seite, eine Farbe: Rot".
 
 Die Set-Zahl wird **nachgezählt**, nicht geschätzt — zwei Karten aus demselben Set sind ein
-Set. Fertig gebaut: `coolshit` (Seite 14 aus „Cool Shit") und `harmonie1` bis `harmonie8`.
+Set. Fertig gebaut: `coolshit` (Seite 14 aus „Cool Shit"), `harmonie1` bis `harmonie8`
+(am 21.09. mit dem neuen Textsatz neu gebaut), `harmonie-rot`, `harmonie-gold`,
+`harmonie-lila` (aus `reel-farbseite.ts --ton 0|45|280 --max 120`) und `evoli` (die einzige
+Familie, die exakt auf eine Seite passt).
 
 ### I — **Artwork Pages** (Art-Kategorie „Binder Art“) · **seit 15.09.2026**
 
@@ -688,15 +718,19 @@ Preisprognosen (unbelegbar, beschädigt die Glaubwürdigkeit dauerhaft).
 
 ### Wochenrhythmus
 
-| Tag | Pflicht | dazu |
-|---|---|---|
-| Mo | A — Binderseite | E — Sets der Woche |
-| Di | A | B — Top-Karten Set |
-| Mi | A | Duell oder Sammler-Fehler |
-| Do | A | C — Ära |
-| Fr | A | D — Vintage vs. Modern |
-| Sa | A | B oder Illustrator |
-| So | A | F — Werkzeug |
+**Seit 21.09.2026: jeden Tag ein Zahl-Beitrag**, nicht ein Format je Wochentag. Die
+Spitzen kamen ausschließlich von Anlass + Zahl (Top-20-Reel 5.205 Aufrufe und 40 Sends,
+alle anderen 59 Beiträge zusammen 18 Sends). Der Tag hat deshalb zwei Pflichten:
+
+| Slot | Sorte |
+|---|---|
+| Zahl-Beitrag (YouTube 10 Uhr, TikTok 12 Uhr) | J Rangliste, K Hook, Duell, D Vergleich, Seitenwert |
+| Kunst-Beitrag (YouTube 14 Uhr, TikTok 19 Uhr, Instagram 18 Uhr) | A Kunstseite, H Matching Cards |
+| Reserve (YouTube 18 Uhr) | F Werkzeug (höchstens 1 je Kanal und Woche), Rangliste, Harmonie |
+
+Kanal-Takt: YouTube 3/Tag, TikTok 2/Tag, Instagram 1 Reel/Tag (keine Carousels, Bilder,
+Stories), Threads 2 Texte/Tag, Facebook und Pinterest aus. Die Slots je Kanal stehen im
+Piloten (Kanäle-Seite) — sie sind die Wahrheit, nicht die Termintabelle.
 
 ---
 

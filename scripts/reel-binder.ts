@@ -556,6 +556,17 @@ const FEELINARA_SEITE = {
   namen: ["Psiana V", "Liliep", "Journée", "Mega-Dragoran-ex", "Feelinara ex", "Tara", "Owei", "Mimi", "Hokumil"],
 };
 
+
+/**
+ * Die neun Schimmernden aus Neo Revelation (Garados, Karpador) und Neo Destiny,
+ * Platz 1 zuerst — avg30 vom 20.09.2026, Summe 6.916 €.
+ */
+const SCHIMMERND = {
+  karten: ["neo4-107", "neo4-109", "neo3-65", "neo4-113", "neo4-111", "neo4-108", "neo3-66", "neo4-112", "neo4-106"],
+  preise: ["1.664 €", "1.393 €", "913 €", "808 €", "599 €", "534 €", "365 €", "336 €", "304 €"],
+  namen: ["Schimm. Glurak", "Schimm. Mewtu", "Schimm. Garados", "Schimm. Despotar", "Schimm. Raichu", "Schimm. Kabutops", "Schimm. Karpador", "Schimm. Stahlos", "Schimm. Celebi"],
+};
+
 const DREHBUECHER: Record<string, Drehbuch> = {
   /**
    * „Das Set kommt erst — deine Seiten nicht." Der Hype-Beitrag zum
@@ -1660,6 +1671,255 @@ Wer legt seine Lieblingskarte wirklich einzeln ab?`,
 Wer legt seine Lieblingskarte einzeln ab?`,
     hashtags: ["#feelinara", "#sylveon", "#30thcelebration", "#binderart", "#pokemonsammeln", "#binderplan"],
   },
+  // --- Content-Plan 21.09.–04.10.2026 (docs/CONTENT_PLAN_2026-09-21.md) ------
+
+  /**
+   * „Gleiches Bild. 12× der Preis." Dieselbe Crystal-Lugia zweimal: das
+   * Original aus Aquapolis (2002) und der Nachdruck im 30th Celebration mit
+   * Jubiläumsstempel. Preise avg30 vom 20.09.2026: 3.002 € gegen 254 €.
+   */
+  "duell-lugia": {
+    titel: "Gleiches Bild. 12× der Preis.",
+    artworks: [],
+    musik: "alex-morgan-no-copyright-music-528321.mp3",
+    clips: [
+      { art: "stand", bild: { art: "karten", karten: ["ecard2-149", "cel30-h7"], sichtbar: 2, spalten: 2, zeilen: 1 },
+        dauerMs: 2600, stil: "hook", zeig: "Gleiches Bild.\n12× der Preis." },
+      { art: "stand", bild: { art: "karten", karten: ["ecard2-149", "cel30-h7"], sichtbar: 2, spalten: 2, zeilen: 1,
+        namen: ["Aquapolis 2002", "30 Jahre 2026"] },
+        dauerMs: 3600, zeig: "Links das Original,\nrechts der Nachdruck." },
+      { art: "stand", bild: { art: "karten", karten: ["ecard2-149", "cel30-h7"], sichtbar: 2, spalten: 2, zeilen: 1,
+        namen: ["Aquapolis 2002", "30 Jahre 2026"] },
+        dauerMs: 2600, zeig: "Was ist der Stempel wert?" },
+      { art: "stand", bild: { art: "karten", karten: ["ecard2-149", "cel30-h7"], sichtbar: 2, spalten: 2, zeilen: 1,
+        preise: ["3.002 €", "254 €"] },
+        dauerMs: 3400, zeig: "2.748 €.\nFür ein Jahr auf der Karte." },
+      { art: "stand", bild: { art: "karten", karten: ["ecard2-149", "cel30-h7"], sichtbar: 2, spalten: 2, zeilen: 1,
+        preise: ["3.002 €", "254 €"] },
+        dauerMs: 3200, stil: "schluss", zeig: "Original oder Nachdruck —\nwas kommt ins Fach?" },
+    ],
+    caption: `Gleiches Bild. 12× der Preis.
+
+Links die Crystal-Lugia aus Aquapolis von 2002, rechts dieselbe Karte als Nachdruck im 30-Jahre-Set — mit Jubiläumsstempel, sonst identisch. 3.002 € gegen 254 €.
+
+Ich hab den Nachdruck ins Fach gelegt und bereue nichts. Die Seite sieht exakt gleich aus, und für die Differenz bekomme ich den Rest des Binders.
+
+Cardmarket, 30-Tage-Schnitt, Stand 20.09.
+
+Original oder Nachdruck — was kommt bei dir ins Fach?`,
+    captionKurz: `Dieselbe Lugia: Aquapolis 2002 für 3.002 €, Nachdruck im 30-Jahre-Set für 254 €. Original oder Nachdruck?`,
+    hashtags: ["#lugia", "#aquapolis", "#30thcelebration", "#pokemonvintage", "#pokemonsammeln", "#binderplan"],
+  },
+
+  /** „Welche ist teurer?" — Nachtara VMAX Alt Art (2021) gegen Nachtara Skyridge (2003). Fast jeder tippt Skyridge. */
+  "duell-nachtara": {
+    titel: "Welche ist teurer? Nachtara 2021 gegen 2003",
+    artworks: [],
+    musik: "alex-morgan-no-copyright-music-528321.mp3",
+    clips: [
+      { art: "stand", bild: { art: "karten", karten: ["swsh7-215", "ecard3-32"], sichtbar: 2, spalten: 2, zeilen: 1 },
+        dauerMs: 2600, stil: "hook", zeig: "Welche ist\nteurer?" },
+      { art: "stand", bild: { art: "karten", karten: ["swsh7-215", "ecard3-32"], sichtbar: 2, spalten: 2, zeilen: 1,
+        namen: ["Evolving Skies 2021", "Skyridge 2003"] },
+        dauerMs: 3600, zeig: "Links 2021,\nrechts 2003." },
+      { art: "stand", bild: { art: "karten", karten: ["swsh7-215", "ecard3-32"], sichtbar: 2, spalten: 2, zeilen: 1,
+        namen: ["Evolving Skies 2021", "Skyridge 2003"] },
+        dauerMs: 2600, zeig: "Denk kurz nach." },
+      { art: "stand", bild: { art: "karten", karten: ["swsh7-215", "ecard3-32"], sichtbar: 2, spalten: 2, zeilen: 1,
+        preise: ["1.812 €", "1.531 €"] },
+        dauerMs: 3400, zeig: "Die neue.\nUm 281 €." },
+      { art: "stand", bild: { art: "karten", karten: ["swsh7-215", "ecard3-32"], sichtbar: 2, spalten: 2, zeilen: 1,
+        preise: ["1.812 €", "1.531 €"] },
+        dauerMs: 3200, stil: "schluss", zeig: "Wie hast du\ngetippt?" },
+    ],
+    caption: `Welche ist teurer?
+
+Links das Nachtara VMAX Alt Art aus Evolving Skies, 2021. Rechts Nachtara aus Skyridge, 2003 — eines der seltensten Sets der WotC-Zeit. Fast jeder tippt rechts.
+
+1.812 € gegen 1.531 €. Die neue gewinnt. Nicht weil sie seltener wäre, sondern weil zehntausend Leute genau diese Illustration wollen und nicht irgendein Nachtara.
+
+Cardmarket, 30-Tage-Schnitt, Stand 20.09.
+
+Wie hast du getippt?`,
+    captionKurz: `Nachtara VMAX Alt Art (2021) oder Nachtara Skyridge (2003) — welche ist teurer? Fast jeder tippt falsch. Wie hast du getippt?`,
+    hashtags: ["#nachtara", "#pokemonquiz", "#evolvingskies", "#skyridge", "#pokemonsammeln", "#binderplan"],
+  },
+
+  /** Reserve: Mew-ex SIR aus 151 gegen das Schimmernde Mew von 2017. */
+  "duell-mew": {
+    titel: "Welche ist teurer? Mew 2023 gegen 2017",
+    artworks: [],
+    musik: "alex-morgan-no-copyright-music-528321.mp3",
+    clips: [
+      { art: "stand", bild: { art: "karten", karten: ["sv04.5-232", "sm3.5-40"], sichtbar: 2, spalten: 2, zeilen: 1 },
+        dauerMs: 2600, stil: "hook", zeig: "Welche ist\nteurer?" },
+      { art: "stand", bild: { art: "karten", karten: ["sv04.5-232", "sm3.5-40"], sichtbar: 2, spalten: 2, zeilen: 1,
+        namen: ["151 · 2023", "Shining Legends 2017"] },
+        dauerMs: 3600, zeig: "Links 151,\nrechts das Schimmernde." },
+      { art: "stand", bild: { art: "karten", karten: ["sv04.5-232", "sm3.5-40"], sichtbar: 2, spalten: 2, zeilen: 1,
+        namen: ["151 · 2023", "Shining Legends 2017"] },
+        dauerMs: 2600, zeig: "Denk kurz nach." },
+      { art: "stand", bild: { art: "karten", karten: ["sv04.5-232", "sm3.5-40"], sichtbar: 2, spalten: 2, zeilen: 1,
+        preise: ["864 €", "205 €"] },
+        dauerMs: 3400, zeig: "Mew-ex.\nUm 659 €." },
+      { art: "stand", bild: { art: "karten", karten: ["sv04.5-232", "sm3.5-40"], sichtbar: 2, spalten: 2, zeilen: 1,
+        preise: ["864 €", "205 €"] },
+        dauerMs: 3200, stil: "schluss", zeig: "Wie hast du\ngetippt?" },
+    ],
+    caption: `Welche ist teurer?
+
+Links die Mew-ex Special Illustration Rare aus 151, 2023. Rechts das Schimmernde Mew aus Shining Legends, 2017 — die Karte, die damals jeder wollte.
+
+864 € gegen 205 €. Die 151er-Illustration kostet das Vierfache. Sechs Jahre reichen, und der Chase von damals ist die zweite Wahl.
+
+Cardmarket, 30-Tage-Schnitt, Stand 20.09.
+
+Wie hast du getippt?`,
+    captionKurz: `Mew-ex aus 151 oder das Schimmernde Mew von 2017 — welche ist teurer? Die Antwort überrascht die meisten. Wie hast du getippt?`,
+    hashtags: ["#mew", "#pokemon151", "#pokemonquiz", "#shiningpokemon", "#pokemonsammeln", "#binderplan"],
+  },
+
+  /**
+   * „9 Schimmernde. Eine Seite." Die ersten Shinys des Spiels — Neo Revelation
+   * und Neo Destiny, 2001/2002 — auf einer Seite, Summe 6.916 € (avg30, 20.09.2026).
+   * Kein Set-Logo: Zwei Sets, und TCGdex liefert für beide nur 200 px.
+   */
+  "seitenwert-schimmernd": {
+    titel: "9 Schimmernde. Eine Seite. 6.916 €.",
+    artworks: [],
+    musik: "absolutesound-background-no-copyright-music-561870.mp3",
+    clips: [
+      { art: "stand", bild: { art: "karten", karten: SCHIMMERND.karten, sichtbar: 9 },
+        dauerMs: 2700, stil: "hook", zeig: "9 Schimmernde.\nEine Seite." },
+      { art: "fuellung", karten: aufsteigend(SCHIMMERND).karten, bis: 8, preise: aufsteigend(SCHIMMERND).preise,
+        dauerMs: 5400, zeig: "Neo Revelation, Neo Destiny.\n2001 bis 2002." },
+      { art: "stand", bild: { art: "karten", karten: [SCHIMMERND.karten[0]!], sichtbar: 1, spalten: 1, zeilen: 1, preise: ["1.664 €"] },
+        dauerMs: 3000, zeig: "Glurak allein:\n1.664 €." },
+      { art: "stand", bild: { art: "karten", karten: aufsteigend(SCHIMMERND).karten, sichtbar: 9, preise: aufsteigend(SCHIMMERND).preise },
+        dauerMs: 3600, zeig: "6.916 €.\nEine Seite." },
+      { art: "stand", bild: { art: "karten", karten: aufsteigend(SCHIMMERND).karten, sichtbar: 9 },
+        dauerMs: 3400, stil: "schluss", zeig: "Was liegt auf deiner\nteuersten Seite?" },
+    ],
+    caption: `9 Schimmernde. Eine Seite.
+
+Die Schimmernden aus Neo Revelation und Neo Destiny waren die ersten Shinys im Spiel — 2001, bevor es das Wort gab. Neun davon auf einer Seite: 6.916 €.
+
+Das billigste Fach ist das Karpador mit 365 €. Das teuerste Glurak mit 1.664 €. Und ganz ehrlich: das Garados ist die schönste Karte der Seite, und sie steht nur auf Platz drei.
+
+Cardmarket, 30-Tage-Schnitt, Stand 20.09.
+
+Was liegt auf deiner teuersten Seite?`,
+    captionKurz: `Neun Schimmernde aus Neo Revelation und Neo Destiny auf einer Seite: 6.916 €. Das Karpador ist das billigste Fach. Was liegt auf deiner teuersten Seite?`,
+    hashtags: ["#shiningpokemon", "#neodestiny", "#pokemonvintage", "#wotc", "#pokemonsammeln", "#binderplan"],
+  },
+
+  /**
+   * „Ein Mew. Eine Seite." Vitrine-Seite „30th Mew" (Binder EnMd-5TPGuQ,
+   * Seite 14): **eine** Ankerkarte — Mew ex 152 aus dem 30th Celebration in
+   * der Mitte, der Wald drumherum gemalt. Der Plan sprach von drei RGB-Mew;
+   * das gibt die Seite nicht her (am 21.09. am Bild geprüft).
+   */
+  "kunst-mew30": {
+    titel: "Ein Mew. Eine Seite.",
+    artworks: ["6Wb7ebbU-H7B"],
+    setLogo: "cel30-setlogo.png",
+    musik: "absolutesound-background-no-copyright-music-561870.mp3",
+    clips: [
+      { art: "stand", bild: { art: "ganz", seite: "6Wb7ebbU-H7B" }, dauerMs: 2800, stil: "hook", zeig: "Ein Mew.\nEine Seite." },
+      { art: "wandel", von: { art: "ganz", seite: "6Wb7ebbU-H7B" }, bis: { art: "binder", seite: "6Wb7ebbU-H7B" }, haltMs: 700, dauerMs: 4000, zeig: "Die Karte ist echt,\nder Wald ist gemalt." },
+      { art: "fahrt", seite: "6Wb7ebbU-H7B", vonFach: 0, bisFach: 8, dauerMs: 4000, zeig: "Mew ex aus dem 30-Jahre-Set,\nSpecial Illustration Rare." },
+      { art: "stand", bild: { art: "ganz", seite: "6Wb7ebbU-H7B" }, dauerMs: 3400, zeig: "Ein Motiv,\nneun Fächer." },
+      { art: "stand", bild: { art: "binder", seite: "6Wb7ebbU-H7B" }, dauerMs: 3200, stil: "schluss", zeig: "Schick das dem,\nder eins gezogen hat." },
+    ],
+    caption: `Ein Mew. Eine Seite.
+
+Das Mew ex aus dem 30-Jahre-Set, allein in der Mitte — der Wald drumherum ist gemalt und führt das Kartenbild über alle neun Fächer weiter. Im Binder sieht man die Fächer kaum noch.
+
+Ein Motiv über neun Fächer, gedruckt in 63 × 88 mm, das Kartenfach in der Mitte bleibt frei für die echte. Wer die Karte hat, hat die Seite.
+
+Schick das dem, der eins gezogen hat.`,
+    captionKurz: `Mew ex aus dem 30-Jahre-Set in der Mitte, der Wald über neun Fächer gemalt. Schick das dem, der eins gezogen hat.`,
+    hashtags: ["#mew", "#30thcelebration", "#pokemon30", "#binderart", "#pokemonbinder", "#binderplan"],
+  },
+
+  /**
+   * „Nicht meine Seite." Vitrine-Seite „Lucia Flower Garden" (Konto 97,
+   * öffentlich): Lucia oben rechts, Imantis in der Mitte, Mantirps unten
+   * links, dazwischen ein gemalter Garten am See mit Togekiss. Eine
+   * **Nutzerseite** — der Beitrag sagt das offen, kein Name.
+   */
+  "kunst-nutzer": {
+    titel: "Nicht meine Seite.",
+    artworks: ["PuXX18XATHs5"],
+    musik: "prettyjohn1-pop-pop-music-503314.mp3",
+    clips: [
+      { art: "stand", bild: { art: "ganz", seite: "PuXX18XATHs5" }, dauerMs: 2800, stil: "hook", zeig: "Nicht meine\nSeite." },
+      { art: "wandel", von: { art: "ganz", seite: "PuXX18XATHs5" }, bis: { art: "binder", seite: "PuXX18XATHs5" }, haltMs: 700, dauerMs: 4000, zeig: "Die hat jemand\nin der Vitrine gebaut." },
+      { art: "fahrt", seite: "PuXX18XATHs5", vonFach: 6, bisFach: 2, dauerMs: 4200, zeig: "Mantirps, Imantis, Lucia —\nein Garten über neun Fächer." },
+      { art: "stand", bild: { art: "ganz", seite: "PuXX18XATHs5" }, dauerMs: 3400, zeig: "Ich hätte die drei\nnie zusammengelegt." },
+      { art: "stand", bild: { art: "binder", seite: "PuXX18XATHs5" }, dauerMs: 3200, stil: "schluss", zeig: "Welche drei würdest du\nin einen Garten setzen?" },
+    ],
+    caption: `Nicht meine Seite.
+
+Die hat jemand anderes in der Vitrine gebaut: Mantirps, Imantis und Lucia in einem Blumengarten am See, der über alle neun Fächer geht — dazwischen ein gemaltes Togekiss. Drei Karten, die in keinem Set nebeneinander liegen; hier gehören sie zusammen.
+
+Das ist der Teil, den ich am liebsten mag: Seiten, auf die ich selbst nie gekommen wäre. Die Vitrine ist voll davon, und jede lässt sich als Vorlage nehmen.
+
+Welche drei würdest du in einen Garten setzen?`,
+    captionKurz: `Nicht meine Seite — die hat jemand in der Vitrine gebaut. Mantirps, Imantis, Lucia in einem Garten. Welche drei würdest du zusammenlegen?`,
+    hashtags: ["#binderart", "#pokemonbinder", "#imantis", "#pokemonsammeln", "#binderplan", "#tcgbinder"],
+  },
+
+  /**
+   * „Schwarz. Weiß. Eine Seite." Vitrine „N's Reshiram & Zekrom": Ns Reshiram
+   * (Reisegefährten) oben in der Mitte, Ns Zekrom (Promo) unten in der Mitte,
+   * dazwischen eine gemalte Treppe aus Stein, Licht und Blitz.
+   */
+  "kunst-reshizek": {
+    titel: "Schwarz. Weiß. Eine Seite.",
+    artworks: ["rZ2MM1TdFyP9"],
+    musik: "alex-morgan-no-copyright-music-528321.mp3",
+    clips: [
+      { art: "stand", bild: { art: "ganz", seite: "rZ2MM1TdFyP9" }, dauerMs: 2800, stil: "hook", zeig: "Schwarz. Weiß.\nEine Seite." },
+      { art: "wandel", von: { art: "ganz", seite: "rZ2MM1TdFyP9" }, bis: { art: "binder", seite: "rZ2MM1TdFyP9" }, haltMs: 700, dauerMs: 4000, zeig: "Reshiram oben,\nZekrom unten." },
+      { art: "fahrt", seite: "rZ2MM1TdFyP9", vonFach: 1, bisFach: 7, dauerMs: 4200, zeig: "Die Karten sind echt,\ndie Treppe ist gemalt." },
+      { art: "stand", bild: { art: "ganz", seite: "rZ2MM1TdFyP9" }, dauerMs: 3400, zeig: "Ein Motiv,\nneun Fächer." },
+      { art: "stand", bild: { art: "binder", seite: "rZ2MM1TdFyP9" }, dauerMs: 3200, stil: "schluss", zeig: "Team Schwarz oder\nTeam Weiß?" },
+    ],
+    caption: `Schwarz. Weiß. Eine Seite.
+
+Ns Reshiram aus Reisegefährten oben, Ns Zekrom als Promo unten — und dazwischen eine gemalte Treppe aus Stein, Licht und Blitz, die beide Drachen auf eine Seite zwingt. Im Set liegen sie nie nebeneinander.
+
+Ein Motiv über neun Fächer, gedruckt in 63 × 88 mm, die beiden Kartenfächer bleiben frei für die echten.
+
+Team Schwarz oder Team Weiß?`,
+    captionKurz: `Ns Reshiram oben, Ns Zekrom unten, dazwischen eine gemalte Treppe über sieben Fächer. Team Schwarz oder Team Weiß?`,
+    hashtags: ["#reshiram", "#zekrom", "#pokemonblackwhite", "#binderart", "#pokemonbinder", "#binderplan"],
+  },
+
+  /** Reserve: „Neun Fächer. Ein Baum." Vitrine „Beatori Cherry Trees" — Beatori-ex (Erhabene Helden) in der Mitte. */
+  "kunst-kirsch": {
+    titel: "Neun Fächer. Ein Baum.",
+    artworks: ["aM86Tvkh0cB5"],
+    musik: "absolutesound-background-no-copyright-music-561870.mp3",
+    clips: [
+      { art: "stand", bild: { art: "ganz", seite: "aM86Tvkh0cB5" }, dauerMs: 2800, stil: "hook", zeig: "Neun Fächer.\nEin Baum." },
+      { art: "wandel", von: { art: "ganz", seite: "aM86Tvkh0cB5" }, bis: { art: "binder", seite: "aM86Tvkh0cB5" }, haltMs: 700, dauerMs: 4000, zeig: "Beatori-ex in der Mitte,\nder Baum drumherum." },
+      { art: "fahrt", seite: "aM86Tvkh0cB5", vonFach: 0, bisFach: 8, dauerMs: 4000, zeig: "Die Karte ist echt,\ndie Blüten sind gemalt." },
+      { art: "stand", bild: { art: "ganz", seite: "aM86Tvkh0cB5" }, dauerMs: 3400, zeig: "Ein Motiv,\nneun Fächer." },
+      { art: "stand", bild: { art: "binder", seite: "aM86Tvkh0cB5" }, dauerMs: 3200, stil: "schluss", zeig: "Welche Karte würdest du\nunter den Baum legen?" },
+    ],
+    caption: `Neun Fächer. Ein Baum.
+
+Beatori-ex aus Erhabene Helden in der Mitte, und der Kirschbaum von der Karte wächst über alle neun Fächer weiter. Ein Rosa, das im Binder sonst nirgends vorkommt.
+
+Ein Motiv über neun Fächer, gedruckt in 63 × 88 mm, das Kartenfach in der Mitte bleibt frei.
+
+Welche Karte würdest du unter den Baum legen?`,
+    captionKurz: `Beatori-ex in der Mitte, der Kirschbaum über neun Fächer gemalt. Welche Karte würdest du unter den Baum legen?`,
+    hashtags: ["#beatori", "#binderart", "#pokemonbinder", "#pokemonsammeln", "#binderplan", "#tcgbinder"],
+  },
+
 };
 
 // --- Bildbausteine -----------------------------------------------------------

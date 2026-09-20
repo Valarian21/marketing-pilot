@@ -120,6 +120,71 @@ Stand 17.09., eBay, ohne Versand.`,
     captionKurz: `Die hässlichste Pokémon-Karte aller Zeiten wird die teuerste? Sechs RGB-Mew in 24 Stunden verkauft, 2.968 bis 8.229 €. Was haltet ihr von den Preisen?`,
     hashtags: ["#30thcelebration", "#rgbmew", "#pokemon30", "#chasecards", "#pokemonsammeln", "#binderplan"],
   },
+  /**
+   * „Von 899 auf 241 €. In einer Woche." Der Rückgriff auf das erfolgreichste
+   * Reel: Am 14.09.2026 stand die Crystal-Lugia des 30th Celebration bei
+   * 899 € (dokumentiert im Top-20-Reel), und wir sagten „wartet bis nach
+   * Mittwoch". Tagespreis am 20.09.: 241 € (card_prices.eur), avg30 254 €.
+   * Die 899 bleiben stehen — sie sind belegt; der zweite Wert wird beim
+   * nächsten Bau gegen den Tagespreis geprüft.
+   */
+  "lugia-nachdruck": {
+    titel: "Von 899 auf 241 €. In einer Woche.",
+    setLogo: "cel30-setlogo.png",
+    musik: "alex-morgan-no-copyright-music-528321.mp3",
+    clips: [
+      { art: "karte", karte: "cel30-h7", farbe: "drei", zahl: "899 €", sub: "vor dem Release", stempel: "14.09.", dauerMs: 1600 },
+      { art: "karte", karte: "cel30-h7", farbe: "drei", zahl: "241 €", sub: "heute", stempel: "−73 %", dauerMs: 1800 },
+      { art: "karte", karte: "cel30-h7", farbe: "drei", zahl: "−658 €", sub: "in einer Woche", dauerMs: 1200 },
+      { art: "karte", karte: "cel30-h7", farbe: "drei", zahl: "WARTEN LOHNT.", sub: "bei jedem neuen Set", dauerMs: 1800 },
+      // Die Pille — ohne Text, wie das Playbook es verlangt.
+      { art: "karte", karte: "cel30-h7", farbe: "drei", dauerMs: 3000 },
+      { art: "frage", karte: "cel30-h7", farbe: "drei", zeilen: ["WER HAT FÜR 899", "GEKAUFT?"], dauerMs: 2400 },
+    ],
+    folgenAbClip: 4,
+    caption: `Von 899 auf 241 €. In einer Woche.
+
+Vor dem Release stand die Crystal-Lugia aus dem 30-Jahre-Set bei 899 € — ganz oben in der Liste, teurer als jede neue Karte des Sets. Ich hatte geschrieben: wartet bis nach Mittwoch. Heute kostet sie 241 €.
+
+Das ist kein Sonderfall, das ist jeder Release. Die ersten Preise sind Ab-Preise von drei Anbietern, keine Verkäufe. Wer in der Woche vor Erscheinen kauft, zahlt für Ungeduld.
+
+Cardmarket, Stand 20.09.
+
+Schick das dem, der am Dienstag bestellt hat.`,
+    captionKurz: `Crystal-Lugia, 30-Jahre-Set: 899 € vor dem Release, 241 € heute. Ich hatte gesagt: wartet bis nach Mittwoch. Wer hat für 899 gekauft?`,
+    hashtags: ["#30thcelebration", "#lugia", "#pokemon30", "#cardmarket", "#pokemonsammeln", "#binderplan"],
+  },
+
+  /**
+   * Reserve: „297 €. Für ein Karpador." Die Illustration Rare aus Entwicklungen
+   * in Paldea (sv02-203, avg30 297 €, 20.09.2026) gegen das Karpador aus dem
+   * Grundset (base1-35, 3 €). Der Plan nannte 1 € für das Basis-Karpador — der
+   * Katalog sagt 3 €, und die Zahl im Bild muss stimmen.
+   */
+  karpador: {
+    titel: "297 €. Für ein Karpador.",
+    musik: "alex-morgan-no-copyright-music-528321.mp3",
+    clips: [
+      { art: "karte", karte: "sv02-203", farbe: "rot", zahl: "297 €", sub: "für ein Karpador", dauerMs: 1600 },
+      { art: "karte", karte: "base1-35", farbe: "rot", zahl: "3 €", sub: "als Grundset-Karte", dauerMs: 1800 },
+      { art: "karte", karte: "sv02-203", farbe: "rot", zahl: "×99", sub: "für die Illustration", dauerMs: 1800 },
+      { art: "karte", karte: "sv02-203", farbe: "rot", dauerMs: 3000 },
+      { art: "frage", karte: "sv02-203", farbe: "rot", zeilen: ["WIE VIEL WÄRE ES", "DIR WERT?"], dauerMs: 2400 },
+    ],
+    folgenAbClip: 3,
+    caption: `297 €. Für ein Karpador.
+
+Die Illustration Rare aus Entwicklungen in Paldea ist das teuerste Karpador, das es je gab — teurer als das Schimmernde von 2001. Das Karpador aus dem Grundset kostet 3 €.
+
+Kein Shiny, keine Auflage von 1999, kein Stempel. Nur eine Illustration, die zehntausend Leute genau so wollen. Das ist der ganze Markt in einer Karte.
+
+Cardmarket, 30-Tage-Schnitt, Stand 20.09.
+
+Wie viel wäre es dir wert?`,
+    captionKurz: `297 € für ein Karpador — die Illustration Rare aus Entwicklungen in Paldea, teurer als das Schimmernde von 2001. Wie viel wäre es dir wert?`,
+    hashtags: ["#karpador", "#magikarp", "#illustrationrare", "#pokemonsammeln", "#cardmarket", "#binderplan"],
+  },
+
 };
 
 // --- Bühne -------------------------------------------------------------------

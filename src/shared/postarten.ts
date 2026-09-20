@@ -62,6 +62,12 @@ export const DREHBUCH_ART: Record<string, PostArt> = {
   "einschub-kunstseite151": "G",
   "preis-set151": "P", "preis-aeraklassik": "P", "preis-illuarita": "P",
   "preis-raritysir": "P", "preis-pokeglurak": "P",
+  // Content-Plan 21.09.–04.10.2026
+  "preis-pokenachtara": "P", "preis-pokepikachu": "P",
+  "einschub-evoli": "G", "einschub-harmonie-rot": "G", "einschub-harmonie-gold": "G", "einschub-harmonie-lila": "G",
+  "duell-lugia": "D", "duell-nachtara": "D", "duell-mew": "D",
+  "seitenwert-schimmernd": "X", "lugia-nachdruck-hook": "X", "karpador-hook": "X",
+  "kunst-mew30": "A", "kunst-nutzer": "A", "kunst-reshizek": "A", "kunst-kirsch": "A",
 };
 
 /**
@@ -93,6 +99,10 @@ export const DREHBUCH_KATEGORIE: Record<string, string> = {
   "preis-illuarita": "Preis-Rangliste · Illustrator",
   "preis-raritysir": "Preis-Rangliste · Seltenheit",
   "preis-pokeglurak": "Preis-Rangliste · Pokémon",
+  "preis-pokenachtara": "Preis-Rangliste · Pokémon", "preis-pokepikachu": "Preis-Rangliste · Pokémon",
+  "einschub-evoli": "Matching Cards", "einschub-harmonie-rot": "Matching Cards",
+  "einschub-harmonie-gold": "Matching Cards", "einschub-harmonie-lila": "Matching Cards",
+  "kunst-mew30": "Artwork Pages", "kunst-nutzer": "Artwork Pages", "kunst-reshizek": "Artwork Pages", "kunst-kirsch": "Artwork Pages",
 };
 
 /** Die Kategorie eines Stücks, falls sein Drehbuch eine hat. */

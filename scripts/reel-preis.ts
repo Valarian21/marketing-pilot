@@ -232,6 +232,64 @@ Over- oder underrated?`,
     hashtags: ["#glurak", "#charizard", "#pokemonpreise", "#cardmarket", "#pokemonsammeln", "#binderplan"],
     musik: "alex-morgan-no-copyright-music-528321.mp3",
   },
+  /**
+   * 6 — Top 10 eines Pokémon: Nachtara. Beobachtung (20.09.2026): vier der zehn
+   * sind über zwanzig Jahre alt, und trotzdem stehen zwei moderne Karten oben
+   * (VMAX Alt Art 1.812 €, Nachtara-ex SIR 1.088 €; Skyridge erst Platz 3 —
+   * der Plan hatte Skyridge auf Platz 2, die Liste sagt es anders). Die Zeile
+   * zu Platz 2 hängt an `vollA`, weil die Zehner keine Marke `zwei` kennt.
+   */
+  pokenachtara: {
+    titel: "Die teuersten Nachtara-Karten",
+    bereich: { pokemon: "Nachtara" },
+    aufbau: "zehn",
+    zeilen: [
+      { ab: "start", text: "Die teuersten\nNachtara-Karten." },
+      { ab: "vollA", versatzMs: -2400, text: "Platz 10 bis 2.\nVier davon älter als du." },
+      { ab: "vollA", versatzMs: 200, text: "Platz 2: {top2}.\n{top2preis}." },
+      { ab: "eins", versatzMs: 400, text: "Platz 1: {top1}, 2021.\n{top1preis}." },
+      { ab: "eins", versatzMs: 2400, text: "Over- oder underrated?", bisMs: 0 },
+    ],
+    caption: `Die teuersten Nachtara-Karten.
+
+Kein Starter, kein Legendäres — und trotzdem sieben Karten über 300 €. Platz 1 ist die VMAX Alt Art aus Evolving Skies mit {top1preis}, vor der Nachtara-ex aus Prismatische Entwicklungen mit {top2preis}. Skyridge von 2003 kommt erst auf Platz 3.
+
+Was mir auffällt: vier der zehn sind über zwanzig Jahre alt, und die Karte ganz oben ist von 2021. Bei keinem anderen Pokémon schlägt Modern die Vintage-Zeit so deutlich.
+
+Cardmarket, 30-Tage-Schnitt, Stand {stand}. Zusammen {summe}.
+
+Over- oder underrated?`,
+    captionKurz: `Nachtara — das teuerste Pokémon, das kein Starter ist. Platz 1: {top1} mit {top1preis}. Over- oder underrated?`,
+    hashtags: ["#nachtara", "#umbreon", "#evolvingskies", "#chasecards", "#pokemonsammeln", "#binderplan"],
+    musik: "alex-morgan-no-copyright-music-528321.mp3",
+  },
+
+  /** 7 — Top 10 eines Pokémon: Pikachu. Die Spitze (Pikachu-ex SIR, 889 €) ist keine zwei Jahre alt; kein Grundset in den Top 3. */
+  pokepikachu: {
+    titel: "Die teuersten Pikachu-Karten",
+    bereich: { pokemon: "Pikachu" },
+    aufbau: "zehn",
+    zeilen: [
+      { ab: "start", text: "Die teuersten\nPikachu-Karten." },
+      { ab: "vollA", versatzMs: -2400, text: "Platz 10 bis 2.\nKein Grundset dabei." },
+      { ab: "vollA", versatzMs: 200, text: "Platz 2: {top2}.\n{top2preis}." },
+      { ab: "eins", versatzMs: 400, text: "Platz 1: {top1}, 2025.\n{top1preis}." },
+      { ab: "eins", versatzMs: 2400, text: "Over- oder underrated?", bisMs: 0 },
+    ],
+    caption: `Die teuersten Pikachu-Karten.
+
+Das bekannteste Pokémon der Welt — und kein Grundset in den Top 3. Platz 1 ist die Pikachu-ex Special Illustration Rare mit {top1preis}, gezeichnet 2025, nicht 1999.
+
+Ich finde das bemerkenswert: Bei Glurak gewinnt die Vintage-Zeit, bei Nachtara Modern, bei Pikachu entscheidet allein die Illustration. Wer das Grundset-Pikachu für die wertvollste hält, hat seit zehn Jahren keinen Preis nachgesehen.
+
+Cardmarket, 30-Tage-Schnitt, Stand {stand}. Zusammen {summe}.
+
+Over- oder underrated?`,
+    captionKurz: `Die teuersten Pikachu-Karten — kein Grundset in den Top 3. Platz 1 mit {top1preis} ist von 2025. Over- oder underrated?`,
+    hashtags: ["#pikachu", "#pokemonkarten", "#chasecards", "#pokemonsammeln", "#cardmarket", "#binderplan"],
+    musik: "alex-morgan-no-copyright-music-528321.mp3",
+  },
+
 };
 
 const name = arg("--drehbuch") ?? "set151";

@@ -153,206 +153,326 @@ Welche Karte hätte bei dir eine eigene Seite verdient?`,
     musik: "alex-morgan-no-copyright-music-528321.mp3",
   },
 
+  /**
+   * Harmonie 1–8 — seit dem 21.09.2026 mit dem Textsatz des Content-Plans
+   * (Abschnitt 1.4): Der Text erklärt die **Seite** (Farbe, Sets, Summe), nicht
+   * das Werkzeug. Die erste Fassung („Zusammengestellt von Binderplan. Bau
+   * deine eigene.") war Werbung im Bild. Die Farbwörter sind von den fertigen
+   * Seiten abgelesen, nicht gerechnet — die Bildmotiv-Töne lagen bei Seite 5
+   * und 8 daneben.
+   */
   harmonie1: {
-    titel: "Harmonie, Seite 1",
+    titel: "Eine Seite, eine Farbe: Grün",
     karten: ["sv02-256", "sv10.5w-094", "sv10.5b-089", "sv10.5b-112", "me02.5-276", "sv01-247", "sv08-206", "sv02-257", "me04-087"],
     reihenfolge: [5, 4, 8, 7, 6, 2, 0, 3, 1],
     zeilen: [
-      { abMs: 0, text: "So sieht eine\ngeplante Seite aus.", stil: "hook" },
-      { abMs: 2400, text: "Farben, die harmonieren.\nAus 7 Sets." },
-      { abMs: 5200, text: "Zusammengestellt\nvon Binderplan." },
-      { abMs: 7600, text: "Bau deine eigene.", stil: "schluss", bisMs: 10400 },
+      { abMs: 0, text: "Eine Seite,\neine Farbe.", stil: "hook" },
+      { abMs: 2400, text: "Grün.\nAus 7 Sets." },
+      { abMs: 5200, text: "Zusammen 1.020 €." },
+      { abMs: 7600, text: "Welche Farbe\nals Nächstes?", stil: "schluss", bisMs: 10400 },
     ],
-    caption: `So sieht eine geplante Seite aus.
+    caption: `Eine Seite, eine Farbe.
 
-Neun Karten aus 7 verschiedenen Sets — Maskagato-ex, Pikachu-ex und Koraidon-ex. Im Binder sieht man von der Herkunft nichts, weil die Farben zusammenpassen. Genau danach sucht Binderplan: Du gibst eine Richtung vor, das Tool findet die Karten, die dazu passen.
+Neun grüne Karten aus 7 Sets — Maskagato-ex, Pikachu-ex und Koraidon-ex. Nach Setnummer sortiert lägen sie auf 7 Seiten und würden sich nie begegnen.
 
-Zusammen 1.020 €. Nach Setnummer zu sortieren ist die langweiligste Art, einen Binder zu füllen.
+Ich bau Seiten inzwischen nur noch so: erst die Farbe, dann die Karten. Der Planer findet sie, ich entscheide, welche bleibt. 1.020 € für die ganze Seite.
 
-Bau deine eigene: binderplan.app
+Cardmarket, 30-Tage-Schnitt, Stand 15.09.
 
-Welche Farbe würdest du zuerst nehmen?`,
-    captionKurz: `Neun Karten aus 7 Sets — im Binder sieht man davon nichts, weil die Farben zusammenpassen.
+Welche Farbe als Nächstes?`,
+    captionKurz: `Neun grüne Karten aus 7 Sets — nach Nummer sortiert würden sie sich nie begegnen. 1.020 €.
 
-Welche Farbe nimmst du?`,
-    hashtags: ["#pokemonbinder", "#binderart", "#pokemonsammeln", "#binderplan", "#pokemontcg", "#pokemoncards"],
+Welche Farbe als Nächstes?`,
+    hashtags: ["#pokemonbinder", "#binderart", "#binderplan", "#pokemonsammeln", "#pokemonkarten", "#tcgbinder"],
     musik: "alex-morgan-no-copyright-music-528321.mp3",
   },
   harmonie2: {
-    titel: "Harmonie, Seite 2",
+    titel: "Eine Seite, eine Farbe: Blau",
     karten: ["sv10.5b-165", "sv10.5w-111", "swsh6-205", "me01-140", "sv10.5b-111", "me02-098", "sv10.5b-110", "sv08-199", "sv10.5b-144"],
     reihenfolge: [6, 2, 3, 4, 0, 1, 5, 7, 8],
     zeilen: [
-      { abMs: 0, text: "So sieht eine\ngeplante Seite aus.", stil: "hook" },
-      { abMs: 2400, text: "Farben, die harmonieren.\nAus 6 Sets." },
-      { abMs: 5200, text: "Zusammengestellt\nvon Binderplan." },
-      { abMs: 7600, text: "Bau deine eigene.", stil: "schluss", bisMs: 10400 },
+      { abMs: 0, text: "Eine Seite,\neine Farbe.", stil: "hook" },
+      { abMs: 2400, text: "Blau.\nAus 6 Sets." },
+      { abMs: 5200, text: "Zusammen 232 €." },
+      { abMs: 7600, text: "Welche Farbe\nals Nächstes?", stil: "schluss", bisMs: 10400 },
     ],
-    caption: `So sieht eine geplante Seite aus.
+    caption: `Eine Seite, eine Farbe.
 
-Neun Karten aus 6 verschiedenen Sets — Kyurem-ex neben Plinfa und Seemops. Im Binder sieht man von der Herkunft nichts, weil die Farben zusammenpassen. Genau danach sucht Binderplan: Du gibst eine Richtung vor, das Tool findet die Karten, die dazu passen.
+Neun blaue Karten aus 6 Sets — Kyurem-ex neben Plinfa und Seemops. Nach Setnummer sortiert lägen sie auf 6 Seiten und würden sich nie begegnen.
 
-Zusammen 232 €. Nach Setnummer zu sortieren ist die langweiligste Art, einen Binder zu füllen.
+Ich bau Seiten inzwischen nur noch so: erst die Farbe, dann die Karten. Der Planer findet sie, ich entscheide, welche bleibt. 232 € für die ganze Seite.
 
-Bau deine eigene: binderplan.app
+Cardmarket, 30-Tage-Schnitt, Stand 15.09.
 
-Welche Farbe würdest du zuerst nehmen?`,
-    captionKurz: `Neun Karten aus 6 Sets — im Binder sieht man davon nichts, weil die Farben zusammenpassen.
+Welche Farbe als Nächstes?`,
+    captionKurz: `Neun blaue Karten aus 6 Sets — nach Nummer sortiert würden sie sich nie begegnen. 232 €.
 
-Welche Farbe nimmst du?`,
-    hashtags: ["#pokemonbinder", "#binderart", "#pokemonsammeln", "#binderplan", "#pokemontcg", "#pokemoncards"],
+Welche Farbe als Nächstes?`,
+    hashtags: ["#pokemonbinder", "#binderart", "#binderplan", "#pokemonsammeln", "#pokemonkarten", "#tcgbinder"],
     musik: "absolutesound-background-no-copyright-music-561870.mp3",
   },
   harmonie3: {
-    titel: "Harmonie, Seite 3",
+    titel: "Eine Seite, eine Farbe: Violett",
     karten: ["me05-119", "xy10-124", "sv05-211", "sv02-212", "me01-183", "swsh7-180", "sv02-222", "me02.5-246", "sv06.5-079"],
     reihenfolge: [7, 6, 1, 8, 2, 0, 5, 4, 3],
     zeilen: [
-      { abMs: 0, text: "So sieht eine\ngeplante Seite aus.", stil: "hook" },
-      { abMs: 2400, text: "Farben, die harmonieren.\nAus 8 Sets." },
-      { abMs: 5200, text: "Zusammengestellt\nvon Binderplan." },
-      { abMs: 7600, text: "Bau deine eigene.", stil: "schluss", bisMs: 10400 },
+      { abMs: 0, text: "Eine Seite,\neine Farbe.", stil: "hook" },
+      { abMs: 2400, text: "Violett.\nAus 8 Sets." },
+      { abMs: 5200, text: "Zusammen 386 €." },
+      { abMs: 7600, text: "Welche Farbe\nals Nächstes?", stil: "schluss", bisMs: 10400 },
     ],
-    caption: `So sieht eine geplante Seite aus.
+    caption: `Eine Seite, eine Farbe.
 
-Neun Karten aus 8 verschiedenen Sets — Psiana V, Despotar und vier Trainerkarten. Im Binder sieht man von der Herkunft nichts, weil die Farben zusammenpassen. Genau danach sucht Binderplan: Du gibst eine Richtung vor, das Tool findet die Karten, die dazu passen.
+Neun violette Karten aus 8 Sets — Psiana V, Despotar und vier Trainerkarten. Nach Setnummer sortiert lägen sie auf 8 Seiten und würden sich nie begegnen.
 
-Zusammen 386 €. Nach Setnummer zu sortieren ist die langweiligste Art, einen Binder zu füllen.
+Ich bau Seiten inzwischen nur noch so: erst die Farbe, dann die Karten. Der Planer findet sie, ich entscheide, welche bleibt. 386 € für die ganze Seite.
 
-Bau deine eigene: binderplan.app
+Cardmarket, 30-Tage-Schnitt, Stand 15.09.
 
-Welche Farbe würdest du zuerst nehmen?`,
-    captionKurz: `Neun Karten aus 8 Sets — im Binder sieht man davon nichts, weil die Farben zusammenpassen.
+Welche Farbe als Nächstes?`,
+    captionKurz: `Neun violette Karten aus 8 Sets — nach Nummer sortiert würden sie sich nie begegnen. 386 €.
 
-Welche Farbe nimmst du?`,
-    hashtags: ["#pokemonbinder", "#binderart", "#pokemonsammeln", "#binderplan", "#pokemontcg", "#pokemoncards"],
+Welche Farbe als Nächstes?`,
+    hashtags: ["#pokemonbinder", "#binderart", "#binderplan", "#pokemonsammeln", "#pokemonkarten", "#tcgbinder"],
     musik: "alex-morgan-no-copyright-music-528321.mp3",
   },
   harmonie4: {
-    titel: "Harmonie, Seite 4",
+    titel: "Eine Seite, eine Farbe: Orange",
     karten: ["sv07-169", "sv10-192", "sv10.5w-097", "sv04-193", "sv10.5w-096", "sm12-22", "bw8-131", "sv10-229", "sv04-186"],
     reihenfolge: [0, 4, 6, 5, 8, 2, 3, 1, 7],
     zeilen: [
-      { abMs: 0, text: "So sieht eine\ngeplante Seite aus.", stil: "hook" },
-      { abMs: 2400, text: "Farben, die harmonieren.\nAus 6 Sets." },
-      { abMs: 5200, text: "Zusammengestellt\nvon Binderplan." },
-      { abMs: 7600, text: "Bau deine eigene.", stil: "schluss", bisMs: 10400 },
+      { abMs: 0, text: "Eine Seite,\neine Farbe.", stil: "hook" },
+      { abMs: 2400, text: "Orange.\nAus 6 Sets." },
+      { abMs: 5200, text: "Zusammen 324 €." },
+      { abMs: 7600, text: "Welche Farbe\nals Nächstes?", stil: "schluss", bisMs: 10400 },
     ],
-    caption: `So sieht eine geplante Seite aus.
+    caption: `Eine Seite, eine Farbe.
 
-Neun Karten aus 6 verschiedenen Sets — Glurak & Rutena GX neben Magby. Im Binder sieht man von der Herkunft nichts, weil die Farben zusammenpassen. Genau danach sucht Binderplan: Du gibst eine Richtung vor, das Tool findet die Karten, die dazu passen.
+Neun orange Karten aus 6 Sets — Glurak & Rutena GX neben Magby. Nach Setnummer sortiert lägen sie auf 6 Seiten und würden sich nie begegnen.
 
-Zusammen 324 €. Nach Setnummer zu sortieren ist die langweiligste Art, einen Binder zu füllen.
+Ich bau Seiten inzwischen nur noch so: erst die Farbe, dann die Karten. Der Planer findet sie, ich entscheide, welche bleibt. 324 € für die ganze Seite.
 
-Bau deine eigene: binderplan.app
+Cardmarket, 30-Tage-Schnitt, Stand 15.09.
 
-Welche Farbe würdest du zuerst nehmen?`,
-    captionKurz: `Neun Karten aus 6 Sets — im Binder sieht man davon nichts, weil die Farben zusammenpassen.
+Welche Farbe als Nächstes?`,
+    captionKurz: `Neun orange Karten aus 6 Sets — nach Nummer sortiert würden sie sich nie begegnen. 324 €.
 
-Welche Farbe nimmst du?`,
-    hashtags: ["#pokemonbinder", "#binderart", "#pokemonsammeln", "#binderplan", "#pokemontcg", "#pokemoncards"],
+Welche Farbe als Nächstes?`,
+    hashtags: ["#pokemonbinder", "#binderart", "#binderplan", "#pokemonsammeln", "#pokemonkarten", "#tcgbinder"],
     musik: "absolutesound-background-no-copyright-music-561870.mp3",
   },
   harmonie5: {
-    titel: "Harmonie, Seite 5",
+    titel: "Eine Seite, eine Farbe: Pastell",
     karten: ["me02.5-272", "sv02-196", "swsh10-161", "sv05-165", "sv05-166", "sv03.5-198", "sv01-245", "sv08-237", "sv10-185"],
     reihenfolge: [5, 6, 7, 1, 3, 8, 0, 4, 2],
     zeilen: [
-      { abMs: 0, text: "So sieht eine\ngeplante Seite aus.", stil: "hook" },
-      { abMs: 2400, text: "Farben, die harmonieren.\nAus 8 Sets." },
-      { abMs: 5200, text: "Zusammengestellt\nvon Binderplan." },
-      { abMs: 7600, text: "Bau deine eigene.", stil: "schluss", bisMs: 10400 },
+      { abMs: 0, text: "Eine Seite,\neine Farbe.", stil: "hook" },
+      { abMs: 2400, text: "Pastell.\nAus 8 Sets." },
+      { abMs: 5200, text: "Zusammen 529 €." },
+      { abMs: 7600, text: "Welche Farbe\nals Nächstes?", stil: "schluss", bisMs: 10400 },
     ],
-    caption: `So sieht eine geplante Seite aus.
+    caption: `Eine Seite, eine Farbe.
 
-Neun Karten aus 8 verschiedenen Sets — Mega-Meganie-ex, Bisaflor-ex und Milotic-ex. Im Binder sieht man von der Herkunft nichts, weil die Farben zusammenpassen. Genau danach sucht Binderplan: Du gibst eine Richtung vor, das Tool findet die Karten, die dazu passen.
+Neun pastellfarbene Karten aus 8 Sets — Mega-Meganie-ex, Bisaflor-ex und Milotic-ex. Nach Setnummer sortiert lägen sie auf 8 Seiten und würden sich nie begegnen.
 
-Zusammen 529 €. Nach Setnummer zu sortieren ist die langweiligste Art, einen Binder zu füllen.
+Ich bau Seiten inzwischen nur noch so: erst die Farbe, dann die Karten. Der Planer findet sie, ich entscheide, welche bleibt. 529 € für die ganze Seite.
 
-Bau deine eigene: binderplan.app
+Cardmarket, 30-Tage-Schnitt, Stand 15.09.
 
-Welche Farbe würdest du zuerst nehmen?`,
-    captionKurz: `Neun Karten aus 8 Sets — im Binder sieht man davon nichts, weil die Farben zusammenpassen.
+Welche Farbe als Nächstes?`,
+    captionKurz: `Neun pastellfarbene Karten aus 8 Sets — nach Nummer sortiert würden sie sich nie begegnen. 529 €.
 
-Welche Farbe nimmst du?`,
-    hashtags: ["#pokemonbinder", "#binderart", "#pokemonsammeln", "#binderplan", "#pokemontcg", "#pokemoncards"],
+Welche Farbe als Nächstes?`,
+    hashtags: ["#pokemonbinder", "#binderart", "#binderplan", "#pokemonsammeln", "#pokemonkarten", "#tcgbinder"],
     musik: "alex-morgan-no-copyright-music-528321.mp3",
   },
   harmonie6: {
-    titel: "Harmonie, Seite 6",
+    titel: "Eine Seite, eine Farbe: Dunkellila",
     karten: ["sm3-88", "sv04-240", "sm5-153", "me02.5-287", "me05-117", "xy1-79", "sma-SV84", "smp-SM63", "me05-115"],
     reihenfolge: [5, 4, 3, 1, 7, 8, 6, 0, 2],
     zeilen: [
-      { abMs: 0, text: "So sieht eine\ngeplante Seite aus.", stil: "hook" },
-      { abMs: 2400, text: "Farben, die harmonieren.\nAus 8 Sets." },
-      { abMs: 5200, text: "Zusammengestellt\nvon Binderplan." },
-      { abMs: 7600, text: "Bau deine eigene.", stil: "schluss", bisMs: 10400 },
+      { abMs: 0, text: "Eine Seite,\neine Farbe.", stil: "hook" },
+      { abMs: 2400, text: "Dunkellila.\nAus 8 Sets." },
+      { abMs: 5200, text: "Zusammen 230 €." },
+      { abMs: 7600, text: "Welche Farbe\nals Nächstes?", stil: "schluss", bisMs: 10400 },
     ],
-    caption: `So sieht eine geplante Seite aus.
+    caption: `Eine Seite, eine Farbe.
 
-Neun Karten aus 8 verschiedenen Sets — Darkrai GX, Yveltal EX und Guzma. Im Binder sieht man von der Herkunft nichts, weil die Farben zusammenpassen. Genau danach sucht Binderplan: Du gibst eine Richtung vor, das Tool findet die Karten, die dazu passen.
+Neun dunkellila Karten aus 8 Sets — Darkrai GX, Yveltal EX und Guzma. Nach Setnummer sortiert lägen sie auf 8 Seiten und würden sich nie begegnen.
 
-Zusammen 230 €. Nach Setnummer zu sortieren ist die langweiligste Art, einen Binder zu füllen.
+Ich bau Seiten inzwischen nur noch so: erst die Farbe, dann die Karten. Der Planer findet sie, ich entscheide, welche bleibt. 230 € für die ganze Seite.
 
-Bau deine eigene: binderplan.app
+Cardmarket, 30-Tage-Schnitt, Stand 15.09.
 
-Welche Farbe würdest du zuerst nehmen?`,
-    captionKurz: `Neun Karten aus 8 Sets — im Binder sieht man davon nichts, weil die Farben zusammenpassen.
+Welche Farbe als Nächstes?`,
+    captionKurz: `Neun dunkellila Karten aus 8 Sets — nach Nummer sortiert würden sie sich nie begegnen. 230 €.
 
-Welche Farbe nimmst du?`,
-    hashtags: ["#pokemonbinder", "#binderart", "#pokemonsammeln", "#binderplan", "#pokemontcg", "#pokemoncards"],
+Welche Farbe als Nächstes?`,
+    hashtags: ["#pokemonbinder", "#binderart", "#binderplan", "#pokemonsammeln", "#pokemonkarten", "#tcgbinder"],
     musik: "absolutesound-background-no-copyright-music-561870.mp3",
   },
   harmonie7: {
-    titel: "Harmonie, Seite 7",
+    titel: "Eine Seite, eine Farbe: Pink",
     karten: ["smp-SM169", "sv04-207", "sv02-209", "sv02-210", "sv10.5b-094", "swsh12.5gg-GG04", "sv01-210", "sv02-208", "swsh6-179"],
     reihenfolge: [3, 2, 0, 7, 5, 4, 6, 1, 8],
     zeilen: [
-      { abMs: 0, text: "So sieht eine\ngeplante Seite aus.", stil: "hook" },
-      { abMs: 2400, text: "Farben, die harmonieren.\nAus 7 Sets." },
-      { abMs: 5200, text: "Zusammengestellt\nvon Binderplan." },
-      { abMs: 7600, text: "Bau deine eigene.", stil: "schluss", bisMs: 10400 },
+      { abMs: 0, text: "Eine Seite,\neine Farbe.", stil: "hook" },
+      { abMs: 2400, text: "Pink.\nAus 7 Sets." },
+      { abMs: 5200, text: "Zusammen 477 €." },
+      { abMs: 7600, text: "Welche Farbe\nals Nächstes?", stil: "schluss", bisMs: 10400 },
     ],
-    caption: `So sieht eine geplante Seite aus.
+    caption: `Eine Seite, eine Farbe.
 
-Neun Karten aus 7 verschiedenen Sets — Evoli & Relaxo GX als Anker. Im Binder sieht man von der Herkunft nichts, weil die Farben zusammenpassen. Genau danach sucht Binderplan: Du gibst eine Richtung vor, das Tool findet die Karten, die dazu passen.
+Neun pinke Karten aus 7 Sets — Evoli & Relaxo GX als Anker. Nach Setnummer sortiert lägen sie auf 7 Seiten und würden sich nie begegnen.
 
-Zusammen 477 €. Nach Setnummer zu sortieren ist die langweiligste Art, einen Binder zu füllen.
+Ich bau Seiten inzwischen nur noch so: erst die Farbe, dann die Karten. Der Planer findet sie, ich entscheide, welche bleibt. 477 € für die ganze Seite.
 
-Bau deine eigene: binderplan.app
+Cardmarket, 30-Tage-Schnitt, Stand 15.09.
 
-Welche Farbe würdest du zuerst nehmen?`,
-    captionKurz: `Neun Karten aus 7 Sets — im Binder sieht man davon nichts, weil die Farben zusammenpassen.
+Welche Farbe als Nächstes?`,
+    captionKurz: `Neun pinke Karten aus 7 Sets — nach Nummer sortiert würden sie sich nie begegnen. 477 €.
 
-Welche Farbe nimmst du?`,
-    hashtags: ["#pokemonbinder", "#binderart", "#pokemonsammeln", "#binderplan", "#pokemontcg", "#pokemoncards"],
+Welche Farbe als Nächstes?`,
+    hashtags: ["#pokemonbinder", "#binderart", "#binderplan", "#pokemonsammeln", "#pokemonkarten", "#tcgbinder"],
     musik: "alex-morgan-no-copyright-music-528321.mp3",
   },
   harmonie8: {
-    titel: "Harmonie, Seite 8",
+    titel: "Eine Seite, eine Farbe: Rosa",
     karten: ["sv08.5-156", "me02.5-288", "me02.5-280", "me02.5-282", "me02.5-290", "sv07-152", "me02.5-236", "swsh7-212", "me03-119"],
     reihenfolge: [4, 0, 1, 5, 6, 7, 2, 3, 8],
     zeilen: [
-      { abMs: 0, text: "So sieht eine\ngeplante Seite aus.", stil: "hook" },
-      { abMs: 2400, text: "Farben, die harmonieren.\nAus 5 Sets." },
-      { abMs: 5200, text: "Zusammengestellt\nvon Binderplan." },
-      { abMs: 7600, text: "Bau deine eigene.", stil: "schluss", bisMs: 10400 },
+      { abMs: 0, text: "Eine Seite,\neine Farbe.", stil: "hook" },
+      { abMs: 2400, text: "Rosa.\nAus 5 Sets." },
+      { abMs: 5200, text: "Zusammen 1.269 €." },
+      { abMs: 7600, text: "Welche Farbe\nals Nächstes?", stil: "schluss", bisMs: 10400 },
     ],
-    caption: `So sieht eine geplante Seite aus.
+    caption: `Eine Seite, eine Farbe.
 
-Neun Karten aus 5 verschiedenen Sets — Feelinara-ex, Mega-Diancie-ex und Mega-Dragoran-ex. Im Binder sieht man von der Herkunft nichts, weil die Farben zusammenpassen. Genau danach sucht Binderplan: Du gibst eine Richtung vor, das Tool findet die Karten, die dazu passen.
+Neun rosa Karten aus 5 Sets — Feelinara-ex, Mega-Diancie-ex und Mega-Dragoran-ex. Nach Setnummer sortiert lägen sie auf 5 Seiten und würden sich nie begegnen.
 
-Zusammen 1.269 €. Nach Setnummer zu sortieren ist die langweiligste Art, einen Binder zu füllen.
+Ich bau Seiten inzwischen nur noch so: erst die Farbe, dann die Karten. Der Planer findet sie, ich entscheide, welche bleibt. 1.269 € für die ganze Seite.
 
-Bau deine eigene: binderplan.app
+Cardmarket, 30-Tage-Schnitt, Stand 15.09.
 
-Welche Farbe würdest du zuerst nehmen?`,
-    captionKurz: `Neun Karten aus 5 Sets — im Binder sieht man davon nichts, weil die Farben zusammenpassen.
+Welche Farbe als Nächstes?`,
+    captionKurz: `Neun rosa Karten aus 5 Sets — nach Nummer sortiert würden sie sich nie begegnen. 1.269 €.
 
-Welche Farbe nimmst du?`,
-    hashtags: ["#pokemonbinder", "#binderart", "#pokemonsammeln", "#binderplan", "#pokemontcg", "#pokemoncards"],
+Welche Farbe als Nächstes?`,
+    hashtags: ["#pokemonbinder", "#binderart", "#binderplan", "#pokemonsammeln", "#pokemonkarten", "#tcgbinder"],
     musik: "absolutesound-background-no-copyright-music-561870.mp3",
-  }
+  },
+
+  // --- Content-Plan 21.09.–04.10.2026 -----------------------------------------
+
+  /**
+   * „Neun Evoli. Eine Seite." Die einzige Familie, die exakt auf eine
+   * Neuner-Seite passt: Evoli in der Mitte, die acht Entwicklungen drumherum
+   * nach Farbe. Karten und Preise (avg30) am 20.09.2026 geprüft — Summe
+   * 3.338 €, davon 1.812 € das Nachtara VMAX Alt Art. Einschub: erst Evoli,
+   * dann im Uhrzeigersinn ab oben links.
+   */
+  evoli: {
+    titel: "Neun Evoli. Eine Seite.",
+    karten: ["swshp-SWSH182", "swsh7-209", "swsh7-212", "swshp-SWSH184", "sv06-188", "swsh7-215", "swshp-SWSH179", "swsh8-270", "swsh7-205"],
+    reihenfolge: [4, 0, 1, 2, 5, 8, 7, 6, 3],
+    zeilen: [
+      { abMs: 0, text: "Neun Evoli.\nEine Seite.", stil: "hook" },
+      { abMs: 2400, text: "Die einzige Familie,\ndie genau passt." },
+      { abMs: 5200, text: "Nachtara allein: 1.812 €.\nDie anderen acht: 1.526 €." },
+      { abMs: 7600, text: "Welches fehlt dir noch?", stil: "schluss", bisMs: 10400 },
+    ],
+    caption: `Neun Evoli. Eine Seite.
+
+Evoli und seine acht Entwicklungen sind die einzige Familie im Spiel, die exakt auf eine Neuner-Seite passt — Evoli in die Mitte, die acht drumherum nach Farbe. Ich hab lange gebraucht, bis ich das gesehen habe.
+
+Die Seite hier kostet 3.338 €, davon 1.812 € allein das Nachtara VMAX aus Evolving Skies. Ohne die Alt Art ist es eine 1.500-€-Seite, und sie sieht genauso gut aus.
+
+Cardmarket, 30-Tage-Schnitt, Stand 20.09.
+
+Schick das dem, der Nachtara nie bekommen hat.`,
+    captionKurz: `Neun Evoli, eine Seite — die einzige Familie, die exakt passt. 3.338 €, davon 1.812 € das Nachtara. Welches fehlt dir noch?`,
+    hashtags: ["#evoli", "#eeveelutions", "#evolvingskies", "#pokemonbinder", "#binderart", "#binderplan"],
+    musik: "alex-morgan-no-copyright-music-528321.mp3",
+  },
+
+  /**
+   * Harmonie in drei neuen Farben — gerechnet mit `reel-farbseite.ts --ton 0|45|280
+   * --max 120` am 21.09.2026 (Preise avg30, Reihenfolge dunkel → hell).
+   * Set-Zahl je Seite nachgezählt.
+   */
+  "harmonie-rot": {
+    titel: "Eine Seite, eine Farbe: Rot",
+    karten: ["sv06.5-073", "sv09-182", "sv09-174", "me01-153", "sv06-208", "swsh7-178", "sv05-195", "sm12-4", "sm9-167"],
+    zeilen: [
+      { abMs: 0, text: "Eine Seite,\neine Farbe.", stil: "hook" },
+      { abMs: 2400, text: "Rot.\nAus 8 Sets." },
+      { abMs: 5200, text: "Zusammen 68 €." },
+      { abMs: 7600, text: "Welche Farbe\nals Nächstes?", stil: "schluss", bisMs: 10400 },
+    ],
+    caption: `Eine Seite, eine Farbe.
+
+Neun rote Karten aus 8 Sets — Volcanion-ex, Giflor GX und Fuegro GX. Nach Setnummer sortiert lägen sie auf acht Seiten und würden sich nie begegnen.
+
+Ich bau Seiten inzwischen nur noch so: erst die Farbe, dann die Karten. Der Planer findet sie, ich entscheide, welche bleibt. 68 € für die ganze Seite.
+
+Cardmarket, 30-Tage-Schnitt, Stand 20.09.
+
+Welche Farbe als Nächstes?`,
+    captionKurz: `Neun rote Karten aus 8 Sets — nach Nummer sortiert würden sie sich nie begegnen. 68 €.
+
+Welche Farbe als Nächstes?`,
+    hashtags: ["#pokemonbinder", "#binderart", "#binderplan", "#pokemonsammeln", "#pokemonkarten", "#tcgbinder"],
+    musik: "absolutesound-background-no-copyright-music-561870.mp3",
+  },
+  "harmonie-gold": {
+    titel: "Eine Seite, eine Farbe: Gold",
+    karten: ["me03-098", "xy9-41", "xy11-66", "sm8-86", "sm6-95", "sm1-161", "swsh8-280", "xy12-32", "sv05-163"],
+    zeilen: [
+      { abMs: 0, text: "Eine Seite,\neine Farbe.", stil: "hook" },
+      { abMs: 2400, text: "Gold.\nAus 9 Sets." },
+      { abMs: 5200, text: "Zusammen 87 €." },
+      { abMs: 7600, text: "Welche Farbe\nals Nächstes?", stil: "schluss", bisMs: 10400 },
+    ],
+    caption: `Eine Seite, eine Farbe.
+
+Neun goldene Karten aus 9 Sets — Hyperball, Quajutsu-TURBO und Tengulist. Nach Setnummer sortiert lägen sie auf neun Seiten und würden sich nie begegnen.
+
+Ich bau Seiten inzwischen nur noch so: erst die Farbe, dann die Karten. Der Planer findet sie, ich entscheide, welche bleibt. 87 € für die ganze Seite.
+
+Cardmarket, 30-Tage-Schnitt, Stand 20.09.
+
+Welche Farbe als Nächstes?`,
+    captionKurz: `Neun goldene Karten aus 9 Sets — nach Nummer sortiert würden sie sich nie begegnen. 87 €.
+
+Welche Farbe als Nächstes?`,
+    hashtags: ["#pokemonbinder", "#binderart", "#binderplan", "#pokemonsammeln", "#pokemonkarten", "#tcgbinder"],
+    musik: "alex-morgan-no-copyright-music-528321.mp3",
+  },
+  "harmonie-lila": {
+    titel: "Eine Seite, eine Farbe: Lila",
+    karten: ["swsh6-178", "swsh12-176", "sv10.5b-114", "sv08.5-163", "sv05-189", "swsh11-179", "sv08.5-142", "xy8-113", "sv02-242"],
+    zeilen: [
+      { abMs: 0, text: "Eine Seite,\neine Farbe.", stil: "hook" },
+      { abMs: 2400, text: "Lila.\nAus 8 Sets." },
+      { abMs: 5200, text: "Zusammen 72 €." },
+      { abMs: 7600, text: "Welche Farbe\nals Nächstes?", stil: "schluss", bisMs: 10400 },
+    ],
+    caption: `Eine Seite, eine Farbe.
+
+Neun lila Karten aus 8 Sets — Infamomo-ex, Zapplalek und Galar-Laschoking V. Nach Setnummer sortiert lägen sie auf acht Seiten und würden sich nie begegnen.
+
+Ich bau Seiten inzwischen nur noch so: erst die Farbe, dann die Karten. Der Planer findet sie, ich entscheide, welche bleibt. 72 € für die ganze Seite.
+
+Cardmarket, 30-Tage-Schnitt, Stand 20.09.
+
+Welche Farbe als Nächstes?`,
+    captionKurz: `Neun lila Karten aus 8 Sets — nach Nummer sortiert würden sie sich nie begegnen. 72 €.
+
+Welche Farbe als Nächstes?`,
+    hashtags: ["#pokemonbinder", "#binderart", "#binderplan", "#pokemonsammeln", "#pokemonkarten", "#tcgbinder"],
+    musik: "absolutesound-background-no-copyright-music-561870.mp3",
+  },
+
 };
 
 const name = arg("--drehbuch") ?? "coolshit";

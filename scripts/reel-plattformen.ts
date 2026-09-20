@@ -25,6 +25,7 @@ import { loadBrandKit } from "../src/server/agents/studio/brandkit.js";
 import { playwrightRenderer } from "../src/server/agents/studio/render.js";
 import { runFfmpeg, OUTPUT_FPS } from "../src/server/agents/video/assemble.js";
 import { folgenHtml, SITZE, KANAL, type Plattform } from "../src/server/agents/video/folgen-pille.js";
+import { abspannClip, adresseFuer } from "../src/server/agents/video/abspann-binderplan.js";
 
 const PROJEKT = "47a70767-fbe6-4657-b406-2de088282896";
 const W = 1080, H = 1920;
@@ -71,7 +72,11 @@ for (const plattform of ziele) {
   if (!SITZE[plattform]) throw new Error(`Keine Plattform „${plattform}"`);
   const alteFassung = ersetzen ? vorhandene
     .filter((p) => { const m = parseJson<Record<string, unknown>>(p.meta, {});
-      return m["drehbuch"] === drehbuch && m["platform"] === plattform && m["basis"] !== true && p.status !== "rejected"; })
+      // Eine gepostete Fassung ist Geschichte und wird nie überschrieben — für
+      // sie entsteht ein neues Stück (am 21.09.2026 hätte der Neubau der
+      // Harmonie-Seiten sonst fünf veröffentlichte Instagram-Reels ersetzt).
+      return m["drehbuch"] === drehbuch && m["platform"] === plattform && m["basis"] !== true
+        && p.status !== "rejected" && p.status !== "published"; })
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0] : undefined;
   const pieceId = alteFassung?.id ?? newId();
   const outDir = path.join(env.MP_DATA_DIR, "assets", PROJEKT, "pieces", pieceId);
@@ -84,23 +89,37 @@ for (const plattform of ziele) {
   await playwrightRenderer([{ html: folgenHtml(akzent, plattform, versatz), width: W, height: H, transparent: true, file: pille }]);
 
   const reel = path.join(outDir, "reel.mp4");
-  if (zeit) {
-    // Nur das Bild wird neu kodiert; die Tonspur bleibt unangetastet.
-    await runFfmpeg(["-i", basisDatei, "-loop", "1", "-framerate", String(OUTPUT_FPS), "-i", pille,
-      "-filter_complex",
-      `[1:v]format=rgba,setsar=1[p];[0:v][p]overlay=0:0:eof_action=pass:enable='between(t,${s3(zeit.startMs)},${s3(zeit.endMs)})'[v]`,
-      "-map", "[v]", "-map", "0:a", "-c:a", "copy",
-      "-c:v", "libx264", "-preset", "medium", "-crf", "20", "-pix_fmt", "yuv420p", "-movflags", "+faststart",
-      // Die Kennzeichnung in den Dateidaten gilt nur, wenn im Bild wirklich etwas
-      // Gemaltes steckt. Eine Rangliste aus echten Scans als „AI-generated" zu
-      // markieren wäre schlicht falsch — und die Apps lesen das aus.
-      ...(basisMeta["kiBild"] === false ? []
-        : ["-metadata", "comment=AI-generated: true (Binderplan Kunstseite, Marketing Pilot)"]),
-      "-metadata", `title=${basis.title}`, "-y", reel]);
-  } else {
-    fs.copyFileSync(basisDatei, reel);
-    console.log("  (Basis ohne Folgen-Zeitspanne — Fassung ist eine reine Kopie)");
-  }
+  /**
+   * Der Abspann wird je Plattform getauscht: Die Basis trägt `binderplan.app`,
+   * die Fassung bekommt den Kurzlink des Kanals (`/ig`, `/tt`, `/yt`) — nur so
+   * ist die Herkunft im Produkt messbar. Abgeschnitten wird die Länge des
+   * Abspanns, den die Basis in `meta.abspannMs` nennt; fehlt die Angabe (alte
+   * Basen), bleibt der Abspann, wie er ist.
+   */
+  const dauerMs = Number(basisMeta["dauerMs"] ?? 0);
+  const abspannMs = Number(basisMeta["abspannMs"] ?? 0);
+  const tauschen = dauerMs > 0 && abspannMs > 0;
+  const abspann = tauschen ? await abspannClip(env.MP_DATA_DIR, undefined, adresseFuer(plattform)) : null;
+  const eingang = ["-i", basisDatei, "-loop", "1", "-framerate", String(OUTPUT_FPS), "-i", pille,
+    ...(abspann ? ["-i", abspann] : [])];
+  const koerper = tauschen ? `[0:v]trim=0:${s3(dauerMs - abspannMs)},setpts=PTS-STARTPTS[k];` : "[0:v]null[k];";
+  const pilleEbene = zeit
+    ? `[1:v]format=rgba,setsar=1[p];[k][p]overlay=0:0:eof_action=pass:enable='between(t,${s3(zeit.startMs)},${s3(zeit.endMs)})'[kp];`
+    : "[k]null[kp];";
+  const schluss = tauschen
+    ? `[2:v]setpts=PTS-STARTPTS,setsar=1,format=yuv420p[ab];[kp]setsar=1,format=yuv420p[kq];[kq][ab]concat=n=2:v=1:a=0[v]`
+    : "[kp]format=yuv420p[v]";
+  if (!zeit) console.log("  (Basis ohne Folgen-Zeitspanne — keine Pille)");
+  // Nur das Bild wird neu kodiert; die Tonspur bleibt unangetastet.
+  await runFfmpeg([...eingang, "-filter_complex", koerper + pilleEbene + schluss,
+    "-map", "[v]", "-map", "0:a", "-c:a", "copy",
+    "-c:v", "libx264", "-preset", "medium", "-crf", "20", "-pix_fmt", "yuv420p", "-movflags", "+faststart",
+    // Die Kennzeichnung in den Dateidaten gilt nur, wenn im Bild wirklich etwas
+    // Gemaltes steckt. Eine Rangliste aus echten Scans als „AI-generated" zu
+    // markieren wäre schlicht falsch — und die Apps lesen das aus.
+    ...(basisMeta["kiBild"] === false ? []
+      : ["-metadata", "comment=AI-generated: true (Binderplan Kunstseite, Marketing Pilot)"]),
+    "-metadata", `title=${basis.title}`, "-y", reel]);
 
   // Text und Schlagworte stehen am Basis-Stück je Plattform bereit.
   const lang = String(basisMeta["captionLang"] ?? basisMeta["caption"] ?? "");
@@ -113,11 +132,12 @@ for (const plattform of ziele) {
   const ts = nowIso();
   const assetId = newId();
   if (alteFassung) {
-    // Nur Video und Text erneuern; Status und Termin des Stücks bleiben.
+    // Video, Titel und Text erneuern; Status und Termin des Stücks bleiben.
     db.update(t.mpContentPieces).set({
+      title: `${basis.title.replace(/ · \w+$/, "")} · ${plattform}`,
       body: `${caption}\n\n${hashtags.join(" ")}`, assets: toJson([assetId]),
       meta: toJson({ ...parseJson<Record<string, unknown>>(alteFassung.meta, {}), ...basisMeta,
-        platform: plattform, caption, hashtags, basis: false, ausBasis: basis.id }),
+        platform: plattform, caption, hashtags, basis: false, ausBasis: basis.id, abspannAdresse: adresseFuer(plattform) }),
       updatedAt: ts,
     }).where(eq(t.mpContentPieces.id, pieceId)).run();
     for (const a of db.select().from(t.mpAssets).all().filter((a2) => a2.contentPieceId === pieceId)) {
@@ -128,7 +148,7 @@ for (const plattform of ziele) {
     title: `${basis.title.replace(/ · \w+$/, "")} · ${plattform}`,
     body: `${caption}\n\n${hashtags.join(" ")}`,
     assets: toJson([assetId]), status: "review", humanEdited: false, publishedAt: null, externalUrl: null, utm: "{}",
-    meta: toJson({ ...basisMeta, platform: plattform, caption, hashtags, basis: false, ausBasis: basis.id }),
+    meta: toJson({ ...basisMeta, platform: plattform, caption, hashtags, basis: false, ausBasis: basis.id, abspannAdresse: adresseFuer(plattform) }),
     aiTellScore: null, aiTellNotes: "Kunstseiten-Reel ohne Stimme, Texte von Hand.", rejectionReason: "",
     createdAt: ts, updatedAt: ts,
   }).run();

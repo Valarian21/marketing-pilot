@@ -53,6 +53,24 @@ const s3 = (ms: number) => (ms / 1000).toFixed(3);
 
 const BLAU = "#2A4B9B", GELB = "#F5C518", TINTE = "#14161C";
 const DOMAIN = "binderplan.app";
+/**
+ * Die Adresse im Abspann je Plattform — seit dem 21.09.2026 die Kurzlinks des
+ * Produkts (`/ig`, `/tt`, `/yt`), nicht mehr die nackte Domain.
+ *
+ * Grund: Die Herkunftsmessung des Produkts läuft ohne Cookie über genau diese
+ * Kurzlinks. Mit `binderplan.app` im Bild kamen 64 Besuche als „binderplan.de"
+ * an — und niemand wusste, aus welchem Kanal. Der Abspann ist der einzige
+ * Moment, in dem eine Adresse im Bild steht; er muss die messbare tragen.
+ * Die Plattform-Schlüssel sind die aus `folgen-pille.ts` (`shorts` = YouTube).
+ */
+export const ABSPANN_ADRESSE: Record<string, string> = {
+  instagram: "binderplan.app/ig",
+  tiktok: "binderplan.app/tt",
+  shorts: "binderplan.app/yt",
+  youtube: "binderplan.app/yt",
+};
+export const adresseFuer = (plattform?: string | null): string =>
+  (plattform && ABSPANN_ADRESSE[plattform]) || DOMAIN;
 const CLAIM = ["Plane deine Seite,", "bevor du kaufst."];
 const FUSS = "Kostenlos, ohne Anmeldung";
 
@@ -80,11 +98,18 @@ function logoHtml(logoUrl: string): string {
   </body></html>`;
 }
 
+/**
+ * Bungee braucht rund 0,663 em je Zeichen (gemessen); `binderplan.app` (14
+ * Zeichen) passt bei 106 px, `binderplan.app/yt` (17) nicht mehr in 1.000 px.
+ * Die Größe folgt deshalb der Länge, nach oben bei 106 gedeckelt.
+ */
+const adressGroesse = (text: string) => Math.min(106, Math.floor(1000 / (text.length * 0.663)));
+
 /** Eine Textebene: Adresse, Claim oder Fußzeile — jede für sich, damit sie einzeln aufblenden können. */
-function textHtml(welche: "domain" | "claim" | "fuss"): string {
+function textHtml(welche: "domain" | "claim" | "fuss", adresse = DOMAIN): string {
   const inhalt = welche === "domain"
     ? `<div style="position:absolute;left:0;right:0;top:${DOMAIN_Y}px;text-align:center;
-         font-family:'Bungee',system-ui;font-size:106px;letter-spacing:-.02em;color:#fff;white-space:nowrap">${DOMAIN}</div>`
+         font-family:'Bungee',system-ui;font-size:${adressGroesse(adresse)}px;letter-spacing:-.02em;color:#fff;white-space:nowrap">${adresse}</div>`
     : welche === "claim"
     ? `<div style="position:absolute;left:0;right:0;top:${CLAIM_Y}px;text-align:center;
          font-family:'Archivo',system-ui;font-weight:800;font-size:56px;line-height:1.24;color:#fff">
@@ -308,12 +333,16 @@ export function abspannVerfuegbar(datenDir: string): boolean {
  * `datenDir` ist `MP_DATA_DIR`; Zwischenstände liegen unter
  * `assets/<projekt>/abspann/` und werden wiederverwendet.
  */
-export async function abspannClip(datenDir: string, variante = ABSPANN_VARIANTE): Promise<string> {
+export async function abspannClip(datenDir: string, variante = ABSPANN_VARIANTE, adresse = DOMAIN): Promise<string> {
   const v = VARIANTEN[variante];
   if (!v) throw new Error(`Keine Abspann-Variante „${variante}". Bekannt: ${Object.keys(VARIANTEN).join(", ")}`);
   const werk = path.join(datenDir, "assets", PROJEKT, "abspann");
   fs.mkdirSync(werk, { recursive: true });
   const dateien = ebenenPfade(werk);
+  // Eine andere Adresse bekommt eine eigene Textebene und einen eigenen Clip;
+  // Grund, Logo, Claim und Fußzeile bleiben geteilt.
+  const kennung = adresse === DOMAIN ? "" : `-${adresse.replace(/^binderplan\.app\/?/, "").replace(/[^\w-]/g, "_") || "x"}`;
+  if (kennung) dateien.domain = path.join(werk, `domain${kennung}.png`);
 
   if (!ebenenNamen.every((n) => fs.existsSync(dateien[n]))) {
     const logoDatei = path.join(datenDir, "assets", PROJEKT, "brand", "binderplan-logo-512.png");
@@ -322,14 +351,14 @@ export async function abspannClip(datenDir: string, variante = ABSPANN_VARIANTE)
     const jobs: RenderJob[] = [
       { html: grundHtml(), width: W, height: H, file: dateien.grund },
       { html: logoHtml(logoUrl), width: W, height: H, transparent: true, file: dateien.logo },
-      { html: textHtml("domain"), width: W, height: H, transparent: true, file: dateien.domain },
+      { html: textHtml("domain", adresse), width: W, height: H, transparent: true, file: dateien.domain },
       { html: textHtml("claim"), width: W, height: H, transparent: true, file: dateien.claim },
       { html: textHtml("fuss"), width: W, height: H, transparent: true, file: dateien.fuss },
     ];
     await playwrightRenderer(jobs);
   }
 
-  const ziel = path.join(werk, `abspann-${variante}.mp4`);
+  const ziel = path.join(werk, `abspann-${variante}${kennung}.mp4`);
   const ebenen = ebenenNamen.map((n) => dateien[n]);
   if (v.teile) {
     const teile = await logoTeile(datenDir, werk);

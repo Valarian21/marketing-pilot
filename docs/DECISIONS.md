@@ -39,6 +39,16 @@ Format: Datum · Entscheidung · Grund · Alternative, die verworfen wurde.
 - **Filterlisten der Mediathek kommen aus `/media/facets`**, nicht aus dem gefilterten Ergebnis: vorher schrumpften Projekt- und Kanalliste mit jedem Filter, und eine Kombination ohne Treffer ließ die eigene Auswahl verschwinden. Eigene Schlüssel wie `shorts` heißen im UI „YouTube Shorts" (`plattformName`). Suche wartet 300 ms Tipp-Pause.
 - **Projekt-Reiter in Arbeitsreihenfolge**: Heute · Freigaben · Pipeline · Handarbeit · Kanäle · Übersicht · Produkt-Brief. Freigaben und Pipeline fehlten dort, obwohl sie der tägliche Weg sind.
 
+## 2026-09-21 (Bau-Sitzung zum Content-Plan 21.09.–04.10.)
+
+- **Die Kanal-Slots im Piloten sind die Wahrheit, nicht die Termintabelle.** `nachplanen()` läuft alle zehn Minuten auf Kanälen ab Stufe „Freigeben", füllt freie Slots aus dem freigegebenen Pool und verschiebt Termine ohne passenden Slot („verwaist"). Am 20.09. wurden 7 Instagram- und 26 Threads-Termine von Hand gesetzt; am 21.09. standen 31 bzw. 29 drin, auf 5/Tag und 3/Tag zusammengerückt. Vor jedem Kalender zuerst die Slots setzen; Stücke, die nicht laufen sollen, bleiben auf `review`.
+- **Abspann je Plattform** (`ABSPANN_ADRESSE`, `abspannClip(dir, variante, adresse)`): `binderplan.app/ig`, `/tt`, `/yt` statt der nackten Domain — nur so misst das Produkt die Herkunft. Die Basis trägt weiter `binderplan.app`; `reel-plattformen.ts` schneidet ihren Abspann (`meta.abspannMs`) ab und hängt den der Plattform an. Die Schrift folgt der Länge, damit 17 Zeichen in 1.000 px passen.
+- **`--ersetzen` überschreibt nie eine veröffentlichte Fassung.** Der Neubau der Harmonie-Seiten hätte sonst fünf gepostete Instagram-Reels ersetzt; für sie entsteht ein neues Stück, Termine an nicht geposteten Fassungen bleiben heil. Der Titel wird beim Ersetzen mit erneuert.
+- **Der Textsatz der Matching-Cards-Serie erklärt die Seite** (Farbe, Sets, Summe), nicht das Werkzeug. Farbwörter werden von der fertigen Seite abgelesen — die gerechneten Bildmotiv-Töne lagen bei zwei von acht Seiten daneben (Pastell- und Rosa-Seiten kamen als „Orange" heraus).
+- **Kunstseiten-Texte gegen das Bild prüfen, nicht gegen den Plan.** „30th Mew" hat eine Ankerkarte (Mew ex), nicht drei RGB-Mew; die Nutzerseite trägt Lucia/Imantis/Mantirps (Togekiss ist gemalt); Reshiram und Zekrom liegen oben und unten, nicht links und rechts. Alle drei Drehbücher wurden am Bild korrigiert.
+- **Ranglisten-Texte hängen an Platzhaltern, Behauptungen an der Liste.** Der Plan hatte Skyridge auf Platz 2 der Nachtara-Liste; `--nur-liste` sagte Nachtara-ex SIR (1.088 €), Skyridge Platz 3. Die Caption wurde vor dem Bau berichtigt.
+- **Doppelte Fassungen werden abgelehnt** (33 am 21.09., z. B. 14 × `einschub-coolshit` Instagram): je Drehbuch und Plattform bleibt die jüngste nicht veröffentlichte Fassung, Stücke mit Termin sind ausgenommen.
+
 ## 2026-09-15 (Einschub-Reels)
 
 - **Neues Format „die Seite füllt sich"** (`scripts/reel-einschub.ts`): echte Binderseite, Karten gleiten einzeln in die Fächer. Gebaut als CSS-Animation, die **Bild für Bild gerendert** wird — eine abgefilmte Animation landete bei 1,6 Mbit/s, und das sah man an den Kartentexten. Gerendert wird nur die Bewegung, die Standzeit hängt ffmpeg als Standbild an: 155 statt 351 Renders, knapp vier statt sechs Minuten.
