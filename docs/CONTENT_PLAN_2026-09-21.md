@@ -75,7 +75,7 @@ Was daran nicht stimmt:
 | Kanal | Takt | Slots | Inhalt |
 |---|---|---|---|
 | YouTube Shorts | 3/Tag | 10:00 Zahl-Beitrag · 14:00 Kunst/Harmonie · 18:00 Reserve (Tool, Rangliste, Harmonie) | alle Reels als Shorts-Fassung; Di 22.09. 18:00 das lange Anleitungsvideo |
-| TikTok | 2/Tag | 12:00 Zahl · 19:00 Kunst/Harmonie | **bis 24.09. liegt das Studio schon voll (3/Tag)**, der Plan beginnt am 25.09. |
+| TikTok | 2/Tag | 12:00 Zahl · 19:00 Kunst/Harmonie | Am 20.09. im Studio neun geplante Beiträge gelöscht (veraltet/doppelt); drei liegen noch (21.09. 12 Uhr, 24.09. 12 + 21 Uhr), der Rest kommt aus dem Pool |
 | Instagram | 1/Tag | 18:00 | ein Reel; Carousels, Bilder, Stories entfallen |
 | Threads | 2/Tag | 10:00 · 19:00 | Meinungstexte, ein Topic-Tag, kein Link, keine Bilder |
 | Facebook | aus | — | Kanal im Piloten auf „Aus" stellen |
@@ -540,20 +540,20 @@ Termine für N-Stücke legt die Bau-Sitzung nach dem Bau an (Abschnitt 8.4).
 
 | Tag | YT 10 | YT 14 | YT 18 | TT 12 | TT 19 | IG 18 | TH |
 |---|---|---|---|---|---|---|---|
-| Mo 21.09. | E1 Seitenwert | E2 Schiggy | E13 Slabs | *Studio* | *Studio* | E4 Bisasam | 3 vorhandene (7/10/16 Uhr) |
-| Di 22.09. | E3 1999/2025 | E4 Bisasam | **E5 Anleitungsvideo** | *Studio* | *Studio* | E11 Blau | Lugia · Evoli |
-| Mi 23.09. | E6 Duell | E7 Mauzi | E14 Zeichner | *Studio* | *Studio* | E1 Seitenwert | Wunschliste · Sonne |
-| Do 24.09. | E8 WotC 9 | E9 Starter | E18 106 € | *Studio* | *Studio* | E12 Vintage/Modern | Skyridge · erste Karte |
-| Fr 25.09. | E10 Fukuda | E11 Blau | E27 151 | E1 Seitenwert | E2 Schiggy | E8 WotC 9 | Besucherseite · Toploader |
-| Sa 26.09. | E12 Vintage/Modern | E15 Grün | E16 Sugimori | E6 Duell | E7 Mauzi | E18 106 € | Nachtara · Umsortieren |
-| So 27.09. | E17 Neun Fächer | E19 Harmonie 1 | E29 Arita | E8 WotC 9 | E11 Blau | E7 Mauzi | Schimmernde · Doppelte |
+| Mo 21.09. | E1 Seitenwert | E2 Schiggy | E13 Slabs | *Studio: E17* | E1 Seitenwert | E4 Bisasam | 3 vorhandene (7/10/16 Uhr) |
+| Di 22.09. | E3 1999/2025 | E4 Bisasam | **E5 Anleitungsvideo** | E6 Duell | E2 Schiggy | E11 Blau | Lugia · Evoli |
+| Mi 23.09. | E6 Duell | E7 Mauzi | E14 Zeichner | E8 WotC 9 | E7 Mauzi | E1 Seitenwert | Wunschliste · Sonne |
+| Do 24.09. | E8 WotC 9 | E9 Starter | E18 106 € | *Studio: E10* | E11 Blau (+ *Studio: E3* 21 Uhr) | E12 Vintage/Modern | Skyridge · erste Karte |
+| Fr 25.09. | E10 Fukuda | E11 Blau | E27 151 | E12 Vintage/Modern | E14 Zeichner | E8 WotC 9 | Besucherseite · Toploader |
+| Sa 26.09. | E12 Vintage/Modern | E15 Grün | E16 Sugimori | E18 106 € | E4 Bisasam | E18 106 € | Nachtara · Umsortieren |
+| So 27.09. | E17 Neun Fächer | E19 Harmonie 1 | E29 Arita | E16 Sugimori | E15 Grün | E7 Mauzi | Schimmernde · Doppelte |
 | Mo 28.09. | **N5 Raketen** | **N1 Evoli** | E20 Harmonie 2 | **N5 Raketen** | **N1 Evoli** | **N1 Evoli** | Raketen · liegend |
-| Di 29.09. | **N4 Lugia 899→241** | E28 WotC 20 | E22 Harmonie 4 | **N4 Lugia** | E12 Vintage/Modern | **N4 Lugia** | Auflösung · planen |
+| Di 29.09. | **N4 Lugia 899→241** | E28 WotC 20 | E22 Harmonie 4 | **N4 Lugia** | E34 Coolshit | **N4 Lugia** | Auflösung · planen |
 | Mi 30.09. | **N2 Nachtara** | **N13 Drei Mew** | E23 Harmonie 5 | **N2 Nachtara** | **N13 Drei Mew** | **N2 Nachtara** | Pikachu · Vitrine |
 | Do 01.10. | **N6 Duell Lugia** | **N10 Harmonie Rot** | E31 Vitrine-Reel | **N6 Duell Lugia** | **N10 Rot** | **N6 Duell Lugia** | Nachdruck · Farbe |
 | Fr 02.10. | **N9 Schimmernde** | **N14 Nutzerseite** | E24 Harmonie 6 | **N9 Schimmernde** | **N14 Nutzerseite** | **N14 Nutzerseite** | Seitenpreis · fünf Sets |
-| Sa 03.10. | **N7 Duell Nachtara** | **N11 Harmonie Gold** | E32 Vorlage-Reel | **N7 Duell Nachtara** | E14 Zeichner | **N9 Schimmernde** | teuerste Seite · Grading |
-| So 04.10. | **N3 Pikachu** | **N15 Reshiram/Zekrom** | E25 Harmonie 7 | **N3 Pikachu** | E18 106 € | **N10 Harmonie Rot** | Bilanz · nie hergeben |
+| Sa 03.10. | **N7 Duell Nachtara** | **N11 Harmonie Gold** | E32 Vorlage-Reel | **N7 Duell Nachtara** | E30 Glurak-Rangliste | **N9 Schimmernde** | teuerste Seite · Grading |
+| So 04.10. | **N3 Pikachu** | **N15 Reshiram/Zekrom** | E25 Harmonie 7 | **N3 Pikachu** | E33 Markt-Reel | **N10 Harmonie Rot** | Bilanz · nie hergeben |
 
 Reserve (ohne Termin): N8 Duell Mew, N12 Harmonie Lila, N16 Kirschblüten, N17 Karpador,
 N18 Tool „Passend", E26 Harmonie 8, E30 Glurak-Rangliste, E33 Markt-Reel, E34 Coolshit.
