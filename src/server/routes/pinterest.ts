@@ -12,7 +12,7 @@ import type { Env } from "../env.js";
 import { getProject } from "../repo/projects.js";
 import { writeAudit } from "../audit.js";
 import {
-  laufVermerken, offeneAuftraege, pinnenStarten, profilStarten, sitzungBeenden, sitzungStarten, sitzungStatus,
+  laufVermerken, offeneAuftraege, pinnenStarten, profilStarten, schritt, sitzungBeenden, sitzungStarten, sitzungStatus,
 } from "../publish/pinterest-studio.js";
 
 export function pinterestRoutes(app: FastifyInstance, db: Db, env: Env): void {
@@ -70,6 +70,21 @@ export function pinterestRoutes(app: FastifyInstance, db: Db, env: Env): void {
     catch (e) { return reply.code(400).send({ detail: e instanceof Error ? e.message : "Lauf ließ sich nicht starten." }); }
     writeAudit(db, { user: req.user, action: "pinterest.profil", entityType: "project", entityId: req.params.projectId, projectId: req.params.projectId, content: { probe: req.body.probe } });
     return view(req.params.projectId);
+  });
+
+  /** Fernsteuerung für die Einrichtung — siehe `schritt()` in pinterest-studio.ts. */
+  r.post("/api/mp/projects/:projectId/pinterest/schritt", {
+    schema: { params: P, body: z.object({
+      goto: z.string().url().optional(), klick: z.string().optional(), klickText: z.string().optional(),
+      tippen: z.object({ selektor: z.string(), text: z.string(), loeschen: z.boolean().optional() }).optional(),
+      datei: z.object({ selektor: z.string(), pfad: z.string() }).optional(),
+      waehlen: z.object({ selektor: z.string(), text: z.string() }).optional(),
+      taste: z.string().optional(), warteMs: z.number().int().optional(), pruefen: z.array(z.string()).optional(), name: z.string().optional(),
+    }), response: { 200: z.object({ url: z.string(), text: z.string(), foto: z.string(), gefunden: z.record(z.string(), z.object({ anzahl: z.number(), sichtbar: z.boolean() })) }), 400: s.ErrorBody, 404: s.ErrorBody } },
+  }, async (req, reply) => {
+    if (!getProject(db, req.params.projectId)) return reply.code(404).send({ detail: "Projekt nicht gefunden." });
+    try { return await schritt(env, req.body); }
+    catch (e) { return reply.code(400).send({ detail: e instanceof Error ? e.message.slice(0, 400) : "Schritt fehlgeschlagen." }); }
   });
 
   r.post("/api/mp/projects/:projectId/pinterest/vermerken", {
