@@ -84,6 +84,8 @@ type Bild =
    */
   | { art: "karten"; karten: string[]; sichtbar: number; spalten?: number; zeilen?: number;
       preise?: (string | null)[]; namen?: (string | null)[];
+      /** Nur für die Bildfolge einer Füllung: Startzeiten je Fach. */
+      einschub?: { starts: number[]; dauerMs: number };
       /** Radius in px: das ganze Blatt samt Schildern unscharf — fuer den Teaser. */
       unscharf?: number;
       /** Dateiname unter assets/<projekt>/marke/ — liegt als Ebene ueber dem Blatt. */
@@ -1949,7 +1951,9 @@ function blattHtml(quellVar: string, breite: number, x: number, y: number, mitFa
 function kartenBlattHtml(vars: (i: number) => string, anzahl: number, sichtbar: number,
                          breite: number, x: number, y: number, spalten: number, zeilen: number,
                          preise?: (string | null)[], namen?: (string | null)[],
-                         unscharf?: number): string {
+                         unscharf?: number,
+                         /** Gesetzt heißt: die Karten fahren ein, jede zu ihrer Zeit. */
+                         einschub?: { starts: number[]; dauerMs: number }): string {
   const m = blattMasse(breite, spalten, zeilen);
   const px = (n: number) => `${n.toFixed(2)}px`;
   // Die Unschaerfe liegt auf dem Blatt, nicht auf den einzelnen Faechern: so
@@ -1972,8 +1976,14 @@ function kartenBlattHtml(vars: (i: number) => string, anzahl: number, sichtbar: 
     if (i >= anzahl) return `<div class="fach leer"></div>`;
     // Karte ohne Scan: leere Huelle, aber mit Schild — das ist die Aussage.
     if (i >= sichtbar) return `<div class="fach leer"></div>`;
-    const neu = i === sichtbar - 1 && sichtbar < anzahl ? " neu" : "";
-    return `<div class="fach karte${neu}" style="background-image:var(${vars(i)})">${namensschild(i)}${schild(i)}</div>`;
+    const neu = i === sichtbar - 1 && sichtbar < anzahl && !einschub ? " neu" : "";
+    // Richtung wie in `binderbuehne.OEFFNUNG`: die letzte Spalte von links,
+    // alle anderen von rechts. Bei zwei Karten (Duell) heißt das: außen nach innen.
+    const richtung = (i % spalten) === spalten - 1 && spalten > 1 ? "links" : "rechts";
+    const lauf = einschub
+      ? ` rein ${richtung}" style="background-image:var(${vars(i)});animation-delay:${einschub.starts[i] ?? 0}ms;--dauer:${einschub.dauerMs}ms`
+      : `" style="background-image:var(${vars(i)})`;
+    return `<div class="fach voll${neu}">${namensschild(i)}${schild(i)}<div class="karte${lauf}"></div></div>`;
   }).join("");
   return `<div class="blatt" style="${rahmen};grid-template-columns:repeat(${spalten},${px(m.fachB)});grid-template-rows:repeat(${zeilen},${px(m.fachH)});gap:${px(m.fuge)}">${felder}</div>`;
 }
@@ -2008,9 +2018,26 @@ function buehneHtml(vars: string, grundVar: string, blaetter: string, zusatz = "
            filter:blur(46px) brightness(.44) saturate(.7)}
     .blatt{display:grid}
     .ganz{border-radius:8px;box-shadow:0 10px 34px rgba(0,0,0,.6)}
-    .fach{position:relative;border-radius:6px;background-repeat:no-repeat;
-          background-size:100% 100%;background-position:center;
+    /* Das Fach ist die **Tasche**, die Karte liegt darin — seit dem 21.09.2026,
+       damit auch die Ranglisten- und Duell-Reels die Einschub-Bewegung zeigen.
+       overflow:hidden ist der ganze Trick: die Karte startet außerhalb und
+       wird von der Tasche beschnitten, statt über das Blatt zu ragen. */
+    .fach{position:relative;border-radius:6px;overflow:hidden;
           box-shadow:0 6px 22px rgba(0,0,0,.55), inset 0 0 0 1.5px rgba(255,255,255,.16)}
+    .fach > .karte{position:absolute;inset:0;border-radius:6px;background-repeat:no-repeat;
+          background-size:100% 100%;background-position:center}
+    /* Linke und mittlere Spalte von rechts, rechte von links — die Öffnungen
+       zeigen zur Seitenmitte, wie bei den Einschub-Reels (binderbuehne.ts). */
+    /* Angehalten: gerendert wird Bild für Bild, und der Zustand wird über ein
+       negatives animation-delay angesprungen. Ohne den Halt liefe die Animation
+       in Echtzeit weiter, und nach dem ersten Screenshot wären alle Karten drin
+       (21.09.2026 genau so passiert). */
+    .fach > .karte.rein{animation:var(--rein) var(--dauer,620ms) cubic-bezier(.22,.9,.24,1.06) forwards;
+          animation-play-state:paused}
+    .fach > .karte.rein.links{--rein:reinLinks;transform:translateX(-116%)}
+    .fach > .karte.rein.rechts{--rein:reinRechts;transform:translateX(116%)}
+    @keyframes reinLinks{from{transform:translateX(-116%)}to{transform:translateX(0)}}
+    @keyframes reinRechts{from{transform:translateX(116%)}to{transform:translateX(0)}}
     /* Die zuletzt gelegte Karte bekommt einen hellen Saum. Eine CSS-Animation
        waere hier falsch: jedes Bild ist ein eigener Render und stuende bei 0 %,
        die Karte waere also in jedem Einzelbild unsichtbar. Der wandernde Saum
@@ -2090,7 +2117,7 @@ function bildHtml(bild: Bild, varName: (seite: string) => string, vars: () => st
     const y = Math.max(96, (H - 470 - m.hoehe) / 2);
     const blatt = kartenBlattHtml(k.name, Math.min(bild.karten.length, spalten * zeilen), bild.sichtbar,
       SEITE_B, (W - SEITE_B) / 2, y, spalten, zeilen,
-      bild.preise, bild.namen, bild.unscharf);
+      bild.preise, bild.namen, bild.unscharf, bild.einschub);
     const logo = bild.logo ? `<div class="setlogo" style="background-image:${markeUrl(bild.logo)}"></div>` : "";
     return buehneHtml(k.def, "--grund", blatt, logo);
   }
@@ -2378,12 +2405,8 @@ for (const [i, c] of buch.clips.entries()) {
 for (const c of buch.clips) {
   if (c.art === "stand") merkeBild(c.bild);
   if (c.art === "wandel") { merkeBild(c.von); merkeBild(c.bis); }
-  if (c.art === "fuellung") {
-    for (let n = 1; n <= c.bis; n++) {
-      merkeBild({ art: "karten", karten: c.karten, sichtbar: n, spalten: c.spalten, zeilen: c.zeilen,
-                  preise: c.preise, namen: c.namen });
-    }
-  }
+  // Füllungen werden als Bildfolge gerendert (siehe `fuellFrames`), nicht als
+  // Einzelbilder je Karte.
 }
 
 // 2. Texte und Kennzeichnung.
@@ -2411,6 +2434,58 @@ if (folgenClip !== null && folgenClip >= 0 && !ohneFolgen) {
 }
 
 await playwrightRenderer([...bildJobs, ...textJobs]);
+
+/**
+ * Die Einschub-Bewegung einer Füllung Bild für Bild rendern.
+ *
+ * Nicht über `playwrightRenderer`: der baut je Bild eine eigene Seite auf, und
+ * bei rund siebzig Einzelbildern je Clip wäre das ein Vielfaches der Zeit. Hier
+ * bleibt **eine** Seite offen, und jedes Bild wird über ein negatives
+ * `animation-delay` angesprungen — dasselbe Verfahren wie in `reel-einschub.ts`.
+ */
+const fuellFrames = new Map<number, string[]>();
+{
+  const fuellungen = buch.clips.map((c, i) => ({ c, i })).filter((x) => x.c.art === "fuellung");
+  if (fuellungen.length) {
+    const { chromium } = await import("playwright");
+    const browser = await chromium.launch({ headless: true });
+    const seite = await browser.newPage({ viewport: { width: W, height: H }, deviceScaleFactor: 1 });
+    /** Wie lange eine Karte in ihre Tasche fährt — wie in `binderbuehne.ts`. */
+    const EINSCHUB_MS = 620;
+    for (const { c, i } of fuellungen) {
+      if (c.art !== "fuellung") continue;
+      const n = c.bis;
+      // Die Bewegung endet 700 ms vor dem Clip, damit die volle Seite kurz steht.
+      const bewegtMs = Math.max(700, c.dauerMs - 700);
+      const versatz = n > 1 ? Math.max(180, (bewegtMs - EINSCHUB_MS) / (n - 1)) : 0;
+      const starts = Array.from({ length: n }, (_, k) => Math.round(k * versatz));
+      const html = bildHtml({ art: "karten", karten: c.karten, sichtbar: n, spalten: c.spalten, zeilen: c.zeilen,
+        preise: c.preise, namen: c.namen, einschub: { starts, dauerMs: EINSCHUB_MS } }, varName, vars, kartenVars);
+      await seite.setContent(html, { waitUntil: "domcontentloaded" });
+      await seite.evaluate(() => (document as Document & { fonts: { ready: Promise<unknown> } }).fonts.ready).catch(() => undefined);
+      await seite.waitForTimeout(300);
+      const ordner = path.join(arbeit, `fuell-${i}`);
+      fs.mkdirSync(ordner, { recursive: true });
+      const anzahl = Math.ceil((((starts[n - 1] ?? 0) + EINSCHUB_MS + 120) / 1000) * OUTPUT_FPS);
+      const dateien: string[] = [];
+      for (let k = 0; k < anzahl; k++) {
+        const tMs = (k / OUTPUT_FPS) * 1000;
+        await seite.evaluate(([zeit, st]) => {
+          document.querySelectorAll<HTMLElement>(".fach > .karte.rein").forEach((el, idx) => {
+            el.style.animationDelay = `${(st as number[])[idx]! - (zeit as number)}ms`;
+          });
+        }, [tMs, starts] as [number, number[]]);
+        const datei = path.join(ordner, `f${String(k).padStart(4, "0")}.png`);
+        await seite.screenshot({ path: datei, type: "png" });
+        dateien.push(datei);
+      }
+      fuellFrames.set(i, dateien);
+      console.log(`  Füllung ${i}: ${anzahl} Einzelbilder (${n} Karten)`);
+    }
+    await seite.close();
+    await browser.close();
+  }
+}
 
 /**
  * Ziehender Rauch zwischen Grund und Karte.
@@ -2499,16 +2574,23 @@ for (const [i, c] of buch.clips.entries()) {
       ].join(","), ...schluss,
     ]);
   } else if (c.art === "fuellung") {
-    // Ein Bild je Karte, gleichmaessig verteilt. Der Gesamttakt steht im
-    // Drehbuch, nicht die Einzelbilddauer — so bleibt die Laenge planbar,
-    // egal wie viele Karten ein Clip legt.
-    const bilder = Array.from({ length: c.bis }, (_, n) =>
-      merkeBild({ art: "karten", karten: c.karten, sichtbar: n + 1, spalten: c.spalten, zeilen: c.zeilen,
-                  preise: c.preise, namen: c.namen }));
+    /**
+     * Die Karten **fahren in ihre Taschen**, seit dem 21.09.2026 auch hier.
+     *
+     * Vorher stand je Karte ein Standbild und die Seite füllte sich sprunghaft.
+     * Das Einschieben ist das Erkennungszeichen der Marke — es gehört auf jede
+     * Binderseite, nicht nur in die Matching-Cards- und Kunstseiten-Reels.
+     * Gerendert wird wie dort: eine Seite, je Einzelbild über ein negatives
+     * `animation-delay` angesprungen, danach Standbild bis zum Clip-Ende.
+     */
+    const frames = fuellFrames.get(i) ?? [];
     const liste = path.join(arbeit, `fuellung-${i}.txt`);
-    const jeMs = c.dauerMs / bilder.length;
-    fs.writeFileSync(liste, bilder.map((d) => `file '${d}'\nduration ${s3(jeMs)}`).join("\n") +
-      `\nfile '${bilder[bilder.length - 1]}'\n`);
+    const bildMs = 1000 / OUTPUT_FPS;
+    const standMs = Math.max(0, c.dauerMs - frames.length * bildMs);
+    const zeilen2 = frames.flatMap((d) => [`file '${d}'`, `duration ${s3(bildMs)}`]);
+    const letztes = frames[frames.length - 1]!;
+    zeilen2.push(`file '${letztes}'`, `duration ${s3(standMs)}`, `file '${letztes}'`);
+    fs.writeFileSync(liste, zeilen2.join("\n") + "\n");
     await runFfmpeg(["-f", "concat", "-safe", "0", "-i", liste, "-vf", "setsar=1", "-t", s3(c.dauerMs), ...schluss]);
   } else if (c.art === "flip") {
     // Rückseite steht, Karte wirbelt, Vorderseite steht. Die Standzeiten tragen

@@ -67,7 +67,7 @@ export function folgenHtml(akzent: string, _plattform: Plattform, versatzY = 0):
       <div class="zeichen"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
       <div class="texte">
         <span class="handle">@${HANDLE}</span>
-        <span class="dazu">folgen für mehr Seiten</span>
+        <span class="dazu">folgen für mehr</span>
       </div>
     </div>
   </body></html>`;

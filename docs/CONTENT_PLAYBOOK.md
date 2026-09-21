@@ -186,7 +186,11 @@ Drei Dinge, die den Unterschied machen:
 ### Folgen-Hinweis: Pille ohne Pfeil (seit 15.09.2026)
 
 Eine dunkle Pille unter der Seite: das Binderplan-Zeichen, `@binderplan.app`, darunter in
-Gelb `folgen für mehr Seiten`. 2,6 s lang, nach der letzten Textzeile. Kein Pfeil.
+Gelb **`folgen für mehr`**. 2,6 s lang, nach der letzten Textzeile. Kein Pfeil.
+
+**Seit 21.09.2026 ohne „Seiten".** Der Zusatz stimmte nur bei Kunst- und Harmonie-Seiten;
+unter einer Preis-Rangliste oder einem Duell versprach er etwas, das der Beitrag nicht
+zeigt. „Folgen für mehr" passt überall und sagt dasselbe.
 
 **Warum der Pfeil weg ist.** Er zeigte auf den echten Folgen-Knopf der App — aber wo der
 senkrecht sitzt, ist nirgends dokumentiert und ändert sich mit App-Version, Gerätehöhe und
@@ -682,6 +686,31 @@ bleibt 3,2 s; bei 16 s Gesamtlänge ist das ein Fünftel, eine Kurzform (1,8 s) 
 Hook-Reels steht zur Entscheidung an.
 
 Fertig gebaut: `verkauft` (Stück `verkauft-hook`, drei Fassungen über `reel-plattformen.ts`).
+
+### Die Einschub-Bewegung gilt für **jede** Binderseite (seit 21.09.2026)
+
+**Wo Karten in ein Blatt kommen, fahren sie seitlich in ihre Taschen** — linke und mittlere
+Spalte von rechts, rechte Spalte von links. Das ist das Erkennungszeichen der Marke und der
+Grund, warum sie Binderplan heißt; ein Blatt, das sprunghaft voller wird, sieht aus wie eine
+Diashow.
+
+Bis zum 21.09.2026 galt das nur für die Formate H, I und J, weil nur sie auf der gemeinsamen
+Bühne (`binderbuehne.ts`) liegen. Die älteren Drehbücher in `reel-binder.ts` zeichneten ihr
+Blatt selbst und ließen die Karten erscheinen. Seither hat auch dieser Baustein die
+Bewegung: das Fach ist die **Tasche** (`overflow:hidden`), die Karte liegt darin und fährt
+ein. Betroffen sind alle Ranglisten, Seitenwerte, Farbseiten und Raketen.
+
+Zwei Regeln aus dem Bau:
+
+- **Die Animation wird angehalten** (`animation-play-state:paused`) und je Einzelbild über ein
+  negatives `animation-delay` angesprungen. Läuft sie in Echtzeit weiter, ist nach dem ersten
+  Screenshot alles drin — am 21.09.2026 genau so passiert.
+- **Gerendert wird nur die Bewegung**, danach hängt ffmpeg das letzte Bild als Standbild an.
+  Eine Füllung mit acht Karten sind rund 120 Einzelbilder.
+
+Noch **nicht** umgestellt: die Kunstseiten-Reels mit Fahrt und Wandel (`bisaflor`, `turtok`,
+`mauzigasse`, `kunst-*`). Sie zeigen eine fertige Seite und keine Füllung; wer sie umstellt,
+baut sie als Format I (Artwork Pages) neu.
 
 ### Die Bühne: eine Binderseite für alle drei Formate
 
