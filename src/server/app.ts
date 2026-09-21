@@ -25,6 +25,7 @@ import { seriesRoutes } from "./routes/series.js";
 import { publishRoutes } from "./routes/publish.js";
 import { tiktokRoutes } from "./routes/tiktok.js";
 import { youtubeRoutes } from "./routes/youtube.js";
+import { sitzungStatus as youtubeSitzung, zahlenHolen as youtubeZahlen } from "./publish/youtube-studio.js";
 import { pinterestRoutes } from "./routes/pinterest.js";
 import { loopRoutes, EVENTS_PUBLIC_PATH } from "./routes/loop.js";
 import { storageRoutes } from "./routes/storage.js";
@@ -33,6 +34,7 @@ import { buildContext, type FullContext, type ServiceOverrides } from "./service
 import { markStaleRuns } from "./agents/analysis/pipeline.js";
 import { resolveShortlink } from "./shortlinks.js";
 import { eq } from "drizzle-orm";
+import * as t from "./db/schema.js";
 import * as schema from "./db/schema.js";
 import { bioHtml, projectByBioCode } from "./publish/bio.js";
 import { zaehleBioAufruf } from "./shortlinks.js";
@@ -190,6 +192,27 @@ export async function buildApp(env: Env, opts: { host?: HostAdapter; dbFile?: st
     }
     return reply.code(404).send({ detail: "Nicht gefunden." });
   });
+
+  /**
+   * Zahlen aus dem YouTube-Studio, einmal am Tag — aber nur, solange im
+   * Anmelde-Browser jemand angemeldet ist. Läuft hier und nicht im Scheduler
+   * des Workers, weil die Sitzung im Speicher **dieses** Prozesses lebt.
+   */
+  const zahlenTakt = async () => {
+    try {
+      if (!(await youtubeSitzung(env)).angemeldet) return;
+      for (const p of db.select().from(t.mpProjects).all().filter((x) => x.status === "active")) {
+        const key = `sched:youtube.zahlen:${p.id}`;
+        const letzte = db.select().from(t.mpSettings).where(eq(t.mpSettings.key, key)).get();
+        if (letzte && Date.now() - Date.parse(letzte.value) < 20 * 3_600_000) continue;
+        const z = await youtubeZahlen(db, env, p.id);
+        db.insert(t.mpSettings).values({ key, value: new Date().toISOString(), updatedAt: new Date().toISOString() })
+          .onConflictDoUpdate({ target: t.mpSettings.key, set: { value: new Date().toISOString(), updatedAt: new Date().toISOString() } }).run();
+        app.log.info(`youtube.zahlen: ${z.videos.length} Videos, ${z.zugeordnet} zugeordnet`);
+      }
+    } catch (e) { app.log.warn(`youtube.zahlen: ${e instanceof Error ? e.message : String(e)}`); }
+  };
+  setInterval(() => void zahlenTakt(), 60 * 60_000).unref();
 
   return {
     app, db, host, ctx,

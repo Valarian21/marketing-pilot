@@ -16,8 +16,17 @@ function termin(iso: string | null): string {
   return `${wt}, ${d.slice(8, 10)}.${d.slice(5, 7)}. · ${d.slice(11, 16)}`;
 }
 
+type StudioZahlen = {
+  abgerufenAm: string; kanalId: string;
+  kanal: { abonnenten: number | null; aufrufe28: number | null; wiedergabeStunden28: number | null };
+  videos: { id: string; titel: string; datum: string; aufrufe: number | null; kommentare: number | null; likes: number | null }[];
+  zugeordnet: number;
+};
+
 export function YoutubeStudio({ projectId }: { projectId: string }) {
   const [view, setView] = useState<TiktokView | null>(null);
+  const [zahlen, setZahlen] = useState<StudioZahlen | null>(null);
+  const [zahlenBusy, setZahlenBusy] = useState(false);
   const [fehler, setFehler] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const vermerkt = useRef(false);
@@ -28,6 +37,7 @@ export function YoutubeStudio({ projectId }: { projectId: string }) {
   }, [projectId]);
 
   useEffect(() => { void laden(); }, [laden]);
+  useEffect(() => { void api<StudioZahlen | null>(`/projects/${projectId}/youtube/zahlen`).then(setZahlen).catch(() => {}); }, [projectId]);
 
   useEffect(() => {
     if (!view?.laeuft) return;
@@ -87,6 +97,15 @@ export function YoutubeStudio({ projectId }: { projectId: string }) {
         )}
         {view?.angemeldet && !lauf?.laeuft && (
           <>
+            <Button disabled={busy || zahlenBusy}
+              onClick={async () => {
+                setZahlenBusy(true); setFehler(null);
+                try { setZahlen(await api<StudioZahlen>(`/projects/${projectId}/youtube/zahlen`, { method: "POST" })); }
+                catch (e) { setFehler(e instanceof Error ? e.message : "Zahlen ließen sich nicht lesen."); }
+                finally { setZahlenBusy(false); }
+              }}>
+              {zahlenBusy ? "Liest das Studio …" : "Zahlen aus dem Studio holen"}
+            </Button>
             <Button variant="primary" disabled={busy || !wartend.length}
               onClick={() => void ruf(`/projects/${projectId}/youtube/planen`, { method: "POST", json: { probe: false } })}>
               {wartend.length} Beiträge einplanen
@@ -120,6 +139,28 @@ export function YoutubeStudio({ projectId }: { projectId: string }) {
           <iframe title="YouTube-Anmeldung" src={rahmenUrl}
             style={{ width: "100%", height: 620, border: "1px solid var(--line, #ddd)", borderRadius: 8, marginTop: 8, background: "#000" }} />
         </>
+      )}
+
+      {zahlen && (
+        <details style={{ marginTop: 12 }} open>
+          <summary className="mp-small">
+            Studio-Stand {new Date(zahlen.abgerufenAm).toLocaleString("de-DE", { dateStyle: "short", timeStyle: "short" })}: {zahlen.kanal.abonnenten ?? "–"} Abonnenten · {zahlen.kanal.aufrufe28 ?? "–"} Aufrufe und {zahlen.kanal.wiedergabeStunden28 ?? "–"} h Wiedergabezeit in 28 Tagen · {zahlen.videos.length} Videos, {zahlen.zugeordnet} davon Beiträgen des Piloten zugeordnet
+          </summary>
+          <table className="mp-table mp-small" style={{ marginTop: 6 }}>
+            <thead><tr><th>Video</th><th>Datum</th><th style={{ textAlign: "right" }}>Aufrufe</th><th style={{ textAlign: "right" }}>Likes</th><th style={{ textAlign: "right" }}>Kommentare</th></tr></thead>
+            <tbody>
+              {[...zahlen.videos].sort((a, b) => (b.aufrufe ?? 0) - (a.aufrufe ?? 0)).map((v) => (
+                <tr key={v.id}>
+                  <td><a href={`https://www.youtube.com/watch?v=${v.id}`} target="_blank" rel="noreferrer">{v.titel}</a></td>
+                  <td>{v.datum}</td>
+                  <td style={{ textAlign: "right" }}>{v.aufrufe ?? "–"}</td>
+                  <td style={{ textAlign: "right" }}>{v.likes ?? "–"}</td>
+                  <td style={{ textAlign: "right" }}>{v.kommentare ?? "–"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </details>
       )}
 
       {lauf && (

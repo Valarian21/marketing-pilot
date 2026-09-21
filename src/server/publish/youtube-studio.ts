@@ -25,8 +25,10 @@ import path from "node:path";
 import { and, eq } from "drizzle-orm";
 import type { Page } from "playwright";
 import * as t from "../db/schema.js";
-import type { Db } from "../db/index.js";
+import { newId, nowIso, parseJson, toJson, type Db } from "../db/index.js";
 import type { Env } from "../env.js";
+import { schreibeKanalTag } from "./kanal-metriken.js";
+import { schreibeVerlauf } from "./metrics.js";
 import {
   aktuelleSitzung, berlin, logOrdner, schuss as schussAllgemein, sitzungOeffnen, sitzungSchliessen,
   type Lauf, type PlanStatus, type PlanZeile,
@@ -426,4 +428,166 @@ export function laufVermerken(db: Db, projectId: string): number {
     n += 1;
   }
   return n;
+}
+
+
+// --- Zahlen aus dem Studio ---------------------------------------------------
+//
+// Ohne Google-Projekt gibt es keine Analytics-API; der öffentliche Feed nennt
+// nur die Aufrufe der letzten 15 Videos. Mit der angemeldeten Sitzung liest
+// dieser Lauf, was das Studio zeigt: je Video Aufrufe, Kommentare, Likes (aus
+// der Inhalte-Liste, alle Seiten) und für den Kanal Abonnenten, Aufrufe und
+// Wiedergabezeit der letzten 28 Tage (Kanal-Dashboard). Geschrieben wird in
+// dieselben Tabellen wie bei den API-Kanälen — mp_kanal_stats (Tag) und die
+// Metriken samt Verlauf der Termine —, damit die Übersicht nichts Neues lernen
+// muss. Videos, die der Pilot nicht kennt (Handuploads), landen mit ihren
+// Zahlen unter `youtube-studio:<projekt>` in den Einstellungen.
+
+export type StudioVideo = { id: string; titel: string; datum: string; aufrufe: number | null; kommentare: number | null; likes: number | null };
+export type StudioZahlen = {
+  abgerufenAm: string;
+  kanalId: string;
+  kanal: { abonnenten: number | null; aufrufe28: number | null; wiedergabeStunden28: number | null };
+  videos: StudioVideo[];
+  zugeordnet: number;
+};
+
+/** „1.359" → 1359, „3,2" → 3.2, „–" → null. */
+function zahlAus(text: string | null | undefined): number | null {
+  if (!text) return null;
+  const m = /-?\d[\d.]*(?:,\d+)?/.exec(text.replace(/\s/g, ""));
+  if (!m) return null;
+  const n = Number(m[0].replace(/\./g, "").replace(",", "."));
+  return Number.isFinite(n) ? n : null;
+}
+
+async function kanalIdAus(seite: Page): Promise<string> {
+  await seite.goto(STUDIO_URL, { waitUntil: "domcontentloaded" }).catch(() => {});
+  await seite.waitForTimeout(4000);
+  const m = /\/channel\/(UC[\w-]+)/.exec(seite.url());
+  if (!m) throw new Error(`Kanal-Id nicht in der Studio-Adresse (${seite.url()})`);
+  return m[1]!;
+}
+
+/** Kanal-Dashboard: Abonnenten, Aufrufe und Wiedergabezeit der letzten 28 Tage. */
+async function kanalZahlen(seite: Page, env: Env, kanalId: string): Promise<StudioZahlen["kanal"]> {
+  await seite.goto(`${STUDIO_URL}channel/${kanalId}`, { waitUntil: "domcontentloaded" }).catch(() => {});
+  await seite.waitForTimeout(6000);
+  const text = (await seite.locator("body").innerText().catch(() => "")).replace(/\u00a0/g, " ");
+  await schuss(seite, env, "zahlen-dashboard");
+  // Der Seitentext liegt neben dem Foto — für den Fall, dass eine Zahl daneben liegt.
+  try { fs.writeFileSync(path.join(logOrdner(env, DIENST), "zahlen-dashboard.txt"), text); } catch { /* egal */ }
+  const greif = (re: RegExp) => zahlAus(re.exec(text)?.[1] ?? null);
+  // Die 28-Tage-Zahlen stehen in der Karte „Kanalanalysen" **nach** „Letzte 28 Tage";
+  // davor nennt die Karte „Leistung des neuesten Shorts" ebenfalls „Aufrufe" (am 21.09. 9 statt 1.359 gelesen).
+  const ab = text.split(/Letzte\s+28\s+Tage|Last\s+28\s+days/i)[1] ?? text;
+  const greifAb = (re: RegExp) => zahlAus(re.exec(ab)?.[1] ?? null);
+  return {
+    abonnenten: greif(/Aktuelle Abonnenten\s*\n?\s*([\d.]+)/i) ?? greif(/Current subscribers\s*\n?\s*([\d,]+)/i),
+    aufrufe28: greifAb(/Aufrufe\s*\n?\s*([\d.]+)/i) ?? greifAb(/Views\s*\n?\s*([\d,]+)/i),
+    wiedergabeStunden28: greifAb(/Wiedergabezeit \(Stunden\)\s*\n?\s*([\d.,]+)/i) ?? greifAb(/Watch time \(hours\)\s*\n?\s*([\d.,]+)/i),
+  };
+}
+
+/** Inhalte-Liste des Studios, Videos und Shorts, alle Seiten. */
+async function videoListe(seite: Page, env: Env, kanalId: string): Promise<StudioVideo[]> {
+  const aus: StudioVideo[] = [];
+  for (const art of ["upload", "short"]) {
+    await seite.goto(`${STUDIO_URL}channel/${kanalId}/videos/${art}`, { waitUntil: "domcontentloaded" }).catch(() => {});
+    await seite.waitForTimeout(6000);
+    for (let blatt = 0; blatt < 6; blatt++) {
+      await seite.locator("ytcp-video-row").first().waitFor({ state: "visible", timeout: 20_000 }).catch(() => {});
+      await schuss(seite, env, `zahlen-liste-${art}-${blatt}`);
+      const zeilen = await seite.locator("ytcp-video-row").evaluateAll((rows) => rows.map((r) => {
+        // Der Titel steht in #video-title; der erste Link der Zeile ist das
+        // Vorschaubild, dessen Text die Dauer ist („0:20") — am 21.09. so gelaufen.
+        const titelLink = r.querySelector("#video-title") as HTMLAnchorElement | null;
+        const irgendein = r.querySelector("a[href*='/video/']") as HTMLAnchorElement | null;
+        const zelle = (sel: string) => (r.querySelector(sel) as HTMLElement | null)?.innerText ?? "";
+        return {
+          href: titelLink?.getAttribute("href") ?? irgendein?.getAttribute("href") ?? "", titel: (titelLink?.innerText ?? "").trim(),
+          datum: zelle(".tablecell-date"), aufrufe: zelle(".tablecell-views"), kommentare: zelle(".tablecell-comments"), likes: zelle(".tablecell-likes"),
+        };
+      })).catch(() => [] as { href: string; titel: string; datum: string; aufrufe: string; kommentare: string; likes: string }[]);
+      for (const z of zeilen) {
+        const id = /\/video\/([\w-]{6,})/.exec(z.href)?.[1];
+        if (!id || aus.some((v) => v.id === id)) continue;
+        // Die Likes-Zelle zeigt „100,0 %" und darunter die Zahl — die Zahl ist die letzte.
+        const likesText = z.likes.split("\n").map((x) => x.trim()).filter((x) => x && !x.includes("%")).pop() ?? "";
+        aus.push({ id, titel: z.titel, datum: z.datum.split("\n")[0]?.trim() ?? "", aufrufe: zahlAus(z.aufrufe), kommentare: zahlAus(z.kommentare), likes: zahlAus(likesText) });
+      }
+      const weiter = seite.locator("#navigate-after, ytcp-icon-button#navigate-after").first();
+      if (!(await weiter.count()) || (await weiter.getAttribute("disabled")) !== null || !zeilen.length) break;
+      await weiter.click();
+      await seite.waitForTimeout(3500);
+    }
+  }
+  return aus;
+}
+
+/** Ein Studio-Video seinem Termin im Piloten zuordnen — über den Videolink, sonst über den Titel. */
+function terminFuerVideo(db: Db, projectId: string, v: StudioVideo): { id: string; pieceId: string } | null {
+  const termine = db.select().from(t.mpScheduledPosts)
+    .where(and(eq(t.mpScheduledPosts.projectId, projectId), eq(t.mpScheduledPosts.platform, "youtube"))).all()
+    .filter((x) => x.status !== "cancelled");
+  const perLink = termine.find((x) => (x.externalUrl ?? "").includes(v.id));
+  if (perLink) return { id: perLink.id, pieceId: perLink.pieceId };
+  const norm = (s: string) => s.toLowerCase().replace(/\s*·\s*(shorts|youtube)\s*$/i, "").replace(/\s+/g, " ").trim();
+  for (const x of termine) {
+    const stueck = db.select().from(t.mpContentPieces).where(eq(t.mpContentPieces.id, x.pieceId)).get();
+    if (stueck && norm(stueck.title ?? "") === norm(v.titel)) return { id: x.id, pieceId: x.pieceId };
+  }
+  return null;
+}
+
+/**
+ * Der Lauf: liest Dashboard und Inhalte-Liste, schreibt Kanaltag, Metriken und
+ * Verlauf, merkt sich die ganze Liste in den Einstellungen.
+ */
+export async function zahlenHolen(db: Db, env: Env, projectId: string): Promise<StudioZahlen> {
+  const s = aktuelleSitzung(DIENST);
+  if (!s?.ctx) throw new Error("Keine Sitzung — bitte zuerst anmelden.");
+  if (!(await angemeldet())) throw new Error("Im Browser ist niemand bei YouTube angemeldet.");
+  if (s.lauf?.laeuft) throw new Error("Es läuft gerade ein Planungslauf.");
+  const seite = s.ctx.pages()[0] ?? (await s.ctx.newPage());
+  const kanalId = await kanalIdAus(seite);
+  const kanal = await kanalZahlen(seite, env, kanalId);
+  const videos = await videoListe(seite, env, kanalId);
+  const now = new Date();
+  const tag = now.toISOString().slice(0, 10);
+
+  // Kanaltag: Bestand aus allen Videos, dazu die 28-Tage-Werte des Dashboards.
+  const aufrufeGesamt = videos.reduce((n, v) => n + (v.aufrufe ?? 0), 0);
+  const interaktionenGesamt = videos.reduce((n, v) => n + (v.likes ?? 0) + (v.kommentare ?? 0), 0);
+  const werte: Record<string, number> = { aufrufeGesamt, interaktionenGesamt, beitraege: videos.length,
+    likes: videos.reduce((n, v) => n + (v.likes ?? 0), 0), kommentare: videos.reduce((n, v) => n + (v.kommentare ?? 0), 0) };
+  if (kanal.abonnenten !== null) werte["follower"] = kanal.abonnenten;
+  if (kanal.aufrufe28 !== null) werte["aufrufe28Tage"] = kanal.aufrufe28;
+  if (kanal.wiedergabeStunden28 !== null) werte["wiedergabeStunden28Tage"] = kanal.wiedergabeStunden28;
+  schreibeKanalTag(db, projectId, "youtube", tag, werte, now, "api");
+
+  // Je Video: Termin finden, Metriken und Verlauf schreiben, Link nachtragen.
+  let zugeordnet = 0;
+  for (const v of videos) {
+    const termin = terminFuerVideo(db, projectId, v);
+    if (!termin) continue;
+    zugeordnet += 1;
+    const m = { reichweite: null, aufrufe: v.aufrufe, likes: v.likes, kommentare: v.kommentare, saves: null, shares: null, quelle: "api" as const, roh: { studio: 1 } };
+    const alt = db.select().from(t.mpScheduledPosts).where(eq(t.mpScheduledPosts.id, termin.id)).get();
+    const link = alt?.externalUrl || `https://www.youtube.com/shorts/${v.id}`;
+    db.update(t.mpScheduledPosts).set({ metrics: toJson(m), metricsAt: now.toISOString(), externalUrl: link }).where(eq(t.mpScheduledPosts.id, termin.id)).run();
+    schreibeVerlauf(db, termin.id, m, now);
+  }
+
+  const ergebnis: StudioZahlen = { abgerufenAm: now.toISOString(), kanalId, kanal, videos, zugeordnet };
+  const key = `youtube-studio:${projectId}`;
+  db.insert(t.mpSettings).values({ key, value: toJson(ergebnis), updatedAt: nowIso() })
+    .onConflictDoUpdate({ target: t.mpSettings.key, set: { value: toJson(ergebnis), updatedAt: nowIso() } }).run();
+  return ergebnis;
+}
+
+/** Der letzte Stand aus dem Studio, falls es einen gibt. */
+export function studioZahlen(db: Db, projectId: string): StudioZahlen | null {
+  const row = db.select({ value: t.mpSettings.value }).from(t.mpSettings).where(eq(t.mpSettings.key, `youtube-studio:${projectId}`)).get();
+  return row ? parseJson<StudioZahlen | null>(row.value, null) : null;
 }
