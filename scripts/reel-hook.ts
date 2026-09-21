@@ -185,6 +185,44 @@ Wie viel wäre es dir wert?`,
     hashtags: ["#karpador", "#magikarp", "#illustrationrare", "#pokemonsammeln", "#cardmarket", "#binderplan"],
   },
 
+  /**
+   * „Eine Woche 30 Jahre. Keine einzige Karte ist gestiegen." — die
+   * Preisentwicklung des laufenden Sets, am 21.09.2026 gemessen.
+   *
+   * Zahlen aus `price_history` des Produkts (Tagespreise, nicht der
+   * 30-Tage-Schnitt — der hinkt bei einem frischen Set eine Woche hinterher):
+   * Lugia H7 263 € (18.09.) → 190 € (21.09.), Glurak H2 207 € → 156 €.
+   * Über alle 92 bepreisten Karten liegt der Tagespreis 28,6 % unter dem
+   * Schnitt, und **keine** Karte über 20 € steht darüber. Genau das ist die
+   * Aussage; einzelne Ausreißer gäbe es sonst immer.
+   */
+  "cel30-woche": {
+    titel: "Eine Woche 30 Jahre. Alles gefallen.",
+    setLogo: "cel30-setlogo.png",
+    musik: "alex-morgan-no-copyright-music-528321.mp3",
+    clips: [
+      { art: "karte", karte: "cel30-h7", farbe: "drei", zahl: "−28 %", sub: "das ganze Set", stempel: "21.09.", dauerMs: 1800 },
+      { art: "karte", karte: "cel30-h7", farbe: "blau", zahl: "263 → 190 €", sub: "Crystal-Lugia", dauerMs: 1600 },
+      { art: "karte", karte: "cel30-h2", farbe: "rot", zahl: "207 → 156 €", sub: "Glurak", dauerMs: 1600 },
+      { art: "karte", karte: "cel30-154", farbe: "gruen", zahl: "176 → 126 €", sub: "Gengar ex", dauerMs: 1600 },
+      { art: "karte", karte: "cel30-h7", farbe: "drei", zahl: "KEINE STEIGT.", sub: "keine über 20 €", dauerMs: 1800 },
+      { art: "karte", karte: "cel30-h7", farbe: "drei", dauerMs: 3000 },
+      { art: "frage", karte: "cel30-h7", farbe: "drei", zeilen: ["WARTEST DU NOCH", "ODER KAUFST DU?"], dauerMs: 2400 },
+    ],
+    folgenAbClip: 5,
+    caption: `Eine Woche 30 Jahre. Alles gefallen.
+
+Das Set ist seit Mittwoch letzter Woche draußen, und die Tagespreise liegen inzwischen 28 % unter dem 30-Tage-Schnitt. Die Crystal-Lugia ist von 263 auf 190 € gefallen, das Glurak von 207 auf 156 €, Gengar ex von 176 auf 126 €.
+
+Was mir auffällt: Es ist keine Ausnahme, sondern die Regel. Von den 92 bepreisten Karten steht nicht eine über 20 € höher als ihr Schnitt. So sieht die zweite Woche nach jedem Release aus — die ersten Preise sind Ab-Preise, keine Verkäufe.
+
+Cardmarket, Tagespreise, Stand 21.09.
+
+Wartest du noch oder kaufst du?`,
+    captionKurz: `30-Jahre-Set nach einer Woche: Lugia 263 → 190 €, Glurak 207 → 156 €. Keine Karte über 20 € steht über ihrem Schnitt. Wartest du noch?`,
+    hashtags: ["#30thcelebration", "#pokemon30", "#cardmarket", "#pokemonpreise", "#pokemonsammeln", "#binderplan"],
+  },
+
 };
 
 // --- Bühne -------------------------------------------------------------------
