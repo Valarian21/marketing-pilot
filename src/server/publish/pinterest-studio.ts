@@ -122,7 +122,9 @@ function beschreibungAus(text: string): string {
 export function offeneAuftraege(db: Db, env: Env, projectId: string): { auftraege: Auftrag[]; uebersprungen: PlanZeile[] } {
   const stuecke = db.select().from(t.mpContentPieces)
     .where(and(eq(t.mpContentPieces.projectId, projectId), eq(t.mpContentPieces.channel, "pinterest"))).all()
-    .filter((p) => p.status === "approved");
+    // Nur Bildseiten (Kunstseiten, Harmonie): Ranglisten-Carousels tragen als Pin
+    // nur ihr Deckblatt und passen nicht zur Pinterest-Ausrichtung (21.09.2026).
+    .filter((p) => p.status === "approved" && p.format === "image");
   const termine = db.select().from(t.mpScheduledPosts)
     .where(and(eq(t.mpScheduledPosts.projectId, projectId), eq(t.mpScheduledPosts.platform, "pinterest"))).all();
   const auftraege: Auftrag[] = [];
@@ -223,7 +225,8 @@ async function einenPinnen(seite: Page, env: Env, auftrag: Auftrag, probe: boole
   if (!pinnwand) return zeile("fehler", "Pinnwand-Auswahl nicht gefunden — Bildschirmfoto in pinterest-logs");
   if (probe) return zeile("uebersprungen", "Probelauf: ausgefüllt, nicht veröffentlicht");
 
-  const veroeffentlichen = seite.locator("button").filter({ hasText: /^(Veröffentlichen|Publish)$/ }).first();
+  // Der Knopf trägt neben dem Wort noch Hilfsknoten — kein Anker-Regex (21.09.: „nicht gefunden").
+  const veroeffentlichen = seite.locator('button:has-text("Veröffentlichen"), button:has-text("Publish")').first();
   if (!(await veroeffentlichen.count())) return fehlt("„Veröffentlichen“ nicht gefunden", "senden");
   await veroeffentlichen.click({ force: true });
   await seite.waitForTimeout(5000);
