@@ -25,7 +25,8 @@ import { seriesRoutes } from "./routes/series.js";
 import { publishRoutes } from "./routes/publish.js";
 import { tiktokRoutes } from "./routes/tiktok.js";
 import { youtubeRoutes } from "./routes/youtube.js";
-import { sitzungStatus as youtubeSitzung, zahlenHolen as youtubeZahlen } from "./publish/youtube-studio.js";
+import { laufVermerken as youtubeVermerken, planenStarten as youtubePlanen, sitzungStatus as youtubeSitzung, zahlenHolen as youtubeZahlen } from "./publish/youtube-studio.js";
+import { berlinParts } from "./agents/series/time.js";
 import { pinterestRoutes } from "./routes/pinterest.js";
 import { loopRoutes, EVENTS_PUBLIC_PATH } from "./routes/loop.js";
 import { storageRoutes } from "./routes/storage.js";
@@ -212,7 +213,32 @@ export async function buildApp(env: Env, opts: { host?: HostAdapter; dbFile?: st
       }
     } catch (e) { app.log.warn(`youtube.zahlen: ${e instanceof Error ? e.message : String(e)}`); }
   };
-  setInterval(() => void zahlenTakt(), 60 * 60_000).unref();
+  /**
+   * Studio-Lauf einmal am Tag, morgens zwischen 6 und 8 Uhr Berliner Zeit —
+   * nur mit angemeldeter Sitzung und höchstens zwölf Stücke, weil YouTube
+   * unbestätigte Kanäle auf wenige Uploads am Tag deckelt (21.09.2026 gemessen)
+   * und ein Stapel im Tagesfenster sonst zur Hälfte scheitert. Der vorige Lauf
+   * wird vorher verbucht, damit erledigte Termine nicht noch einmal anstehen.
+   */
+  const studioTakt = async () => {
+    try {
+      const st = await youtubeSitzung(env);
+      if (!st.angemeldet || st.lauf?.laeuft) return;
+      const jetzt = berlinParts(new Date());
+      if (jetzt.hour < 6 || jetzt.hour > 8) return;
+      for (const p of db.select().from(t.mpProjects).all().filter((x) => x.status === "active")) {
+        const key = `sched:youtube.studio:${p.id}`;
+        const letzte = db.select().from(t.mpSettings).where(eq(t.mpSettings.key, key)).get();
+        if (letzte && Date.now() - Date.parse(letzte.value) < 20 * 3_600_000) continue;
+        youtubeVermerken(db, p.id);
+        await youtubePlanen(db, env, p.id, false, 12);
+        db.insert(t.mpSettings).values({ key, value: new Date().toISOString(), updatedAt: new Date().toISOString() })
+          .onConflictDoUpdate({ target: t.mpSettings.key, set: { value: new Date().toISOString(), updatedAt: new Date().toISOString() } }).run();
+        app.log.info(`youtube.studio: Tageslauf gestartet (${p.id.slice(0, 8)})`);
+      }
+    } catch (e) { app.log.warn(`youtube.studio: ${e instanceof Error ? e.message : String(e)}`); }
+  };
+  setInterval(() => { void zahlenTakt(); void studioTakt(); }, 60 * 60_000).unref();
 
   return {
     app, db, host, ctx,

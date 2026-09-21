@@ -11,7 +11,7 @@ import type { Env } from "../env.js";
 import { getProject } from "../repo/projects.js";
 import { writeAudit } from "../audit.js";
 import {
-  laufVermerken, offeneAuftraege, planenStarten, sitzungBeenden, sitzungStarten, sitzungStatus, studioZahlen, zahlenHolen,
+  laufVermerken, offeneAuftraege, planenStarten, schritt, sitzungBeenden, sitzungStarten, sitzungStatus, studioZahlen, zahlenHolen,
 } from "../publish/youtube-studio.js";
 
 const StudioZahlenSchema = z.object({
@@ -60,10 +60,10 @@ export function youtubeRoutes(app: FastifyInstance, db: Db, env: Env): void {
   });
 
   r.post("/api/mp/projects/:projectId/youtube/planen", {
-    schema: { params: P, body: z.object({ probe: z.boolean().default(false) }), response: { 200: s.TiktokView, 400: s.ErrorBody, 404: s.ErrorBody } },
+    schema: { params: P, body: z.object({ probe: z.boolean().default(false), hoechstens: z.number().int().min(0).max(60).default(0) }), response: { 200: s.TiktokView, 400: s.ErrorBody, 404: s.ErrorBody } },
   }, async (req, reply) => {
     if (!getProject(db, req.params.projectId)) return reply.code(404).send({ detail: "Projekt nicht gefunden." });
-    try { await planenStarten(db, env, req.params.projectId, req.body.probe); }
+    try { await planenStarten(db, env, req.params.projectId, req.body.probe, req.body.hoechstens); }
     catch (e) { return reply.code(400).send({ detail: e instanceof Error ? e.message : "Lauf ließ sich nicht starten." }); }
     writeAudit(db, { user: req.user, action: "youtube.planen", entityType: "project", entityId: req.params.projectId, projectId: req.params.projectId, content: { probe: req.body.probe } });
     return view(req.params.projectId);
@@ -86,6 +86,21 @@ export function youtubeRoutes(app: FastifyInstance, db: Db, env: Env): void {
   }, async (req, reply) => {
     if (!getProject(db, req.params.projectId)) return reply.code(404).send({ detail: "Projekt nicht gefunden." });
     return studioZahlen(db, req.params.projectId);
+  });
+
+  /** Fernsteuerung für die Einrichtung — siehe `schritt()` in studio-browser.ts. */
+  r.post("/api/mp/projects/:projectId/youtube/schritt", {
+    schema: { params: P, body: z.object({
+      goto: z.string().url().optional(), klick: z.string().optional(), klickText: z.string().optional(),
+      tippen: z.object({ selektor: z.string(), text: z.string(), loeschen: z.boolean().optional() }).optional(),
+      datei: z.object({ selektor: z.string(), pfad: z.string() }).optional(),
+      waehlen: z.object({ selektor: z.string(), text: z.string() }).optional(),
+      taste: z.string().optional(), warteMs: z.number().int().optional(), pruefen: z.array(z.string()).optional(), name: z.string().optional(),
+    }), response: { 200: z.object({ url: z.string(), text: z.string(), foto: z.string(), gefunden: z.record(z.string(), z.object({ anzahl: z.number(), sichtbar: z.boolean() })) }), 400: s.ErrorBody, 404: s.ErrorBody } },
+  }, async (req, reply) => {
+    if (!getProject(db, req.params.projectId)) return reply.code(404).send({ detail: "Projekt nicht gefunden." });
+    try { return await schritt(env, req.body); }
+    catch (e) { return reply.code(400).send({ detail: e instanceof Error ? e.message.slice(0, 400) : "Schritt fehlgeschlagen." }); }
   });
 
   r.post("/api/mp/projects/:projectId/youtube/vermerken", {

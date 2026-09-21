@@ -191,3 +191,67 @@ export function berlin(iso: string): { datum: string; stunde: string; minute: st
   const s = new Date(new Date(iso).getTime() + 2 * 3600_000).toISOString();
   return { datum: s.slice(0, 10), stunde: s.slice(11, 13), minute: s.slice(14, 16) };
 }
+
+// --- Fernsteuerung ------------------------------------------------------------
+//
+// Pinterest zeigt seine Feldnamen erst in der echten Sitzung. Statt bei jedem
+// Selektor neu zu bauen und den Dienst durchzustarten, nimmt dieser Schritt
+// einen kleinen Auftrag entgegen (Seite laden, tippen, klicken, Datei setzen)
+// und liefert Bildschirmfoto plus Seitentext zurück. Nur mit angemeldeter
+// Sitzung, nur über die geschützte API — ein Werkzeug für die Einrichtung,
+// kein Weg für Beiträge.
+
+export type Schritt = {
+  goto?: string | undefined;
+  klick?: string | undefined;
+  /** Text-Locator: ein Element, dessen Text passt (Knopf, Menüpunkt). */
+  klickText?: string | undefined;
+  tippen?: { selektor: string; text: string; loeschen?: boolean | undefined } | undefined;
+  datei?: { selektor: string; pfad: string } | undefined;
+  /** Native Auswahlliste: Option nach sichtbarem Text. */
+  waehlen?: { selektor: string; text: string } | undefined;
+  taste?: string | undefined;
+  warteMs?: number | undefined;
+  /** Selektoren, deren Vorhandensein und Sichtbarkeit gemeldet werden. */
+  pruefen?: string[] | undefined;
+  name?: string | undefined;
+};
+
+export async function schritt(env: Env, dienst: Dienst, auftrag: Schritt): Promise<{ url: string; text: string; foto: string; gefunden: Record<string, { anzahl: number; sichtbar: boolean }> }> {
+  const s = aktuelleSitzung(dienst);
+  if (!s?.ctx) throw new Error("Keine Sitzung — bitte zuerst anmelden.");
+  if (s.lauf?.laeuft) throw new Error("Es läuft gerade ein Lauf.");
+  const seite = s.ctx.pages()[0] ?? (await s.ctx.newPage());
+  if (auftrag.goto) { await seite.goto(auftrag.goto, { waitUntil: "domcontentloaded" }).catch(() => {}); await seite.waitForTimeout(3500); }
+  // Pinterest zeichnet Listen und Knöpfe so, dass Playwrights Trefferprüfung
+  // hängen bleibt („scrolling into view" in Schleife, 21.09.2026). Deshalb erst
+  // der ordentliche Klick, danach der erzwungene, zuletzt ein Klick per Skript.
+  const klicken = async (l: ReturnType<Page["locator"]>) => {
+    try { await l.click({ timeout: 4000 }); return; } catch { /* weiter */ }
+    try { await l.click({ timeout: 4000, force: true }); return; } catch { /* weiter */ }
+    await l.evaluate((el) => (el as HTMLElement).click());
+  };
+  if (auftrag.klick) { await klicken(seite.locator(auftrag.klick).first()); await seite.waitForTimeout(1200); }
+  if (auftrag.klickText) { await klicken(seite.getByText(auftrag.klickText, { exact: false }).first()); await seite.waitForTimeout(1200); }
+  if (auftrag.tippen) {
+    const f = seite.locator(auftrag.tippen.selektor).first();
+    await klicken(f);
+    if (auftrag.tippen.loeschen !== false) { await seite.keyboard.press("Control+A"); await seite.keyboard.press("Delete"); }
+    await seite.keyboard.type(auftrag.tippen.text, { delay: 6 });
+    await seite.waitForTimeout(600);
+  }
+  if (auftrag.datei) { await seite.locator(auftrag.datei.selektor).first().setInputFiles(auftrag.datei.pfad); await seite.waitForTimeout(2500); }
+  if (auftrag.waehlen) { await seite.locator(auftrag.waehlen.selektor).first().selectOption({ label: auftrag.waehlen.text }, { timeout: 8000 }); await seite.waitForTimeout(800); }
+  if (auftrag.taste) { await seite.keyboard.press(auftrag.taste); await seite.waitForTimeout(800); }
+  if (auftrag.warteMs) await seite.waitForTimeout(Math.min(auftrag.warteMs, 20_000));
+  const name = (auftrag.name ?? "schritt").replace(/[^\w-]/g, "_");
+  await schuss(seite, env, dienst, name);
+  const gefunden: Record<string, { anzahl: number; sichtbar: boolean }> = {};
+  for (const sel of auftrag.pruefen ?? []) {
+    const l = seite.locator(sel);
+    const anzahl = await l.count().catch(() => 0);
+    gefunden[sel] = { anzahl, sichtbar: anzahl ? await l.first().isVisible().catch(() => false) : false };
+  }
+  const text = (await seite.locator("body").innerText().catch(() => "")).slice(0, 6000);
+  return { url: seite.url(), text, foto: path.join(logOrdner(env, dienst), `${name}.png`), gefunden };
+}

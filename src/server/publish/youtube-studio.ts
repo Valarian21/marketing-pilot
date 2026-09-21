@@ -30,11 +30,14 @@ import type { Env } from "../env.js";
 import { schreibeKanalTag } from "./kanal-metriken.js";
 import { schreibeVerlauf } from "./metrics.js";
 import {
-  aktuelleSitzung, berlin, logOrdner, schuss as schussAllgemein, sitzungOeffnen, sitzungSchliessen,
-  type Lauf, type PlanStatus, type PlanZeile,
+  aktuelleSitzung, berlin, logOrdner, schritt as schrittAllgemein, schuss as schussAllgemein, sitzungOeffnen, sitzungSchliessen,
+  type Lauf, type PlanStatus, type PlanZeile, type Schritt,
 } from "./studio-browser.js";
 
-export type { Lauf, PlanStatus, PlanZeile } from "./studio-browser.js";
+export type { Lauf, PlanStatus, PlanZeile, Schritt } from "./studio-browser.js";
+
+/** Fernsteuerung für die Einrichtung — dieselbe wie bei Pinterest. */
+export const schritt = (env: Env, auftrag: Schritt) => schrittAllgemein(env, DIENST, auftrag);
 
 const DIENST = "youtube" as const;
 /** Kurzlink für die Beschreibung — der Weg, den die Herkunftsmessung zählt. */
@@ -196,14 +199,51 @@ export function offeneAuftraege(db: Db, env: Env, projectId: string): { auftraeg
 
 const schuss = (seite: Page, env: Env, name: string) => schussAllgemein(seite, env, DIENST, name);
 
+/**
+ * Die eigene Kanal-Id, einmal je Lauf aus der Studio-Adresse gelesen.
+ *
+ * `…/channel/UC/videos/upload` mit dem Platzhalter „UC" lädt eine **weiße
+ * Seite** (21.09.2026 im Probelauf: „Upload-Dialog nicht gefunden"). Mit der
+ * echten Id öffnet derselbe Weg den Dialog sofort.
+ */
+let gemerkteKanalId: string | null = null;
+async function kanalIdHolen(seite: Page): Promise<string> {
+  if (gemerkteKanalId) return gemerkteKanalId;
+  const ausUrl = /\/channel\/(UC[\w-]+)/.exec(seite.url())?.[1];
+  if (ausUrl) { gemerkteKanalId = ausUrl; return ausUrl; }
+  gemerkteKanalId = await kanalIdAus(seite);
+  return gemerkteKanalId;
+}
+
+/**
+ * Klicken, ohne hängen zu bleiben.
+ *
+ * Das Studio zeichnet Knöpfe in Schatten-Bäumen; `scrollIntoViewIfNeeded()`
+ * lief am 21.09.2026 dreißig Sekunden ins Leere und riss jeden Auftrag mit.
+ * Kurze Frist, dann erzwungen, zuletzt per Skript — und nie eine Ausnahme.
+ */
+async function sanftKlicken(l: ReturnType<Page["locator"]>): Promise<boolean> {
+  for (const versuch of [() => l.click({ timeout: 4000 }), () => l.click({ timeout: 4000, force: true }),
+    () => l.evaluate((el) => (el as HTMLElement).click(), undefined, { timeout: 4000 })]) {
+    try { await versuch(); return true; } catch { /* nächster Versuch */ }
+  }
+  return false;
+}
+
 /** Zeitwahl im Studio: Viertelstunden, deshalb abrunden. */
 function viertelstunde(minute: string): string {
   return String(Math.floor(Number(minute) / 15) * 15).padStart(2, "0");
 }
 
-/** In ein Polymer-Textfeld tippen: markieren, löschen, Zeile für Zeile schreiben. */
-async function tippen(seite: Page, feld: ReturnType<Page["locator"]>, text: string): Promise<void> {
-  await feld.click();
+/**
+ * In ein Polymer-Textfeld tippen: markieren, löschen, Zeile für Zeile schreiben.
+ *
+ * Der Klick geht über `sanftKlicken` — das Beschreibungsfeld liegt unter der
+ * Falz, und ein gewöhnlicher Klick wartete am 21.09.2026 dreißig Sekunden auf
+ * einen Treffer, den es nie gab.
+ */
+async function tippen(seite: Page, feld: ReturnType<Page["locator"]>, text: string): Promise<boolean> {
+  if (!(await sanftKlicken(feld))) return false;
   await seite.keyboard.press("Control+A");
   await seite.keyboard.press("Delete");
   const zeilen = text.split("\n");
@@ -211,6 +251,7 @@ async function tippen(seite: Page, feld: ReturnType<Page["locator"]>, text: stri
     if (zeilen[i]) await seite.keyboard.type(zeilen[i]!, { delay: 8 });
     if (i < zeilen.length - 1) await seite.keyboard.press("Shift+Enter");
   }
+  return true;
 }
 
 /**
@@ -218,6 +259,39 @@ async function tippen(seite: Page, feld: ReturnType<Page["locator"]>, text: stri
  * Videoelemente, Prüfung, Sichtbarkeit — die mittleren zwei werden nur mit
  * „Weiter" durchlaufen.
  */
+/** Titel vergleichbar machen: Groß/klein, Mehrfach-Leerzeichen, Kanal-Suffix. */
+const titelSchluessel = (s2: string) => s2.toLowerCase().replace(/\s*·\s*(shorts|youtube)\s*$/i, "").replace(/\s+/g, " ").trim();
+
+/**
+ * Einen wartenden Entwurf mit diesem Titel im Studio öffnen.
+ *
+ * Gesucht wird in beiden Listen (Videos und Shorts); die Zeile trägt den
+ * Knopf „Entwurf bearbeiten", der den Assistenten mit dem bereits
+ * hochgeladenen Video öffnet. Findet sich nichts, bleibt alles wie es war.
+ */
+async function entwurfOeffnen(seite: Page, titel: string): Promise<"entwurf" | "geplant" | "nein"> {
+  const kanalId = await kanalIdHolen(seite);
+  for (const art of ["short", "upload"]) {
+    await seite.goto(`${STUDIO_URL}channel/${kanalId}/videos/${art}`, { waitUntil: "domcontentloaded" }).catch(() => {});
+    await seite.waitForTimeout(5000);
+    const zeilen = await seite.locator("ytcp-video-row").count().catch(() => 0);
+    for (let i = 0; i < zeilen; i++) {
+      const row = seite.locator("ytcp-video-row").nth(i);
+      const rowTitel = ((await row.locator("#video-title").first().innerText().catch(() => "")) ?? "").trim();
+      if (titelSchluessel(rowTitel) !== titelSchluessel(titel)) continue;
+      // Steht die Zeile schon auf „Geplant", ist nichts mehr zu tun.
+      const zeilenText = ((await row.innerText().catch(() => "")) ?? "");
+      if (/\bGeplant\b|\bScheduled\b/.test(zeilenText)) return "geplant";
+      const knopf = row.locator("a, button").filter({ hasText: /Entwurf bearbeiten|Edit draft/i }).first();
+      if (!(await knopf.count())) continue;
+      if (!(await sanftKlicken(knopf))) continue;
+      await seite.waitForTimeout(6000);
+      return "entwurf";
+    }
+  }
+  return "nein";
+}
+
 async function einesPlanen(seite: Page, env: Env, auftrag: Auftrag, probe: boolean): Promise<PlanZeile> {
   const zeile = (status: PlanStatus, meldung: string): PlanZeile =>
     ({ pieceId: auftrag.pieceId, titel: auftrag.titel, geplantAm: auftrag.geplantAm, status, meldung });
@@ -226,22 +300,46 @@ async function einesPlanen(seite: Page, env: Env, auftrag: Auftrag, probe: boole
     return zeile("fehler", `${was} — Bildschirmfoto in youtube-logs`);
   };
 
-  // 1. Upload-Dialog öffnen (?d=ud öffnet ihn direkt) und Datei wählen.
-  await seite.goto(`${STUDIO_URL}channel/UC/videos/upload?d=ud`, { waitUntil: "domcontentloaded" }).catch(() => {});
-  await seite.waitForTimeout(4000);
+  /**
+   * 1a. Liegt das Video schon als **Entwurf** im Studio? Dann wird es
+   * fertiggestellt statt neu hochgeladen.
+   *
+   * Grund: YouTube begrenzt unbestätigte Kanäle auf wenige Uploads am Tag
+   * („Tägliches Upload-Limit erreicht", 21.09.2026 nach 23 Probeläufen). Jeder
+   * gescheiterte Assistent hätte sonst ein Kontingent verbrannt und das Video
+   * doppelt abgelegt.
+   */
+  const schon = await entwurfOeffnen(seite, auftrag.titel);
+  if (schon === "geplant") return zeile("uebersprungen", "liegt schon geplant im Studio");
+  if (schon === "entwurf") return assistentFuellen(seite, env, auftrag, probe);
+
+  // 1b. Upload-Dialog öffnen (?d=ud öffnet ihn direkt) und Datei wählen.
+  const kanalId = await kanalIdHolen(seite);
+  await seite.goto(`${STUDIO_URL}channel/${kanalId}/videos/upload?d=ud`, { waitUntil: "domcontentloaded" }).catch(() => {});
+  await seite.waitForTimeout(5000);
   let dateiFeld = seite.locator('ytcp-uploads-file-picker input[type="file"], input[type="file"]').first();
   if (!(await dateiFeld.count())) {
     // Ohne Dialog: über den „Erstellen"-Knopf gehen.
     const erstellen = seite.locator("#create-icon, ytcp-button#create-icon").first();
     if (await erstellen.count()) {
-      await erstellen.click();
+      await sanftKlicken(erstellen);
       await seite.waitForTimeout(1500);
-      await seite.locator("#text-item-0, tp-yt-paper-item#text-item-0").first().click().catch(() => {});
+      await sanftKlicken(seite.locator("#text-item-0, tp-yt-paper-item#text-item-0").first());
       await seite.waitForTimeout(2500);
     }
     dateiFeld = seite.locator('input[type="file"]').first();
   }
   if (!(await dateiFeld.count())) return fehlt("Upload-Dialog nicht gefunden", "upload");
+  /**
+   * YouTube deckelt unbestätigte Kanäle auf wenige Uploads am Tag. Ist das
+   * Limit erreicht, legt das Studio einen grauen Schleier über den Assistenten
+   * — jede weitere Eingabe läuft ins Leere, und der Auftrag scheiterte bisher
+   * erst Schritte später mit einer irreführenden Meldung (21.09.2026).
+   * Der Kanal lässt sich unter youtube.com/verify freischalten.
+   */
+  if (await seite.getByText(/Tägliches Upload-Limit erreicht|Daily upload limit reached/i).first().count()) {
+    return zeile("uebersprungen", "YouTube: tägliches Upload-Limit erreicht — Kanal unter youtube.com/verify bestätigen");
+  }
   /**
    * Das Upload-Video erst hier rechnen, nicht in der Ansicht: `uploadVideo()`
    * ruft ffmpeg synchron und blockiert damit den ganzen Dienst. Am 21.09.2026
@@ -251,87 +349,139 @@ async function einesPlanen(seite: Page, env: Env, auftrag: Auftrag, probe: boole
    */
   await dateiFeld.setInputFiles(uploadVideo(env, auftrag.pieceId, auftrag.video, auftrag.cover));
 
+  return assistentFuellen(seite, env, auftrag, probe);
+}
+
+/**
+ * Der Assistent ab der Detailseite — für frische Uploads und für Entwürfe.
+ */
+async function assistentFuellen(seite: Page, env: Env, auftrag: Auftrag, probe: boolean): Promise<PlanZeile> {
+  const zeile = (status: PlanStatus, meldung: string): PlanZeile =>
+    ({ pieceId: auftrag.pieceId, titel: auftrag.titel, geplantAm: auftrag.geplantAm, status, meldung });
+  const fehlt = async (was: string, name: string) => {
+    await schuss(seite, env, `fehler-${auftrag.pieceId}-${name}`);
+    return zeile("fehler", `${was} — Bildschirmfoto in youtube-logs`);
+  };
+
   // 2. Details: Titel, Beschreibung. Das Titelfeld erscheint, sobald der
   //    Upload angenommen ist — YouTube füllt es mit dem Dateinamen vor.
   const titelFeld = seite.locator("#title-textarea #textbox, ytcp-social-suggestions-textbox#title-textarea #textbox").first();
   try { await titelFeld.waitFor({ state: "visible", timeout: 120_000 }); }
   catch { return fehlt("Detailseite nach dem Upload nicht erschienen", "details"); }
   await seite.waitForTimeout(2500);
-  await tippen(seite, titelFeld, auftrag.titel);
-  await seite.waitForTimeout(600);
-
-  const beschreibungFeld = seite.locator("#description-textarea #textbox, ytcp-social-suggestions-textbox#description-textarea #textbox").first();
-  if (await beschreibungFeld.count()) {
-    await tippen(seite, beschreibungFeld, auftrag.beschreibung);
+  const titelJetzt = ((await titelFeld.innerText().catch(() => "")) ?? "").trim();
+  if (titelSchluessel(titelJetzt) !== titelSchluessel(auftrag.titel)) {
+    if (!(await tippen(seite, titelFeld, auftrag.titel))) return fehlt("Titelfeld ließ sich nicht anklicken", "titel");
     await seite.waitForTimeout(600);
   }
 
-  // 3. Zielgruppe: nicht für Kinder — Pflichtangabe, ohne sie geht „Weiter" nicht.
-  const nichtKinder = seite.locator('tp-yt-paper-radio-button[name="VIDEO_MADE_FOR_KIDS_NOT_MFK"], #audience tp-yt-paper-radio-button').last();
-  if (await nichtKinder.count()) { await nichtKinder.scrollIntoViewIfNeeded(); await nichtKinder.click().catch(() => {}); }
-  await seite.waitForTimeout(600);
+  const beschreibungFeld = seite.locator("#description-textarea #textbox, ytcp-social-suggestions-textbox#description-textarea #textbox").first();
+  if (await beschreibungFeld.count()) {
+    const jetzt = ((await beschreibungFeld.innerText().catch(() => "")) ?? "").trim();
+    // Der Entwurf trägt den Text schon — dann nicht noch einmal tippen.
+    if (jetzt.length < 20) { await tippen(seite, beschreibungFeld, auftrag.beschreibung); await seite.waitForTimeout(600); }
+  }
+
+  /**
+   * 3. Zielgruppe: „Nein, nicht speziell für Kinder" — Pflichtangabe; ohne sie
+   * bleibt „Weiter" grau und der Assistent steht still (21.09.2026 genau so
+   * gesehen: drei Klicks auf „Weiter" bewirkten nichts).
+   *
+   * Gewählt wird über den **Text**, nicht über `name="VIDEO_MADE_FOR_KIDS_NOT_MFK"`:
+   * Das Attribut trägt der Schalter im Studio nicht mehr, und `.last()` einer
+   * gemischten Liste traf die falsche Zeile.
+   */
+  const nichtKinder = seite.locator("tp-yt-paper-radio-button")
+    .filter({ hasText: /nicht speziell für Kinder|not made for kids/i }).first();
+  if (!(await nichtKinder.count())) return fehlt("Zielgruppen-Frage nicht gefunden", "kinder");
+  await sanftKlicken(nichtKinder);
+  await seite.waitForTimeout(800);
+  // Gegenprobe: ist der Schalter wirklich gesetzt? Sonst bleibt „Weiter" gesperrt.
+  const gesetzt = await nichtKinder.getAttribute("aria-checked").catch(() => null);
+  if (gesetzt !== "true") {
+    await sanftKlicken(nichtKinder.locator("#radioLabel, div").first());
+    await seite.waitForTimeout(800);
+  }
 
   // 4. Schlagwörter stehen hinter „Mehr anzeigen". Ohne sie geht es auch — nichts abbrechen.
   try {
     const mehr = seite.locator("#toggle-button, ytcp-button#toggle-button").first();
-    if (await mehr.count()) { await mehr.scrollIntoViewIfNeeded(); await mehr.click(); await seite.waitForTimeout(1200); }
+    if (await mehr.count()) { await sanftKlicken(mehr); await seite.waitForTimeout(1200); }
     const tagFeld = seite.locator("#tags-container input, ytcp-free-text-chip-bar input").first();
     if (await tagFeld.count()) {
-      await tagFeld.scrollIntoViewIfNeeded();
-      await tagFeld.click();
+      await sanftKlicken(tagFeld);
       for (const tag of auftrag.schlagworte) { await seite.keyboard.type(`${tag},`, { delay: 8 }); await seite.waitForTimeout(150); }
     }
   } catch { /* Schlagwörter sind Zugabe */ }
   await schuss(seite, env, `details-${auftrag.pieceId}`);
 
-  // 5. Weiter, Weiter, Weiter — Videoelemente und Prüfung überspringen.
+  /**
+   * 5. „Weiter", bis die Sichtbarkeitsseite da ist.
+   *
+   * Gezählt wird nicht, sondern **auf das Ziel geprüft**: Der Assistent hat je
+   * nach Video drei oder vier Seiten, und ein gesperrter Knopf schluckt den
+   * Klick lautlos. Am 21.09.2026 meldete eine Schrittzählung „bleibt stehen",
+   * während der Assistent längst auf der Vorabprüfung war.
+   */
   const weiter = seite.locator("#next-button").first();
-  for (let i = 0; i < 3; i++) {
+  // Erkennungsmerkmal der Sichtbarkeitsseite — der Aufklapper für den Termin.
+  const planenSchalter = () => seite.locator("#second-container-expand-button, #datepicker-trigger").first();
+  let sichtbarkeitDa = false;
+  for (let i = 0; i < 6 && !sichtbarkeitDa; i++) {
+    if (await planenSchalter().count()) { sichtbarkeitDa = true; break; }
     if (!(await weiter.count())) return fehlt("„Weiter“-Knopf nicht gefunden", `weiter${i}`);
-    await weiter.click();
+    await sanftKlicken(weiter);
     await seite.waitForTimeout(2500);
   }
+  if (!sichtbarkeitDa && !(await planenSchalter().count())) return fehlt("Sichtbarkeitsseite nicht erreicht", "sichtbarkeit");
 
   // 6. Sichtbarkeit: planen. Datum als Text ins Feld, Uhrzeit aus der Liste.
-  const planen = seite.locator("#schedule-radio-button, tp-yt-paper-radio-button[name=\"SCHEDULE\"]").first();
-  if (!(await planen.count())) return fehlt("Umschalter „Planen“ nicht gefunden", "schalter");
-  await planen.click();
-  await seite.waitForTimeout(1500);
-
   const { datum, stunde, minute } = berlin(auftrag.geplantAm);
   const min15 = viertelstunde(minute);
   const datumDe = `${datum.slice(8, 10)}.${datum.slice(5, 7)}.${datum.slice(0, 4)}`;
 
-  const datumKnopf = seite.locator("#datepicker-trigger").first();
-  if (await datumKnopf.count()) {
-    await datumKnopf.click();
-    await seite.waitForTimeout(1000);
-    const datumFeld = seite.locator("ytcp-date-picker input, tp-yt-paper-dialog input").first();
-    if (await datumFeld.count()) {
-      await datumFeld.click();
-      await seite.keyboard.press("Control+A");
-      await seite.keyboard.type(datumDe, { delay: 20 });
-      await seite.keyboard.press("Enter");
-      await seite.waitForTimeout(1000);
-    }
-    await seite.keyboard.press("Escape").catch(() => {});
-    await seite.waitForTimeout(500);
+  /**
+   * Der Terminblock liegt hinter dem Aufklapper „Veröffentlichungszeitpunkt
+   * festlegen" (`#second-container-expand-button`). Darin: das Datum als
+   * Auswahlknopf, die Uhrzeit als **Textfeld** — einen `#time-of-day-trigger`
+   * gibt es nicht mehr (21.09.2026 am offenen Studio nachgesehen). Die
+   * Überschrift lautet „Als ‚Öffentlich' planen"; die Sichtbarkeit ergibt sich
+   * daraus, ein eigener Schalter ist nicht nötig.
+   */
+  if (!(await seite.locator("#datepicker-trigger").first().isVisible().catch(() => false))) {
+    await sanftKlicken(seite.locator("#second-container-expand-button").first());
+    await seite.waitForTimeout(1800);
   }
 
-  const zeitKnopf = seite.locator("#time-of-day-trigger").first();
-  if (await zeitKnopf.count()) {
-    await zeitKnopf.click();
-    await seite.waitForTimeout(1000);
-    const eintrag = seite.locator("tp-yt-paper-item, ytcp-text-menu tp-yt-paper-item").filter({ hasText: new RegExp(`^\\s*${stunde}:${min15}\\s*$`) }).first();
-    if (await eintrag.count()) { await eintrag.scrollIntoViewIfNeeded(); await eintrag.click(); }
-    else await seite.keyboard.press("Escape");
-    await seite.waitForTimeout(1000);
+  const datumKnopf = seite.locator("#datepicker-trigger").first();
+  if (!(await datumKnopf.count())) return fehlt("Datumsauswahl nicht gefunden", "datum");
+  await sanftKlicken(datumKnopf);
+  await seite.waitForTimeout(1200);
+  // Genau dieses Feld: im geöffneten Kalender steht neben dem Datumsfeld auch
+  // das Zeitfeld in einem `tp-yt-paper-dialog` — ein gemeinsamer Selektor traf
+  // am 21.09.2026 das falsche und schrieb das Datum in die Uhrzeit.
+  const datumFeld = seite.locator("ytcp-date-picker input").first();
+  if (await datumFeld.count()) {
+    await sanftKlicken(datumFeld);
+    await seite.keyboard.press("Control+A");
+    await seite.keyboard.type(datumDe, { delay: 25 });
+    await seite.keyboard.press("Enter");
+    await seite.waitForTimeout(1500);
+  }
+
+  // Nach dem Schließen des Kalenders ist das einzige Eingabefeld die Uhrzeit.
+  const zeitFeld = seite.locator("ytcp-datetime-picker input").first();
+  if (await zeitFeld.count()) {
+    await sanftKlicken(zeitFeld);
+    await seite.keyboard.press("Control+A");
+    await seite.keyboard.type(`${stunde}:${min15}`, { delay: 30 });
+    await seite.keyboard.press("Enter");
+    await seite.waitForTimeout(1200);
   }
 
   // Gegenprobe: was zeigt das Studio? Lieber nichts abschicken als den falschen Tag.
-  const gesetztDatum = ((await datumKnopf.textContent().catch(() => "")) ?? "").trim();
-  const gesetztZeit = ((await seite.locator("#time-of-day-trigger input, #time-of-day-trigger").first().inputValue().catch(async () =>
-    (await zeitKnopf.textContent().catch(() => "")) ?? "")) ?? "").trim();
+  const gesetztDatum = ((await datumKnopf.innerText().catch(() => "")) ?? "").trim();
+  const gesetztZeit = ((await zeitFeld.inputValue().catch(() => "")) ?? "").trim();
   const tagNr = String(Number(datum.slice(8, 10)));
   const datumPasst = gesetztDatum.includes(datumDe) || (gesetztDatum.includes(tagNr) && gesetztDatum.includes(datum.slice(0, 4)));
   const zeitPasst = gesetztZeit.includes(`${stunde}:${min15}`);
@@ -346,7 +496,7 @@ async function einesPlanen(seite: Page, env: Env, auftrag: Auftrag, probe: boole
   //    daraus kommt die Video-Id, die der Pilot für die Zahlen je Video braucht.
   const fertig = seite.locator("#done-button").first();
   if (!(await fertig.count())) return fehlt("„Planen“-Knopf nicht gefunden", "knopf");
-  await fertig.click();
+  if (!(await sanftKlicken(fertig))) return fehlt("„Planen“ ließ sich nicht klicken", "knopf");
   let link = "";
   for (let i = 0; i < 20 && !link; i++) {
     await seite.waitForTimeout(1500);
@@ -354,6 +504,9 @@ async function einesPlanen(seite: Page, env: Env, auftrag: Auftrag, probe: boole
     if (await a.count()) link = ((await a.getAttribute("href").catch(() => null)) ?? (await a.textContent().catch(() => "")) ?? "").trim();
   }
   await schuss(seite, env, `nach-absenden-${auftrag.pieceId}`);
+  // Beim Planen zeigt das Studio keinen Teilen-Dialog, sondern speichert still
+  // („Alle Änderungen gespeichert", 21.09.2026). Der Videolink steht dann in
+  // der Inhalte-Liste und kommt über `zahlenHolen()` nach.
   const schliessen = seite.locator("#close-button, ytcp-button#close-button").first();
   if (await schliessen.count()) await schliessen.click().catch(() => {});
   await seite.waitForTimeout(1000);
@@ -361,13 +514,17 @@ async function einesPlanen(seite: Page, env: Env, auftrag: Auftrag, probe: boole
   return zeile("geplant", `im Studio terminiert auf ${datumDe} ${stunde}:${min15} · ${link}`);
 }
 
-export async function planenStarten(db: Db, env: Env, projectId: string, probe: boolean): Promise<Lauf> {
+export async function planenStarten(db: Db, env: Env, projectId: string, probe: boolean, hoechstens = 0): Promise<Lauf> {
   const s = aktuelleSitzung(DIENST);
   if (!s?.ctx) throw new Error("Keine Sitzung — bitte zuerst anmelden.");
   if (!(await angemeldet())) throw new Error("Im Browser ist niemand bei YouTube angemeldet.");
   if (s.lauf?.laeuft) throw new Error("Es läuft schon ein Planungslauf.");
 
-  const { auftraege, uebersprungen } = offeneAuftraege(db, env, projectId);
+  const alle = offeneAuftraege(db, env, projectId);
+  // Ein Stapel lässt sich begrenzen — für Probeläufe und um YouTubes
+  // Tagesgrenze nicht auf einmal auszureizen.
+  const auftraege = hoechstens > 0 ? alle.auftraege.slice(0, hoechstens) : alle.auftraege;
+  const uebersprungen = alle.uebersprungen;
   const lauf: Lauf = {
     laeuft: true, probe, gestartetAm: new Date().toISOString(), fertigAm: null,
     gesamt: auftraege.length, erledigt: 0, aktuell: null, zeilen: [...uebersprungen],
