@@ -369,7 +369,10 @@ describe("Export einspielen (TikTok)", () => {
     expect(view.verlauf.find((v) => v.tag === "2026-09-09")?.aufrufe ?? "leer").toBe("leer");
     // Ein Export ohne Follower-Spalte macht den Follower-Bestand nicht kaputt.
     expect(view.kennzahlen.find((k) => k.id === "follower")?.wert).toBeNull();
-    expect(view.hinweise.some((h) => /TikTok: Zahlen aus dem Export reichen bis 08\.09\./.test(h))).toBe(true);
+    // Der Hinweis nennt den Stand — aber nicht mehr die Aufforderung, einen
+    // neueren Export einzuspielen: seit dem 22.09.2026 holt der Tageslauf die
+    // TikTok-Zahlen selbst (`STUDIO_KANAELE`).
+    expect(view.hinweise.some((h) => /TikTok: Zahlen aus dem Export reichen bis 08\.09\. — neuere holt der Tageslauf selbst\./.test(h))).toBe(true);
   });
 
   it("weist Exporte für API-Kanäle und unbekannte Plattformen ab", async () => {

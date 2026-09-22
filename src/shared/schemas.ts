@@ -1182,6 +1182,9 @@ export const TiktokZahlen = z.object({
   erkannt: z.record(z.string(), z.string()).default({}),
   unbekannt: z.array(z.string()).default([]),
   hinweise: z.array(z.string()).default([]),
+  /** Zeilen des Inhalt-Exports und wie viele davon einem Termin zugeordnet wurden. */
+  beitraege: z.number().int().default(0),
+  zugeordnet: z.number().int().default(0),
 });
 
 export const VerteilenRequest = z.object({

@@ -27,7 +27,8 @@ import * as t from "../db/schema.js";
 import type { Db } from "../db/index.js";
 import type { Env } from "../env.js";
 import { loadProfiles } from "../channels.js";
-import { deuteZahl, liesExport, speichereExport } from "./kanal-import.js";
+import { deuteDatum, deuteZahl, liesExport, rohZeilen, speichereExport } from "./kanal-import.js";
+import { schreibeVerlauf } from "./metrics.js";
 import { schreibeKanalTag } from "./kanal-metriken.js";
 import {
   aktuelleSitzung, berlin, logOrdner as logOrdnerAllgemein, schritt as schrittAllgemein, schuss as schussAllgemein,
@@ -447,6 +448,9 @@ export type TiktokZahlen = {
   erkannt: Record<string, string>;
   unbekannt: string[];
   hinweise: string[];
+  /** Beiträge aus dem Inhalt-Export und wie viele davon einem Termin zugeordnet wurden. */
+  beitraege: number;
+  zugeordnet: number;
 };
 
 /** `https://www.tiktok.com/@binderplan.app` → `binderplan.app`. */
@@ -486,18 +490,25 @@ async function kontoAus(seite: Page, env: Env): Promise<{ handle: string | null;
  * Klappt der Klick auf CSV nicht, bleibt XLSX stehen — beides versteht
  * `liesExport`, der Lauf scheitert daran also nicht.
  */
-async function exportHolen(seite: Page, env: Env, tageZurueck: number): Promise<{ name: string; datei: Buffer }> {
+async function exportHolen(seite: Page, env: Env, tageZurueck: number, reiter: "uebersicht" | "inhalt" = "uebersicht"): Promise<{ name: string; datei: Buffer }> {
   const bereich = encodeURIComponent(JSON.stringify({ type: "fixed", pastDay: tageZurueck }));
   await seite.goto(`${ANALYSE_URL}?dateRange=${bereich}`, { waitUntil: "domcontentloaded" }).catch(() => {});
   await seite.waitForTimeout(9000);
-  await schuss(seite, env, "zahlen-analyse");
+  // Die Reiter „Übersicht | Inhalt | Zuschauer*innen | Follower*innen" stehen
+  // oben; der Export folgt dem gewählten Reiter, der Dialog heißt dann
+  // „Inhalt-Daten herunterladen".
+  if (reiter === "inhalt") {
+    await seite.getByText("Inhalt", { exact: true }).first().click({ timeout: 15_000 });
+    await seite.waitForTimeout(7000);
+  }
+  await schuss(seite, env, `zahlen-analyse-${reiter}`);
 
   const knopf = seite.getByText("Daten herunterladen", { exact: false }).first();
   await knopf.click({ timeout: 15_000 });
   await seite.waitForTimeout(2500);
   await seite.getByText("CSV", { exact: true }).first().click({ timeout: 6000 }).catch(() => { /* XLSX geht auch */ });
   await seite.waitForTimeout(800);
-  await schuss(seite, env, "zahlen-dialog");
+  await schuss(seite, env, `zahlen-dialog-${reiter}`);
 
   // Der Bestätigungsknopf heißt „Herunterladen" — der Auslöser darüber
   // „Daten herunterladen". `getByText` fände beide, deshalb der genaue Text.
@@ -506,7 +517,7 @@ async function exportHolen(seite: Page, env: Env, tageZurueck: number): Promise<
     seite.getByText("Herunterladen", { exact: true }).last().click({ timeout: 15_000 }),
   ]);
   const name = download.suggestedFilename();
-  const ziel = path.join(logOrdner(env), `export-${Date.now()}-${name.replace(/[^\w.-]+/g, "_")}`);
+  const ziel = path.join(logOrdner(env), `export-${reiter}-${Date.now()}-${name.replace(/[^\w.-]+/g, "_")}`);
   await download.saveAs(ziel);
   const datei = fs.readFileSync(ziel);
   return { name, datei };
@@ -537,18 +548,37 @@ export async function zahlenHolen(db: Db, env: Env, projectId: string, tageZurue
   const now = new Date();
   const heute = berlin(now.toISOString()).datum;
   const deutung = liesExport(datei, name, heute);
-  pruefeVerschiebung(db, projectId, deutung.tage.at(-1)?.tag ?? null);
-  if (deutung.tage.length) speichereExport(db, projectId, "tiktok", deutung.tage, now);
+  const letzterTag = deutung.tage.at(-1)?.tag ?? null;
+  const geraeumt = raeumeNach(db, projectId, letzterTag);
+  if (deutung.tage.length) speichereExport(db, projectId, "tiktok", deutung.tage, now, "api");
   // Follower sind ein Bestand, kein Tageswert — der Export nennt sie nicht,
   // die Startseite schon. Sie gehören an den jüngsten Tag, den es gibt.
   if (konto.follower !== null) {
-    schreibeKanalTag(db, projectId, "tiktok", deutung.tage.at(-1)?.tag ?? heute, { follower: konto.follower }, now, "hand");
+    schreibeKanalTag(db, projectId, "tiktok", deutung.tage.at(-1)?.tag ?? heute, { follower: konto.follower }, now, "api");
+  }
+
+  if (geraeumt) {
+    deutung.hinweise.push(`${geraeumt} TikTok-Tage nach dem ${letzterTag} entfernt: TikTok hat seine Tagesetiketten verschoben, der Export gilt.`);
+  }
+  // Zahlen je Beitrag aus demselben Studio, zweiter Reiter. Ein Fehler hier
+  // darf die Kanalzahlen nicht mitreißen — die stehen schon geschrieben.
+  let beitraege = 0;
+  let zugeordnet = 0;
+  const hinweise = [...deutung.hinweise];
+  try {
+    const r = await beitragsZahlen(seite, db, env, projectId, tageZurueck, now);
+    beitraege = r.gefunden;
+    zugeordnet = r.zugeordnet;
+    hinweise.push(...r.hinweise);
+  } catch (e) {
+    hinweise.push(`Zahlen je Beitrag: ${e instanceof Error ? e.message : String(e)}`);
   }
 
   const ergebnis: TiktokZahlen = {
     abgerufenAm: now.toISOString(), konto: konto.handle, follower: konto.follower,
     tage: deutung.tage.length, von: deutung.tage[0]?.tag ?? null, bis: deutung.tage.at(-1)?.tag ?? null,
-    erkannt: deutung.erkannt, unbekannt: deutung.unbekannt, hinweise: deutung.hinweise,
+    erkannt: deutung.erkannt, unbekannt: deutung.unbekannt, hinweise,
+    beitraege, zugeordnet,
   };
   const key = `tiktok-studio:${projectId}`;
   db.insert(t.mpSettings).values({ key, value: JSON.stringify(ergebnis), updatedAt: new Date().toISOString() })
@@ -556,28 +586,219 @@ export async function zahlenHolen(db: Db, env: Env, projectId: string, tageZurue
   return ergebnis;
 }
 
+// --- Zahlen je Beitrag --------------------------------------------------------
+//
+// Die Übersicht misst den **Kanal**; welcher einzelne Beitrag getragen hat,
+// steht dort nicht. Bis zum 22.09.2026 hatte deshalb kein einziger der 23
+// TikTok-Beiträge eines Monats eine eigene Zahl, während Instagram und Threads
+// für jeden Beitrag welche hatten. Die Quelle ist derselbe Weg wie beim
+// Kanalexport, nur der Reiter „Inhalt" statt „Übersicht".
+//
+// Zugeordnet wird über den Titel: TikTok nennt im Export keine Video-Id, und
+// der Titel ist im Piloten dieselbe Zeichenkette, die beim Planen ins Feld
+// getippt wurde. Zur Sicherheit muss zusätzlich das Datum passen — derselbe
+// Titel kann auf mehreren Kanälen und in mehreren Wochen vorkommen.
+
 /**
- * Wandert das Exportfenster rückwärts, sind die Etiketten falsch.
+ * Spalten des Inhalt-Exports, deutsch und englisch.
  *
- * Kurz nach Mitternacht UTC zieht TikTok den Fensteranfang um einen Tag
- * zurück, liefert aber **dieselben** Werte — am 22.09.2026 zweimal gemessen:
- * um 01:56 CEST endete der Export am 21.09. mit 889 Aufrufen, um 02:09 CEST
- * standen exakt dieselben sechzig Zeilen da, nur endeten sie am 20.09. Welche
- * Beschriftung stimmt, entscheidet die Oberfläche: ihre Sieben-Tage-Summe
- * (8,5 Tsd.) passt auf die erste (8.513), nicht auf die verschobene (8.427).
- *
- * Ein solcher Export würde jeden Tag um eine Stelle verrücken — genau das war
- * an den von Hand eingespielten Tagen zu sehen. Also lieber nichts schreiben
- * und es später noch einmal versuchen.
+ * Am 22.09.2026 gemessen (englische Kopfzeile trotz deutscher Oberfläche):
+ * `Time, Video title, Video link, Post time, Total likes, Total comments,
+ * Total shares, Total views`. Zwei Fallen stecken darin: `Time` ist **nicht**
+ * der Veröffentlichungstag, sondern der Tag des Exports (steht in jeder Zeile
+ * gleich) — der Tag heißt `Post time`. Und alle Zahlen tragen „Total", sind
+ * also Gesamtstände über die Lebenszeit, keine Tageswerte.
  */
-function pruefeVerschiebung(db: Db, projectId: string, letzterTag: string | null): void {
-  if (!letzterTag) return;
-  const bekannt = db.select().from(t.mpKanalStats)
-    .where(and(eq(t.mpKanalStats.projectId, projectId), eq(t.mpKanalStats.platform, "tiktok")))
-    .all().map((r) => r.tag).sort().at(-1);
-  if (bekannt && letzterTag < bekannt) {
-    throw new Error(`Der Export endet am ${letzterTag}, gespeichert ist schon der ${bekannt} — TikTok hat das Fenster zurückgezogen (passiert kurz nach Mitternacht UTC). Nichts geschrieben.`);
+const INHALT_SPALTEN: [RegExp, "titel" | "datum" | "link" | "aufrufe" | "likes" | "kommentare" | "geteilt" | "reichweite"][] = [
+  [/^(video ?title|videotitel|titel|title|beitrag|post)$/, "titel"],
+  [/^(video ?link|link|url)$/, "link"],
+  [/^(post ?time|posted|veroffentlichungszeit|veroffentlicht|datum|date)$/, "datum"],
+  [/^(total ?views|video ?views|videoaufrufe|aufrufe|views|wiedergaben)$/, "aufrufe"],
+  [/^(total ?likes|likes|gefallt mir|gefallt mir angaben)$/, "likes"],
+  [/^(total ?comments|comments|kommentare)$/, "kommentare"],
+  [/^(total ?shares|shares|geteilt|teilen)$/, "geteilt"],
+  [/^(reach|reichweite|unique viewers|erreichte konten)$/, "reichweite"],
+];
+
+/** Spalten, die es gibt, aber nichts beitragen — sie sollen nicht als „unbekannt" gemeldet werden. */
+const INHALT_EGAL = /^(time|zeit|exportiert am)$/;
+
+const normal = (x: string): string =>
+  x.toLowerCase().replace(/ä/g, "a").replace(/ö/g, "o").replace(/ü/g, "u").replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim();
+
+export interface InhaltZeile {
+  titel: string; datum: string | null; link: string | null;
+  aufrufe: number | null; likes: number | null; kommentare: number | null; geteilt: number | null; reichweite: number | null;
+}
+
+/** Die Video-Id aus `https://www.tiktok.com/@konto/video/7686419347836767521`. */
+export const videoId = (link: string | null | undefined): string | null => /\/video\/(\d{6,})/.exec(link ?? "")?.[1] ?? null;
+
+/**
+ * Den Inhalt-Export deuten.
+ *
+ * Wie beim Kanalexport ist die Kopfzeile die erste Zeile mit einer erkannten
+ * Titelspalte — TikTok setzt gelegentlich eine Überschrift darüber. Spalten,
+ * die der Pilot nicht kennt, werden gemeldet statt geraten.
+ */
+export function deuteInhalt(zeilen: string[][], heute: string): { zeilen: InhaltZeile[]; erkannt: Record<string, string>; unbekannt: string[] } {
+  const kopfIdx = zeilen.findIndex((z) => z.some((c) => INHALT_SPALTEN.find(([re, f]) => f === "titel" && re.test(normal(c)))));
+  if (kopfIdx < 0) throw new Error(`Keine Titelspalte im Inhalt-Export gefunden (Kopfzeilen: ${(zeilen[0] ?? []).join(", ")}).`);
+  const kopf = zeilen[kopfIdx]!;
+  const erkannt: Record<string, string> = {};
+  const unbekannt: string[] = [];
+  const felder = kopf.map((name) => {
+    const n = normal(name.trim());
+    if (!n) return null;
+    const treffer = INHALT_SPALTEN.find(([re]) => re.test(n));
+    if (treffer) { erkannt[name.trim()] = treffer[1]; return treffer[1]; }
+    if (!INHALT_EGAL.test(n)) unbekannt.push(name.trim());
+    return null;
+  });
+  const aus: InhaltZeile[] = [];
+  for (const z of zeilen.slice(kopfIdx + 1)) {
+    const zeile: InhaltZeile = { titel: "", datum: null, link: null, aufrufe: null, likes: null, kommentare: null, geteilt: null, reichweite: null };
+    felder.forEach((f, i) => {
+      const roh = (z[i] ?? "").trim();
+      if (!f || !roh) return;
+      if (f === "titel") zeile.titel = roh;
+      else if (f === "link") zeile.link = roh;
+      else if (f === "datum") zeile.datum = deuteDatum(roh, heute);
+      else zeile[f] = deuteZahl(roh) ?? null;
+    });
+    if (zeile.titel || zeile.link) aus.push(zeile);
   }
+  return { zeilen: aus, erkannt, unbekannt };
+}
+
+/**
+ * Text vergleichbar machen: Hashtags, Zeichensetzung und Mehrfach-Leerzeichen weg.
+ *
+ * Der Export nennt als „Video title" die **ganze Bildunterschrift**, im Piloten
+ * steht dieselbe unter `body`. Verglichen wird der Anfang, weil TikTok lange
+ * Texte kürzt und beim Tippen im Studio schon mal ein Zeichen verlorengeht.
+ */
+const textSchluessel = (x: string): string =>
+  x.toLowerCase()
+    .replace(/#[\p{L}\p{N}_]+/gu, " ")
+    .replace(/[^\p{L}\p{N} ]+/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 60);
+
+/**
+ * Eine Exportzeile ihrem Termin im Piloten zuordnen.
+ *
+ * Drei Wege, in dieser Reihenfolge:
+ *
+ * 1. **Videolink.** Sobald ein Termin einmal zugeordnet war, steht die Adresse
+ *    an ihm — ab dann ist die Zuordnung eindeutig und kostet nichts.
+ * 2. **Bildunterschrift.** Beim ersten Mal der einzige Anker: TikTok nennt im
+ *    Export keine Id, die der Pilot vorher kennen könnte.
+ * 3. **Datum als Schiedsrichter**, wenn zwei Termine denselben Text tragen.
+ *
+ * Termine auf `queued` zählen mit: über den Anmelde-Browser vorgeplante
+ * Beiträge bleiben dort absichtlich stehen (siehe `laufVermerken`), und genau
+ * das sind die Beiträge, um die es hier geht.
+ */
+function terminFuerZeile(db: Db, projectId: string, zeile: InhaltZeile): typeof t.mpScheduledPosts.$inferSelect | null {
+  const termine = db.select().from(t.mpScheduledPosts)
+    .where(and(eq(t.mpScheduledPosts.projectId, projectId), eq(t.mpScheduledPosts.platform, "tiktok"))).all()
+    .filter((x) => x.status !== "cancelled" && x.status !== "failed");
+
+  const id = videoId(zeile.link);
+  if (id) {
+    const perLink = termine.find((x) => (x.externalUrl ?? "").includes(id));
+    if (perLink) return perLink;
+  }
+
+  const gesucht = textSchluessel(zeile.titel);
+  if (!gesucht) return null;
+  const passend = termine.filter((x) => {
+    const stueck = db.select().from(t.mpContentPieces).where(eq(t.mpContentPieces.id, x.pieceId)).get();
+    if (!stueck) return false;
+    const text = textSchluessel(stueck.body ?? "");
+    return text !== "" && (text === gesucht || text.startsWith(gesucht.slice(0, 30)) || gesucht.startsWith(text.slice(0, 30)));
+  });
+  if (passend.length === 0) return null;
+  if (!zeile.datum || passend.length === 1) return passend[0]!;
+  const ziel = Date.parse(`${zeile.datum}T12:00:00Z`);
+  return passend
+    .map((x) => ({ x, abstand: Math.abs(Date.parse(x.postedAt ?? x.scheduledAt) - ziel) }))
+    .filter((k) => k.abstand <= 3 * 86_400_000)
+    .sort((a, b) => a.abstand - b.abstand)[0]?.x ?? null;
+}
+
+/**
+ * Den Inhalt-Export ziehen und die Zahlen an die Termine schreiben.
+ *
+ * Geschrieben wird in dieselben Felder wie bei den API-Kanälen (`metrics` am
+ * Termin plus eine Zeile im Verlauf), damit die Übersicht nichts Neues lernen
+ * muss. `quelle: "api"` ist richtig: der Pilot hat die Zahl selbst geholt,
+ * niemand hat sie eingetippt.
+ */
+async function beitragsZahlen(seite: Page, db: Db, env: Env, projectId: string, tageZurueck: number, now: Date): Promise<{ gefunden: number; zugeordnet: number; hinweise: string[] }> {
+  const { name, datei } = await exportHolen(seite, env, tageZurueck, "inhalt");
+  const heute = berlin(now.toISOString()).datum;
+  const { zeilen: posts, unbekannt } = deuteInhalt(rohZeilen(datei, name), heute);
+  const hinweise: string[] = [];
+  if (unbekannt.length) hinweise.push(`Inhalt-Export: nicht zugeordnete Spalten — ${unbekannt.join(", ")}.`);
+  let zugeordnet = 0;
+  const ohne: string[] = [];
+  for (const zeile of posts) {
+    const termin = terminFuerZeile(db, projectId, zeile);
+    if (!termin) { ohne.push(zeile.titel.slice(0, 40)); continue; }
+    zugeordnet += 1;
+    const m = {
+      reichweite: zeile.reichweite, aufrufe: zeile.aufrufe, likes: zeile.likes,
+      kommentare: zeile.kommentare, saves: null, shares: zeile.geteilt,
+      quelle: "api" as const, roh: { tiktokStudio: 1 },
+    };
+    // Die Adresse mitschreiben: ab dem nächsten Lauf trägt sie die Zuordnung,
+    // und in der Übersicht wird aus dem Beitrag ein Link zum Video.
+    db.update(t.mpScheduledPosts)
+      .set({ metrics: JSON.stringify(m), metricsAt: now.toISOString(), ...(zeile.link ? { externalUrl: zeile.link } : {}) })
+      .where(eq(t.mpScheduledPosts.id, termin.id)).run();
+    schreibeVerlauf(db, termin.id, m, now);
+  }
+  if (ohne.length) hinweise.push(`${ohne.length} TikTok-Beiträge ließen sich keinem Termin zuordnen (z. B. „${ohne[0]}") — meist von Hand hochgeladen.`);
+  // Die ganze Liste bleibt erhalten, auch das nicht Zugeordnete: sonst wären
+  // die Zahlen der von Hand hochgeladenen Videos nach dem Lauf verloren.
+  const key = `tiktok-inhalt:${projectId}`;
+  const wert = JSON.stringify({ abgerufenAm: now.toISOString(), videos: posts });
+  db.insert(t.mpSettings).values({ key, value: wert, updatedAt: now.toISOString() })
+    .onConflictDoUpdate({ target: t.mpSettings.key, set: { value: wert, updatedAt: now.toISOString() } }).run();
+  return { gefunden: posts.length, zugeordnet, hinweise };
+}
+
+/**
+ * TikToks Tagesetiketten wandern — deshalb gilt der Export, nicht der Bestand.
+ *
+ * Am 22.09.2026 zweimal nachgemessen: um 01:56 endete der Export am 21.09. mit
+ * 889 Aufrufen, um 13:35 standen exakt dieselben sechzig Werte da und endeten
+ * am 20.09. Das war kein Ausrutscher des Exports — **die Oberfläche zeigte
+ * dieselbe Verschiebung**: ihr Sieben-Tage-Fenster hieß beide Male „14.–20.
+ * Sept", die Summe fiel aber von 8,5 Tsd. auf 8,4 Tsd., und die Differenz ist
+ * genau der Wert, der vorn herausfiel. TikTok rechnet in der Zeitzone des
+ * Kontos und braucht rund einen Tag, bis ein Tag steht; gegen Berliner Tage
+ * verschiebt sich das Etikett um eins.
+ *
+ * Daraus folgt: nicht gegen den eigenen Bestand prüfen und im Zweifel gar
+ * nichts schreiben — das blockierte nach der ersten Verschiebung für immer.
+ * Stattdessen ist der Export die Wahrheit, und Tage dahinter sind Reste einer
+ * früher anders beschrifteten Messung. Sie kommen weg, sonst stünden zwei
+ * Etikettierungen nebeneinander in derselben Reihe.
+ *
+ * Damit die Etiketten wenigstens untereinander stabil bleiben, läuft der Abruf
+ * immer zur selben Tageszeit (12–20 Uhr, siehe `tiktokTakt`).
+ */
+function raeumeNach(db: Db, projectId: string, letzterTag: string | null): number {
+  if (!letzterTag) return 0;
+  const reste = db.select().from(t.mpKanalStats)
+    .where(and(eq(t.mpKanalStats.projectId, projectId), eq(t.mpKanalStats.platform, "tiktok")))
+    .all().filter((r) => r.tag > letzterTag);
+  for (const r of reste) db.delete(t.mpKanalStats).where(eq(t.mpKanalStats.id, r.id)).run();
+  return reste.length;
 }
 
 /** Der letzte Stand aus dem Studio, falls es einen gibt. */

@@ -274,21 +274,38 @@ export function deuteExport(zeilen: string[][], heute: string): ExportDeutung {
  * im Browser ankommt, ohne dass jemand sie vorher entpacken muss.
  */
 export function liesExport(datei: Buffer, name: string, heute: string): ExportDeutung {
+  return deuteExport(rohZeilen(datei, name), heute);
+}
+
+/**
+ * Die Tabellenzeilen einer Exportdatei, ohne sie zu deuten.
+ *
+ * Getrennt von `liesExport`, weil TikToks Inhalt-Export keine Tageszeilen hat
+ * (eine Zeile je Video) und deshalb einen eigenen Deuter braucht — das
+ * Auspacken ist aber dasselbe.
+ */
+export function rohZeilen(datei: Buffer, name: string): string[][] {
   const istZip = datei.length > 4 && datei.readUInt32LE(0) === 0x04034b50;
   if (istZip && !/\.xlsx$/i.test(name)) {
     const eintraege = zipEintraege(datei);
     if (!eintraege.has("xl/workbook.xml")) {
       const treffer = [...eintraege.entries()].find(([k]) => /\.(csv|xlsx)$/i.test(k) && !k.startsWith("__MACOSX"));
       if (!treffer) throw new Error(`Das ZIP enthält weder CSV noch XLSX (${[...eintraege.keys()].slice(0, 5).join(", ")}).`);
-      return liesExport(treffer[1], treffer[0], heute);
+      return rohZeilen(treffer[1], treffer[0]);
     }
   }
-  const zeilen = /\.xlsx$/i.test(name) || istZip ? liesXlsx(datei) : liesCsv(datei.toString("utf8"));
-  return deuteExport(zeilen, heute);
+  return /\.xlsx$/i.test(name) || istZip ? liesXlsx(datei) : liesCsv(datei.toString("utf8"));
 }
 
-/** Tage einer Plattform als Handeintrag speichern; gibt die Zahl der Tage zurück. */
-export function speichereExport(db: Db, projectId: string, platform: string, tage: KanalTag[], now = new Date()): number {
-  for (const { tag, werte } of tage) schreibeKanalTag(db, projectId, platform, tag, werte, now, "hand");
+/**
+ * Tage einer Plattform speichern; gibt die Zahl der Tage zurück.
+ *
+ * `quelle` unterscheidet den Handeinwurf vom Lauf, der sich den Export selbst
+ * holt. Seit der Pilot TikTok allein abruft (22.09.2026) ist „hand" dort
+ * falsch: die Übersicht hängte daran den Vermerk „Export bis …" und den
+ * Hinweis, jemand möge einen neueren einspielen.
+ */
+export function speichereExport(db: Db, projectId: string, platform: string, tage: KanalTag[], now = new Date(), quelle: "api" | "hand" = "hand"): number {
+  for (const { tag, werte } of tage) schreibeKanalTag(db, projectId, platform, tag, werte, now, quelle);
   return tage.length;
 }

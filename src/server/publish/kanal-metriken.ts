@@ -338,8 +338,21 @@ const ABRUFE: Record<string, (a: Abruf) => Promise<KanalTag[]>> = {
   youtube: youtubeKanal,
 };
 
-/** Kanäle, deren Zahlen der Pilot selbst holen kann. */
+/** Kanäle, deren Zahlen der Pilot über eine API selbst holen kann. */
 export const MESSBARE_KANAELE = Object.keys(ABRUFE);
+
+/**
+ * Kanäle, die der Pilot über den **Anmelde-Browser** misst statt über eine API.
+ *
+ * TikTok gibt ohne Content-Posting-Audit nichts heraus; der Tageslauf zieht
+ * dort seit dem 22.09.2026 den Analytics-Export (`tiktok-studio.ts`). Für die
+ * Übersicht zählt das wie ein messbarer Kanal — nur `ABRUFE` kennt ihn nicht,
+ * weil er nicht über `holeKanalStats` läuft.
+ */
+export const STUDIO_KANAELE = ["tiktok"];
+
+/** Alle Kanäle, deren Zahlen von selbst hereinkommen. */
+export const SELBST_GEMESSEN = [...MESSBARE_KANAELE, ...STUDIO_KANAELE];
 
 /**
  * Kanäle, die statt eines Zugriffstokens nur ihre öffentliche Adresse brauchen.

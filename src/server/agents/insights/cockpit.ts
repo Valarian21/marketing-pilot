@@ -27,7 +27,7 @@ import { parseJson, type Db } from "../../db/index.js";
 import { PLATFORMS } from "../../../shared/channels.js";
 import { loadProfiles } from "../../channels.js";
 import { leseMetriken } from "../../publish/metrics.js";
-import { kanalEingerichtet, leseHandStand, leseKanalStatus, leseKanalTage, MESSBARE_KANAELE, type KanalWerte } from "../../publish/kanal-metriken.js";
+import { kanalEingerichtet, leseHandStand, leseKanalStatus, leseKanalTage, MESSBARE_KANAELE, SELBST_GEMESSEN, type KanalWerte } from "../../publish/kanal-metriken.js";
 import { loadCredentials } from "../../publish/index.js";
 import { BIO_CODE, berlinTag } from "../../shortlinks.js";
 import { geschaeftsZahlen, tageZwischen, type GeschaeftsTag } from "../../providers/geschaeft.binderplan.js";
@@ -69,6 +69,7 @@ function aufrufeHinweis(platform: string, werte: (KanalWerte | undefined)[]): st
       + "Ab dem nächsten Abruf steht hier, wie viele davon am Tag dazukamen.";
   }
   return MESSBARE_KANAELE.includes(platform) ? "Diese Plattform meldet keine Aufrufe je Kanal." : "";
+  // (Studio-Kanäle liefern Aufrufe, brauchen hier also keinen Satz.)
 }
 
 /**
@@ -153,6 +154,11 @@ export function cockpitView(db: Db, projectId: string, opts: CockpitOptions): s.
   // YouTube-Kanal eine leere Karte.
   const zaehlKanaele = [...new Set([
     ...MESSBARE_KANAELE.filter((p) => kanalEingerichtet(p, creds[p], profile.find((x) => x.platform === p)?.url) || jeKanal.has(p)),
+    // Alles, wofür Tage gespeichert sind: seit der Pilot TikTok selbst abruft,
+    // steht dieser Kanal nicht mehr unter `handStand`, gehört aber weiter in
+    // die Summen. Eine leere Karte entsteht dadurch nicht — ohne Tage taucht
+    // eine Plattform hier gar nicht auf.
+    ...jeKanal.keys(),
     ...handStand.keys(),
   ])];
 
@@ -304,7 +310,7 @@ export function cockpitView(db: Db, projectId: string, opts: CockpitOptions): s.
       platform,
       label: PLATFORMS[platform]?.label ?? platform,
       eingerichtet: kanalEingerichtet(platform, creds[platform], profil?.url) || Boolean(creds[platform]?.["accessToken"]) || Boolean(hand),
-      messbar: MESSBARE_KANAELE.includes(platform),
+      messbar: SELBST_GEMESSEN.includes(platform),
       vonHand: Boolean(hand),
       standBis: hand?.bisTag ?? null,
       profilUrl: profil?.url || null,
@@ -392,11 +398,17 @@ export function cockpitView(db: Db, projectId: string, opts: CockpitOptions): s.
   const ohneZugang = kanaele.filter((k) => k.messbar && !k.eingerichtet).map((k) => k.label);
   if (ohneZugang.length) hinweise.push(`Ohne hinterlegten Zugang keine Zahlen: ${ohneZugang.join(", ")}. Auf der Kanäle-Seite eintragen.`);
   const nichtMessbar = kanaele.filter((k) => !k.messbar && !k.vonHand && k.beitraege > 0).map((k) => k.label);
+  // „Der Export ist alt" gilt nur, wenn wirklich jemand einen einspielen muss.
   if (nichtMessbar.length) hinweise.push(`Zahlen nur über einen Export: ${nichtMessbar.join(", ")} — dort gibt es keine Lese-API. Den Analytics-Export unten bei „Kanäle" einspielen.`);
   // „gestern" oben ist der Tag vor dem Zeitraum; hier zählt der Tag vor heute.
   const vortag = berlinTag(new Date(now.getTime() - TAG_MS));
   for (const k of kanaele.filter((x) => x.vonHand && x.standBis && x.standBis < vortag)) {
-    hinweise.push(`${k.label}: Zahlen aus dem Export reichen bis ${k.standBis!.slice(8, 10)}.${k.standBis!.slice(5, 7)}. — neuere Tage fehlen, bis der nächste Export eingespielt ist.`);
+    const bis = `${k.standBis!.slice(8, 10)}.${k.standBis!.slice(5, 7)}.`;
+    hinweise.push(k.messbar
+      // Seit der Pilot TikTok selbst abruft, wäre „bitte einen neueren Export
+      // einspielen" eine falsche Aufforderung: da muss niemand mehr hin.
+      ? `${k.label}: Zahlen aus dem Export reichen bis ${bis} — neuere holt der Tageslauf selbst.`
+      : `${k.label}: Zahlen aus dem Export reichen bis ${bis} — neuere Tage fehlen, bis der nächste Export eingespielt ist.`);
   }
   if (!status.letzterLauf) hinweise.push("Die Kanalzahlen wurden noch nie abgerufen. Der Sammler läuft täglich, oder oben von Hand starten.");
   if (kanaele.some((k) => k.platform === "facebook" && k.beitraege > 0)) hinweise.push("Facebook nennt seit Graph v21 keine Aufrufe je Seite mehr (nur Videoaufrufe). Für die Facebook-Seite stehen deshalb Interaktionen und Seitenaufrufe, aber keine Reichweite.");
