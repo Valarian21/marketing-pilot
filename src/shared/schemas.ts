@@ -1574,6 +1574,8 @@ export const CockpitTag = z.object({
   beitraege: z.number().int().default(0),
   /** Klicks auf die Kurzlinks des Piloten. */
   klicks: z.number().int().default(0),
+  /** Seitenaufrufe der Webseite (alle Quellen). `null` = an diesem Tag nicht gemessen. */
+  besuche: z.number().int().nullable().default(null),
   /** Aus dem Produkt: Anmeldungen über den Webhook. */
   anmeldungen: z.number().int().default(0),
   /** Aus dem Produkt: neue Konten und Bestand laut Produktdatenbank. */
@@ -1725,6 +1727,25 @@ export const CockpitVersorgung = z.object({
   beitraegeGesamt: z.number().int().default(0),
 });
 
+/**
+ * Woher die Besucher der Webseite kommen — eine Zeile je Kanal.
+ *
+ * Die Zahlen stammen aus der aggregierten Zählung des Produkts (kein Cookie,
+ * keine Kennung). Es sind **Seitenaufrufe**, keine eindeutigen Besucher, und
+ * die Quote ist eine Größenordnung, keine Kohorte: siehe
+ * `providers/besucher.binderplan.ts`.
+ */
+export const CockpitHerkunft = z.object({
+  id: z.string(),
+  label: z.string(),
+  art: z.enum(["social", "suche", "ki", "direkt", "verweis"]),
+  platform: z.string().nullable().default(null),
+  besuche: z.number().int().default(0),
+  konten: z.number().int().default(0),
+  zahlende: z.number().int().default(0),
+  quote: z.number().nullable().default(null),
+});
+
 export const CockpitView = z.object({
   zeitraum: z.object({ von: z.string(), bis: z.string(), tage: z.number().int() }),
   kennzahlen: z.array(CockpitKennzahl),
@@ -1752,12 +1773,31 @@ export const CockpitView = z.object({
   nachStunde: z.array(CockpitSchnitt).default([]),
   /** Woher die Zahlen kommen und ob sie von selbst kommen. */
   versorgung: z.array(CockpitVersorgung).default([]),
+  /** Besucher der Webseite, ihre Herkunft und die Quote bis zum Konto. */
+  besucher: z.object({
+    verfuegbar: z.boolean().default(false),
+    /** Seitenaufrufe im Zeitraum, alle Quellen zusammen. */
+    besuche: z.number().int().nullable().default(null),
+    /** Im Zeitraum angelegte Konten, deren Herkunft bekannt ist. */
+    kontenMitHerkunft: z.number().int().default(0),
+    /** Im Zeitraum angelegte Konten insgesamt. */
+    kontenGesamt: z.number().int().default(0),
+    /** kontenMitHerkunft / besuche. */
+    quote: z.number().nullable().default(null),
+    /** Ab wann gezählt wird — davor ist eine 0 keine Null, sondern unbekannt. */
+    ersterTag: z.string().nullable().default(null),
+    /** Ab wann auch Direktbesuche mitzählen. */
+    direktSeit: z.string().nullable().default(null),
+    herkunft: z.array(CockpitHerkunft).default([]),
+    hinweis: z.string().default(""),
+  }).default({ verfuegbar: false, besuche: null, kontenMitHerkunft: 0, kontenGesamt: 0, quote: null, ersterTag: null, direktSeit: null, herkunft: [], hinweis: "" }),
 });
 
 export type StueckKurz = z.infer<typeof StueckKurz>;
 export type InsightsView = z.infer<typeof InsightsView>;
 export type WeeklyReport = z.infer<typeof WeeklyReport>;
 export type CockpitView = z.infer<typeof CockpitView>;
+export type CockpitHerkunft = z.infer<typeof CockpitHerkunft>;
 export type CockpitTag = z.infer<typeof CockpitTag>;
 export type CockpitKanal = z.infer<typeof CockpitKanal>;
 export type CockpitBeitrag = z.infer<typeof CockpitBeitrag>;

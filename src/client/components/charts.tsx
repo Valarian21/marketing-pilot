@@ -305,9 +305,18 @@ export function Tagesbalken({ punkte, farbe = "var(--mp-serie-1)", einheit = "za
             </g>
           );
         })}
-        {punkte.map((p, i) => (i % schritt === 0 || i === punkte.length - 1) && (
-          <text key={`t${p.tag}`} x={links + i * breite + breite / 2} y={hoehe - 6} className="mp-chart-tick" textAnchor="middle">{tagKurz(p.tag)}</text>
-        ))}
+        {/* Der letzte Tag bekommt nur dann eine eigene Beschriftung, wenn er nicht
+            direkt neben der vorherigen steht — bei 30 Tagen (Schritt 4) landeten
+            sonst Index 28 und 29 übereinander und lasen sich als „21.0822.09.". */}
+        {punkte.map((p, i) => {
+          const letzter = punkte.length - 1;
+          // Der letzte Tag kommt nur dazu, wenn zwischen ihm und dem letzten
+          // regulären Tick noch ein halber Schritt Platz ist.
+          const zeigen = i % schritt === 0 || (i === letzter && letzter % schritt >= schritt / 2);
+          return zeigen && (
+            <text key={`t${p.tag}`} x={links + i * breite + breite / 2} y={hoehe - 6} className="mp-chart-tick" textAnchor="middle">{tagKurz(p.tag)}</text>
+          );
+        })}
       </svg>
       {aktiv !== null && punkte[aktiv] && (
         <div className="mp-chart-tip mp-chart-tip--balken" style={{ left: `${((aktiv + 0.5) / punkte.length) * 100}%` }} role="status">

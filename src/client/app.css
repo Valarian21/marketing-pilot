@@ -518,6 +518,32 @@ button, input { font: inherit; color: inherit; }
 .mp-delta.is-ab { color: var(--mp-bad); }
 .mp-stand { margin: -14px 0 var(--mp-gap); }
 
+/* Reiter der Übersicht. Die Seite war über 4.000 px hoch; fünf Bereiche machen
+   aus dem Scrollen eine Auswahl. Bewusst Knöpfe und kein <select>: welche
+   Bereiche es gibt, soll man sehen, ohne zu klicken. */
+.mp-reiter { display: flex; gap: 2px; flex-wrap: wrap; margin: 0 0 var(--mp-gap); border-bottom: var(--mp-border); }
+.mp-reiter-knopf { position: relative; height: var(--mp-control-h); padding: 0 14px; border: 0; border-bottom: 2px solid transparent;
+                   margin-bottom: -1px; background: transparent; color: var(--mp-ink-2); font: inherit; font-size: var(--mp-text-sm);
+                   font-weight: 600; cursor: pointer; border-radius: var(--mp-radius-sm) var(--mp-radius-sm) 0 0; }
+.mp-reiter-knopf:hover { background: var(--mp-surface); color: var(--mp-ink); }
+.mp-reiter-knopf.is-aktiv { color: var(--mp-accent); border-bottom-color: var(--mp-accent); background: var(--mp-accent-soft); }
+/* Ein Punkt am Reiter „Datenlage", wenn ein Kanal hängt — sonst fiele es erst
+   auf, wenn man dort nachsieht. */
+.mp-reiter-punkt { display: inline-block; width: 7px; height: 7px; margin-left: 6px; border-radius: 50%;
+                   background: var(--mp-warn); vertical-align: middle; }
+
+/* Ein Text, der sich wie ein Link verhält, aber einen Reiter schaltet. */
+.mp-link-knopf { border: 0; background: none; padding: 0; font: inherit; color: var(--mp-accent);
+                 text-decoration: underline; cursor: pointer; }
+
+/* Herkunft: Kopfzahlen, Verteilungsband, Fußnoten. */
+.mp-herkunft-kopf { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--mp-gap-sm); margin-bottom: var(--mp-gap); }
+.mp-band { display: flex; height: 14px; width: 100%; border-radius: 7px; overflow: hidden; background: var(--mp-bg); }
+.mp-band-teil { display: block; min-width: 2px; }
+.mp-band-legende { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 8px 0 var(--mp-gap); font-size: var(--mp-text-sm); }
+.mp-band-key { white-space: nowrap; }
+.mp-herkunft-fuss { margin-top: var(--mp-gap-sm); }
+
 .mp-zeitraum { display: inline-flex; border: var(--mp-border); border-radius: var(--mp-radius-sm); overflow: hidden; }
 .mp-zeitraum-knopf { height: var(--mp-control-h); padding: 0 12px; border: 0; background: var(--mp-surface); color: var(--mp-ink-2); font: inherit; font-size: var(--mp-text-sm); font-weight: 600; cursor: pointer; }
 .mp-zeitraum-knopf + .mp-zeitraum-knopf { border-left: var(--mp-border); }

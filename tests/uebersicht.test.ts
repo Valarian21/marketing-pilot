@@ -147,9 +147,12 @@ describe("Übersicht", () => {
     const view = res.json();
     expect(view.verlauf).toHaveLength(30);
     expect(view.zeitraum.tage).toBe(30);
-    expect(view.trichter.map((s: { id: string }) => s.id)).toEqual(["aufrufe", "interaktionen", "bio", "klicks", "konten", "kaeufe"]);
+    expect(view.trichter.map((s: { id: string }) => s.id)).toEqual(["aufrufe", "interaktionen", "bio", "klicks", "besuche", "konten", "kaeufe"]);
     // Ohne Produktdatenquelle sagt die Seite, warum Konten und Umsatz fehlen.
     expect(view.produkt.verfuegbar).toBe(false);
+    // Und ohne sie zählt auch niemand die Besucher der Webseite.
+    expect(view.besucher.verfuegbar).toBe(false);
+    expect(view.trichter.find((s: { id: string }) => s.id === "besuche").wert).toBeNull();
     expect(view.hinweise.join(" ")).toMatch(/keine Produktdatenquelle/);
   });
 

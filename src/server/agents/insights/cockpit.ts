@@ -31,6 +31,7 @@ import { kanalEingerichtet, leseHandStand, leseKanalStatus, leseKanalTage, MESSB
 import { loadCredentials } from "../../publish/index.js";
 import { BIO_CODE, berlinTag } from "../../shortlinks.js";
 import { geschaeftsZahlen, tageZwischen, type GeschaeftsTag } from "../../providers/geschaeft.binderplan.js";
+import { besucherZahlen } from "../../providers/besucher.binderplan.js";
 import { loadDataSource } from "../../data-source.js";
 import { berlinParts } from "../series/time.js";
 import { postArtOf } from "../../../shared/postarten.js";
@@ -209,6 +210,10 @@ export function cockpitView(db: Db, projectId: string, opts: CockpitOptions): s.
   // --- Produktzahlen ----------------------------------------------------------
   const quelle = loadDataSource(db, projectId);
   const geschaeft = opts.produktDbPfad ? geschaeftsZahlen(opts.produktDbPfad, von, bis) : null;
+  // Besucher der Webseite: dieselbe Datei, derselbe Zeitraum. Ohne sie endete die
+  // Übersicht bei den Klicks auf die Kurzlinks — was auf der Seite geschah, war blind.
+  const besuch = opts.produktDbPfad ? besucherZahlen(opts.produktDbPfad, von, bis) : null;
+  const besuchJeTag = new Map<string, number | null>((besuch?.verlauf ?? []).map((b) => [b.tag, b.besuche]));
   const geschaeftJeTag = new Map<string, GeschaeftsTag>((geschaeft?.verlauf ?? []).map((g) => [g.tag, g]));
   const produkt: s.CockpitView["produkt"] = geschaeft
     ? {
@@ -271,6 +276,7 @@ export function cockpitView(db: Db, projectId: string, opts: CockpitOptions): s.
       follower: followerSumme(),
       beitraege: beitragJeTag.get(tag) ?? 0,
       klicks: klickJeTag.get(tag) ?? 0,
+      besuche: besuchJeTag.get(tag) ?? null,
       anmeldungen: anmeldungJeTag.get(tag) ?? 0,
       neueKonten: g?.neueKonten ?? null,
       konten: g?.konten ?? null,
@@ -377,6 +383,7 @@ export function cockpitView(db: Db, projectId: string, opts: CockpitOptions): s.
     { id: "beitragsaufrufe", label: "Aufrufe dieser Beiträge", wert: beitragsAufrufe, davor: beitragsAufrufeDavor, einheit: "zahl", art: "summe", hinweis: "Gesamtstand der im Zeitraum veröffentlichten Beiträge — Meta liefert je Beitrag keine Tageswerte." },
     { id: "klicks", label: "Klicks auf die Seite", wert: klicksIn(von, bis), davor: klicksIn(vorherVon, gestern), einheit: "zahl", art: "summe", hinweis: "Klicks auf die Kurzlinks des Piloten." },
     { id: "bioaufrufe", label: "Profil-Link geöffnet", wert: bioIn(von, bis), davor: bioIn(vorherVon, gestern), einheit: "zahl", art: "summe", hinweis: "Aufrufe der Link-in-Bio-Seite — auf Instagram und Threads der einzige Weg zur Seite." },
+    { id: "besuche", label: "Besuche der Seite", wert: besuch?.besuche ?? null, davor: null, einheit: "zahl", art: "summe", hinweis: "Seitenaufrufe aller Quellen, vom Produkt gezählt. Keine eindeutigen Besucher." },
     { id: "anmeldungen", label: "Anmeldungen", wert: anmeldungenIn(von, bis), davor: anmeldungenIn(vorherVon, gestern), einheit: "zahl", art: "summe", hinweis: "Aus dem Webhook des Produkts (utm-gestützt)." },
     { id: "konten", label: "Konten im Produkt", wert: produkt.konten, davor: null, einheit: "zahl", art: "bestand", hinweis: produkt.hinweis },
     { id: "zahlende", label: "Zahlende Kunden", wert: produkt.zahlende, davor: null, einheit: "zahl", art: "bestand", hinweis: "Konten mit laufendem Abo; der Betreiberzugang zählt nicht mit." },
@@ -390,6 +397,7 @@ export function cockpitView(db: Db, projectId: string, opts: CockpitOptions): s.
     { id: "interaktionen", label: "Interaktionen", wert: zeitraumSumme("interaktionen", von, bis), erklaerung: "Davon reagiert: Like, Kommentar, Speichern, Teilen." },
     { id: "bio", label: "Profil-Link geöffnet", wert: bioIn(von, bis) || null, erklaerung: "Die Link-in-Bio-Seite — auf Instagram und Threads der einzige Weg weiter." },
     { id: "klicks", label: "Klicks auf die Seite", wert: klicksIn(von, bis), erklaerung: "Über die Kurzlinks des Piloten." },
+    { id: "besuche", label: "Besuche der Webseite", wert: besuch?.besuche ?? null, erklaerung: "Seitenaufrufe aller Quellen, vom Produkt selbst gezählt — auch Direktbesuche und Suchtreffer, die nie über einen Kurzlink liefen." },
     { id: "konten", label: "Neue Konten", wert: neueKonten ?? (anmeldungenIn(von, bis) || null), erklaerung: geschaeft ? "Neu angelegte Konten laut Produktdatenbank." : "Anmeldungen aus dem Webhook — ohne Produktdatenquelle die einzige Quelle." },
     { id: "kaeufe", label: "Käufe", wert: geschaeft ? summe(verlauf.map((v) => v.kaeufe)) : (bezahltImZeitraum || null), erklaerung: "Bezahlte Bestellungen im Zeitraum — Abos und Kreditpakete zusammen." },
   ];
@@ -494,6 +502,23 @@ export function cockpitView(db: Db, projectId: string, opts: CockpitOptions): s.
     kennzahlen, verlauf, kanaele, beitraege, trichter, produkt, hinweise,
     kanalStatus: { letzterLauf: status.letzterLauf, laeuft: false },
     nachSorte, nachStunde, versorgung,
+    besucher: besuch
+      ? {
+        verfuegbar: true,
+        besuche: besuch.besuche,
+        kontenMitHerkunft: besuch.kontenMitHerkunft,
+        kontenGesamt: besuch.kontenGesamt,
+        quote: besuch.quote,
+        ersterTag: besuch.ersterTag,
+        direktSeit: besuch.direktSeit,
+        herkunft: besuch.herkunft,
+        hinweis: "Seitenaufrufe, keine eindeutigen Besucher — ohne Cookie ist niemand wiederzuerkennen. Gezählt wird der Einstieg, nicht jede Folgeseite.",
+      }
+      : {
+        verfuegbar: false, besuche: null, kontenMitHerkunft: 0, kontenGesamt: 0, quote: null,
+        ersterTag: null, direktSeit: null, herkunft: [],
+        hinweis: "Ohne Produktdatenquelle zählt niemand die Besucher der Webseite.",
+      },
   };
 }
 
