@@ -537,6 +537,7 @@ export async function zahlenHolen(db: Db, env: Env, projectId: string, tageZurue
   const now = new Date();
   const heute = berlin(now.toISOString()).datum;
   const deutung = liesExport(datei, name, heute);
+  pruefeVerschiebung(db, projectId, deutung.tage.at(-1)?.tag ?? null);
   if (deutung.tage.length) speichereExport(db, projectId, "tiktok", deutung.tage, now);
   // Follower sind ein Bestand, kein Tageswert — der Export nennt sie nicht,
   // die Startseite schon. Sie gehören an den jüngsten Tag, den es gibt.
@@ -553,6 +554,30 @@ export async function zahlenHolen(db: Db, env: Env, projectId: string, tageZurue
   db.insert(t.mpSettings).values({ key, value: JSON.stringify(ergebnis), updatedAt: new Date().toISOString() })
     .onConflictDoUpdate({ target: t.mpSettings.key, set: { value: JSON.stringify(ergebnis), updatedAt: new Date().toISOString() } }).run();
   return ergebnis;
+}
+
+/**
+ * Wandert das Exportfenster rückwärts, sind die Etiketten falsch.
+ *
+ * Kurz nach Mitternacht UTC zieht TikTok den Fensteranfang um einen Tag
+ * zurück, liefert aber **dieselben** Werte — am 22.09.2026 zweimal gemessen:
+ * um 01:56 CEST endete der Export am 21.09. mit 889 Aufrufen, um 02:09 CEST
+ * standen exakt dieselben sechzig Zeilen da, nur endeten sie am 20.09. Welche
+ * Beschriftung stimmt, entscheidet die Oberfläche: ihre Sieben-Tage-Summe
+ * (8,5 Tsd.) passt auf die erste (8.513), nicht auf die verschobene (8.427).
+ *
+ * Ein solcher Export würde jeden Tag um eine Stelle verrücken — genau das war
+ * an den von Hand eingespielten Tagen zu sehen. Also lieber nichts schreiben
+ * und es später noch einmal versuchen.
+ */
+function pruefeVerschiebung(db: Db, projectId: string, letzterTag: string | null): void {
+  if (!letzterTag) return;
+  const bekannt = db.select().from(t.mpKanalStats)
+    .where(and(eq(t.mpKanalStats.projectId, projectId), eq(t.mpKanalStats.platform, "tiktok")))
+    .all().map((r) => r.tag).sort().at(-1);
+  if (bekannt && letzterTag < bekannt) {
+    throw new Error(`Der Export endet am ${letzterTag}, gespeichert ist schon der ${bekannt} — TikTok hat das Fenster zurückgezogen (passiert kurz nach Mitternacht UTC). Nichts geschrieben.`);
+  }
 }
 
 /** Der letzte Stand aus dem Studio, falls es einen gibt. */

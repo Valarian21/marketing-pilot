@@ -276,6 +276,12 @@ export async function buildApp(env: Env, opts: { host?: HostAdapter; dbFile?: st
       const mitKonto = db.select().from(t.mpProjects).all()
         .filter((x) => x.status !== "archived")
         .filter((x) => (loadProfiles(db, x.id).find((c) => c.platform === "tiktok")?.url ?? "").trim() !== "");
+      // Nicht rund um Mitternacht UTC: dort zieht TikTok das Exportfenster um
+      // einen Tag zurück und liefert dieselben Werte falsch beschriftet
+      // (22.09.2026 gemessen). Mittags bis abends Berliner Zeit ist von jeder
+      // Tagesgrenze weit genug weg.
+      const stunde = berlinParts(new Date()).hour;
+      if (stunde < 12 || stunde >= 20) return;
       if (!mitKonto.some((p) => faellig(`sched:tiktok.zahlen:${p.id}`))) return;
       await mitSitzung(tiktokSitzung, tiktokAnmelden, async () => {
         for (const p of mitKonto) {
