@@ -18,7 +18,7 @@ import { writeAudit } from "../audit.js";
 import { currentVersion, dueAtFor } from "../agents/strategy/plan.js";
 import { weekOf } from "../routes/tasks.js";
 import { getPiece } from "../agents/studio/generate.js";
-import { assetToken, assetUrl } from "./asset-tokens.js";
+import { assetToken, assetUrl, jpegFuerMeta } from "./asset-tokens.js";
 import { credentialsFor, posterFor } from "./index.js";
 import { leseMetriken } from "./metrics.js";
 import type { PostAsset } from "./types.js";
@@ -233,6 +233,25 @@ export async function runScheduledPost(ctx: PostContext, entry: s.ScheduledPost)
       return { path: file, mime, kind, alt: String(meta["alt"] ?? piece.title), url: publicBase ? assetUrl(publicBase, assetToken(ctx.db, a.id, now.getTime())) : "" };
     })
     .filter((a) => fs.existsSync(a.path));
+
+  /**
+   * PNG vorab in JPEG wandeln, bevor Meta die Adresse abruft.
+   *
+   * Meta nimmt als Bild nur JPEG; `/go/a/:token` wandelt deshalb beim Abruf um.
+   * Nur: das tut es mit `spawnSync` **im Request**, und ffmpeg blockiert dabei
+   * den ganzen Prozess. Bei einem Karussell holt Meta acht Adressen kurz
+   * hintereinander — am 20.09.2026 kam das Deckblatt durch (die `.meta.jpg`
+   * trägt die Uhrzeit des Laufs), die sieben dahinter nicht, und der Lauf
+   * scheiterte an „Only photo or video can be accepted as media type": eine
+   * Meldung, die Meta auch dann schickt, wenn es die Datei gar nicht erst
+   * bekommen hat. Vorher gewandelt liegt die Datei fertig da, und der Abruf
+   * ist nur noch ein Dateistrom.
+   */
+  for (const a of assets) {
+    if (!a.path.toLowerCase().endsWith(".png")) continue;
+    try { jpegFuerMeta(a.path); }
+    catch (e) { ctx.log(`JPEG für ${path.basename(a.path)}: ${e instanceof Error ? e.message : String(e)}`); }
+  }
 
   const short = ctx.db.select().from(t.mpShortlinks).where(eq(t.mpShortlinks.pieceId, piece.id)).get();
   const link = short && publicBase ? `${publicBase.replace(/\/$/, "")}/go/${short.code}` : null;
