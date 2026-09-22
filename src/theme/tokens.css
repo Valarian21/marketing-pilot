@@ -18,6 +18,9 @@
   --mp-text-h2: 16px;
   --mp-text-h1: 30px;
   --mp-text-num: 28px;
+  /* Eine einzelne Auskunft, die die Karte trägt (Follower gesamt) — größer als
+     eine Kennzahl-Kachel, kleiner als die Seitenüberschrift wirkt sie nicht. */
+  --mp-text-hero: 44px;
   --mp-tracking-label: 0.1em;
 
   /* Flächen und Text */
@@ -62,6 +65,11 @@
   --mp-serie-2: #eb6834;
   --mp-serie-3: #1baf7a;
   --mp-serie-4: #a8328f;
+  /* 5 und 6 kamen am 22.09.2026 dazu (YouTube, Pinterest). Beide Modi sind
+     gegen die Fläche geprüft: Helligkeitsband, Chroma, Farbsehschwächen und
+     Kontrast — nicht nach Augenmaß gewählt. */
+  --mp-serie-5: #6b4fd8;
+  --mp-serie-6: #0e9bb2;
   --mp-serie-rest: #8C9098;
   /* Ordinale Rampe (eine Farbfamilie, hell → dunkel) für Stufen: Trichter, Ränge. */
   --mp-stufe-1: #86b6ef;
@@ -128,6 +136,8 @@
     --mp-serie-2: #d95926;
     --mp-serie-3: #199e70;
     --mp-serie-4: #c94ba8;
+    --mp-serie-5: #8a72ec;
+    --mp-serie-6: #1497ae;
     --mp-serie-rest: #7C8087;
     --mp-stufe-1: #86b6ef;
     --mp-stufe-2: #5598e7;
@@ -176,6 +186,8 @@
   --mp-serie-2: #d95926;
   --mp-serie-3: #199e70;
   --mp-serie-4: #c94ba8;
+  --mp-serie-5: #8a72ec;
+  --mp-serie-6: #1497ae;
   --mp-serie-rest: #7C8087;
   --mp-stufe-1: #86b6ef;
   --mp-stufe-2: #5598e7;

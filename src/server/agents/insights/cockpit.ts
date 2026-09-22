@@ -71,6 +71,56 @@ function aufrufeHinweis(platform: string, werte: (KanalWerte | undefined)[]): st
   return MESSBARE_KANAELE.includes(platform) ? "Diese Plattform meldet keine Aufrufe je Kanal." : "";
 }
 
+/**
+ * Auf welchem Weg die Zahlen eines Kanals hereinkommen.
+ *
+ * Steht hier und nicht im Frontend, weil es eine Aussage über den Code ist:
+ * ändert sich der Weg, ändert sich diese Tabelle mit. Die Takte entsprechen
+ * `kanalStatsJob` (Worker, täglich) und den Tagesläufen in `app.ts`.
+ */
+const VERSORGUNGSWEG: Record<string, { weg: "api" | "studio" | "export" | "keine"; automatisch: boolean; takt: string }> = {
+  instagram: { weg: "api", automatisch: true, takt: "Täglich über die Graph-API." },
+  facebook: { weg: "api", automatisch: true, takt: "Täglich über die Graph-API." },
+  threads: { weg: "api", automatisch: true, takt: "Täglich über die Threads-API." },
+  youtube: { weg: "studio", automatisch: true, takt: "Täglich: offener Feed für den Kanal, angemeldetes Studio für Video- und 28-Tage-Zahlen." },
+  tiktok: { weg: "studio", automatisch: true, takt: "Täglich zwischen 12 und 20 Uhr: Export aus dem angemeldeten Studio (keine Lese-API)." },
+  pinterest: { weg: "keine", automatisch: false, takt: "Pinnen läuft über den Anmelde-Browser, Zahlen holt der Pilot dort noch nicht." },
+};
+
+/** Die Größen, auf die eine Kanalversorgung geprüft wird — gemessen, nicht behauptet. */
+const GROESSEN: [keyof KanalWerte, string][] = [
+  ["aufrufe", "Aufrufe"], ["reichweite", "Reichweite"], ["interaktionen", "Interaktionen"],
+  ["profilaufrufe", "Profilaufrufe"], ["follower", "Follower"], ["linkklicks", "Link-Klicks"],
+];
+
+/** Der Tag davor, als `YYYY-MM-DD`. */
+const vorTag = (tag: string): string => new Date(Date.parse(`${tag}T00:00:00Z`) - TAG_MS).toISOString().slice(0, 10);
+
+/**
+ * Der jüngste gemessene Followerstand bis einschließlich `bisTag`.
+ *
+ * Follower sind ein Bestand: fehlt für einen Tag die Messung, gilt der letzte
+ * bekannte Wert weiter. Ohne dieses Fortschreiben gäbe es für jeden Kanal, der
+ * seine Followerzahl nur unregelmäßig mitschickt, keinen Vergleichswert.
+ */
+function letzterFollowerBis(tage: Map<string, KanalWerte> | undefined, bisTag: string): number | null {
+  if (!tage) return null;
+  let out: number | null = null;
+  for (const tag of [...tage.keys()].sort()) {
+    if (tag > bisTag) break;
+    const f = tage.get(tag)?.follower;
+    if (typeof f === "number") out = f;
+  }
+  return out;
+}
+
+/** Erster Tag mit einer Followerzahl — „gemessen seit". */
+function ersterFollowerTag(tage: Map<string, KanalWerte> | undefined): string | null {
+  if (!tage) return null;
+  for (const tag of [...tage.keys()].sort()) if (typeof tage.get(tag)?.follower === "number") return tag;
+  return null;
+}
+
 export function cockpitView(db: Db, projectId: string, opts: CockpitOptions): s.CockpitView {
   const now = opts.now ?? new Date();
   const bis = berlinTag(now);
@@ -233,8 +283,22 @@ export function cockpitView(db: Db, projectId: string, opts: CockpitOptions): s.
     const profil = profile.find((p) => p.platform === platform);
     let letzterFollower: number | null = null;
     for (const { w } of imRaum) if (typeof w?.follower === "number") letzterFollower = w.follower;
-    let followerDavor: number | null = null;
-    for (const tag of tageZwischen(vorherVon, von)) { const f = tageDesKanals?.get(tag)?.follower; if (typeof f === "number") followerDavor = f; }
+    // Der Stand **vor** dem Zeitraum ist der letzte bekannte davor, nicht der
+    // letzte innerhalb des Vorzeitraums: eine Plattform, die nur gelegentlich
+    // eine Followerzahl mitschickt (TikTok nennt sie erst seit dem 22.09.),
+    // hätte sonst nie einen Vergleichswert — und die Anzeige stand dauerhaft
+    // auf „–" statt auf dem Zuwachs, nach dem eigentlich gefragt war.
+    const followerDavor = letzterFollowerBis(tageDesKanals, vorTag(von));
+    const followerSeit = ersterFollowerTag(tageDesKanals);
+    // Fehlt die Grundlinie, weil dieser Kanal erst im Zeitraum zum ersten Mal
+    // gemessen wurde, zählt der Zuwachs ab dem ersten Messtag. Sonst stünde
+    // bei Instagram „+0 in 30 Tagen", obwohl es von 6 auf 21 gewachsen ist —
+    // eine Null, die wie Stillstand aussieht, ist schlechter als ein Zuwachs
+    // mit Datum daneben.
+    const startImRaum = followerSeit && followerSeit >= von ? followerSeit : null;
+    const followerStart = followerDavor ?? (startImRaum ? tageDesKanals?.get(startImRaum)?.follower ?? null : null);
+    const followerStartTag = followerDavor !== null ? vorTag(von) : startImRaum;
+    const neueFollower = letzterFollower !== null && followerStart !== null ? letzterFollower - followerStart : null;
     const hand = handStand.get(platform);
     return {
       platform,
@@ -246,6 +310,10 @@ export function cockpitView(db: Db, projectId: string, opts: CockpitOptions): s.
       profilUrl: profil?.url || null,
       follower: letzterFollower,
       followerDavor,
+      neueFollower,
+      followerStartTag,
+      followerExakt: followerDavor !== null,
+      followerSeit,
       aufrufe: summe(imRaum.map(({ w }) => w?.aufrufe)),
       reichweite: summe(imRaum.map(({ w }) => w?.reichweite)),
       interaktionen: summe(imRaum.map(({ w }) => w?.interaktionen)),
@@ -273,17 +341,32 @@ export function cockpitView(db: Db, projectId: string, opts: CockpitOptions): s.
     [...anmeldungJeTag.entries()].filter(([tag]) => tag >= vonTag && tag <= bisTag).reduce((s2, [, n]) => s2 + n, 0);
   const gestern = berlinTag(new Date(Date.parse(`${von}T00:00:00Z`) - TAG_MS));
 
-  const follower = verlauf.at(-1)?.follower ?? null;
-  const followerVorher = kanaele.filter((k) => eingerichteteKanaele.includes(k.platform)).every((k) => k.followerDavor !== null)
-    ? summe(kanaele.filter((k) => eingerichteteKanaele.includes(k.platform)).map((k) => k.followerDavor))
+  // Follower gesamt: der Bestand über alle Kanäle, die einen nennen. Der
+  // Vergleichswert zählt nur, wenn **jeder** dieser Kanäle auch einen Stand von
+  // vorher hat — sonst sähe ein Kanal, der gerade erst zum ersten Mal gemessen
+  // wurde, wie ein Zuwachs von null auf fünfundzwanzig aus.
+  const mitFollower = kanaele.filter((k) => k.follower !== null);
+  const follower = mitFollower.length ? summe(mitFollower.map((k) => k.follower)) : null;
+  const followerVorher = mitFollower.length && mitFollower.every((k) => k.followerDavor !== null)
+    ? summe(mitFollower.map((k) => k.followerDavor))
     : null;
+  // Der Zuwachs dagegen lässt sich auch dann angeben, wenn ein Kanal noch keine
+  // Grundlinie von vor dem Zeitraum hat — er zählt dann ab seinem ersten
+  // Messtag, und der Hinweis nennt ihn.
+  const ohneGrundlinie = mitFollower.filter((k) => !k.followerExakt && k.neueFollower !== null);
+  const neueFollower = summe(mitFollower.map((k) => k.neueFollower));
   const beitragsAufrufe = summe(beitraege.map((b) => b.aufrufe));
   const beitragsAufrufeDavor = summe(davor.map((p) => leseMetriken(p)?.aufrufe));
 
   const kennzahlen: s.CockpitKennzahl[] = [
     { id: "aufrufe", label: "Aufrufe", wert: zeitraumSumme("aufrufe", von, bis), davor: zeitraumSumme("aufrufe", vorherVon, gestern), einheit: "zahl", art: "summe", hinweis: "Wie oft Inhalte der Kanäle abgespielt oder angezeigt wurden — auch ältere Beiträge." },
     { id: "interaktionen", label: "Interaktionen", wert: zeitraumSumme("interaktionen", von, bis), davor: zeitraumSumme("interaktionen", vorherVon, gestern), einheit: "zahl", art: "summe", hinweis: "Likes, Kommentare, Speichern und Teilen zusammen." },
-    { id: "follower", label: "Follower", wert: follower, davor: followerVorher, einheit: "zahl", art: "bestand", hinweis: "Bestand über alle Kanäle, nicht der Zuwachs." },
+    { id: "follower", label: "Follower gesamt", wert: follower, davor: followerVorher, einheit: "zahl", art: "bestand",
+      hinweis: `Bestand über alle Kanäle, die eine Followerzahl nennen (${mitFollower.map((k) => k.label).join(", ") || "keiner"}).` },
+    { id: "neueFollower", label: "Neue Follower", wert: neueFollower, davor: null, einheit: "zahl", art: "summe",
+      hinweis: ohneGrundlinie.length
+        ? `Zuwachs im Zeitraum. ${ohneGrundlinie.map((k) => `${k.label} erst ab ${k.followerStartTag}`).join(", ")} — dort ist der Zuwachs eher zu klein als zu groß.`
+        : "Zuwachs im Zeitraum über alle Kanäle zusammen." },
     { id: "beitraege", label: "Beiträge", wert: imZeitraum.length, davor: davor.length, einheit: "zahl", art: "summe", hinweis: "Was der Pilot in diesem Zeitraum veröffentlicht hat." },
     { id: "beitragsaufrufe", label: "Aufrufe dieser Beiträge", wert: beitragsAufrufe, davor: beitragsAufrufeDavor, einheit: "zahl", art: "summe", hinweis: "Gesamtstand der im Zeitraum veröffentlichten Beiträge — Meta liefert je Beitrag keine Tageswerte." },
     { id: "klicks", label: "Klicks auf die Seite", wert: klicksIn(von, bis), davor: klicksIn(vorherVon, gestern), einheit: "zahl", art: "summe", hinweis: "Klicks auf die Kurzlinks des Piloten." },
@@ -344,11 +427,61 @@ export function cockpitView(db: Db, projectId: string, opts: CockpitOptions): s.
   const nachSorte = schnitte((b) => b.postArt || null);
   const nachStunde = schnitte((b) => (b.stunde === null ? null : String(b.stunde).padStart(2, "0")));
 
+  // --- Datenversorgung ----------------------------------------------------------
+  // Beantwortet die Frage „kommen die Zahlen eigentlich von selbst?" — und zwar
+  // je Kanal, mit Rückstand. Ohne sie fiel im September drei Tage lang nicht
+  // auf, dass TikTok gar nicht mehr gemessen wurde.
+  /**
+   * Was im Zeitraum draußen ist — gepostet **oder** über den Anmelde-Browser
+   * eingeplant. Maßgeblich ist der Zeitpunkt, an dem es erscheinen sollte.
+   */
+  const veroeffentlicht = db.select().from(t.mpScheduledPosts).where(eq(t.mpScheduledPosts.projectId, projectId)).all()
+    .filter((p2) => p2.status === "posted" || (p2.providerRef && p2.status !== "cancelled" && p2.status !== "failed"))
+    .filter((p2) => { const stempel = p2.postedAt ?? p2.scheduledAt; const tg = berlinTag(new Date(stempel)); return tg >= von && tg <= bis; });
+  const versorgung: s.CockpitVersorgung[] = kanaele.map((k) => {
+    const art = VERSORGUNGSWEG[k.platform] ?? { weg: "keine" as const, automatisch: false, takt: "Für diesen Kanal holt der Pilot keine Zahlen." };
+    const tageDesKanals = jeKanal.get(k.platform);
+    const datenBis = tageDesKanals
+      ? [...tageDesKanals.entries()].filter(([, w]) => Object.keys(w).length > 0).map(([tag]) => tag).sort().at(-1) ?? null
+      : null;
+    const rueckstand = datenBis ? Math.max(0, Math.round((Date.parse(`${vortag}T00:00:00Z`) - Date.parse(`${datenBis}T00:00:00Z`)) / TAG_MS)) : null;
+    const hatWert = (feld: keyof KanalWerte): boolean =>
+      [...(tageDesKanals?.values() ?? [])].some((w) => typeof w[feld] === "number");
+    const liefert: string[] = [];
+    const fehlt: string[] = [];
+    for (const [feld, name] of GROESSEN) (hatWert(feld) ? liefert : fehlt).push(name);
+    // Nicht nur `status === "posted"`: TikTok und YouTube werden über den
+    // Anmelde-Browser **vorgeplant** und bleiben dort absichtlich auf
+    // „geplant" stehen (siehe `laufVermerken`). Zählte man nur Gepostetes,
+    // stünde ausgerechnet bei den beiden Kanälen, um die es hier geht, „–".
+    const eigene = veroeffentlicht.filter((p2) => p2.platform === k.platform);
+    const mitZahlen = eigene.filter((p2) => { const m = leseMetriken(p2); return typeof m?.aufrufe === "number"; }).length;
+    const status2: "ok" | "spaet" | "fehlt" =
+      art.weg === "keine" || !k.eingerichtet ? "fehlt"
+        : rueckstand === null || rueckstand > 1 ? "spaet"
+          : "ok";
+    return {
+      platform: k.platform, label: k.label, weg: art.weg, automatisch: art.automatisch, takt: art.takt,
+      letzterAbruf: k.letzterAbruf, datenBis, rueckstand, status: status2,
+      liefert, fehlt, beitraegeMitZahlen: mitZahlen, beitraegeGesamt: eigene.length,
+    };
+  });
+  const nichtAutomatisch = versorgung.filter((v) => v.status !== "fehlt" && !v.automatisch).map((v) => v.label);
+  if (nichtAutomatisch.length) hinweise.push(`Kommt nicht von selbst herein: ${nichtAutomatisch.join(", ")}.`);
+  // Kanalzahlen und Beitragszahlen sind zweierlei: TikTok liefert den Kanal
+  // vollständig und je Beitrag gar nichts.
+  for (const v of versorgung.filter((x) => x.beitraegeGesamt >= 3 && x.beitraegeMitZahlen === 0)) {
+    hinweise.push(`${v.label}: für keinen der ${v.beitraegeGesamt} Beiträge im Zeitraum gibt es Zahlen je Beitrag — dort misst der Pilot nur den Kanal als Ganzes.`);
+  }
+  for (const v of versorgung.filter((x) => x.automatisch && x.status === "spaet")) {
+    hinweise.push(`${v.label}: der Stand reicht nur bis ${v.datenBis ? `${v.datenBis.slice(8, 10)}.${v.datenBis.slice(5, 7)}.` : "nirgendwohin"} — der Tageslauf holt dort gerade nichts.`);
+  }
+
   return {
     zeitraum: { von, bis, tage: opts.tage },
     kennzahlen, verlauf, kanaele, beitraege, trichter, produkt, hinweise,
     kanalStatus: { letzterLauf: status.letzterLauf, laeuft: false },
-    nachSorte, nachStunde,
+    nachSorte, nachStunde, versorgung,
   };
 }
 

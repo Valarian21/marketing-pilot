@@ -3,11 +3,13 @@
  *
  * Aufgebaut wie die Frage, die man wirklich hat, von oben nach unten:
  * 1. Was ist in diesem Zeitraum passiert? (Kennzahlen mit Vergleich)
- * 2. Wie hat es sich entwickelt? (der Verlauf der gewählten Kennzahl)
- * 3. Wo bricht es ab? (der Weg vom Aufruf bis zum Kunden)
- * 4. Welcher Kanal trägt? (je Kanal Bestand, Summe, eigener Verlauf)
- * 5. Kommt es im Produkt an? (Konten, zahlende Kunden, Umsatz)
- * 6. Welcher Beitrag war es? (Tabelle, sortiert nach Aufrufen)
+ * 2. Wie viele folgen uns, wie viele davon neu? (Publikum)
+ * 3. Wie hat es sich entwickelt? (der Verlauf der gewählten Kennzahl)
+ * 4. Wo bricht es ab? (der Weg vom Aufruf bis zum Kunden)
+ * 5. Welcher Kanal trägt? (je Kanal Bestand, Summe, eigener Verlauf)
+ * 6. Kommen die Zahlen überhaupt von selbst? (Datenversorgung)
+ * 7. Kommt es im Produkt an? (Konten, zahlende Kunden, Umsatz)
+ * 8. Welcher Beitrag war es? (Tabelle, sortiert nach Aufrufen)
  *
  * Zwei Dinge, die die Seite bewusst **nicht** tut: sie legt keine zwei
  * Größenordnungen in ein Achsenkreuz (Aufrufe und Konten sind zwei Diagramme),
@@ -21,6 +23,8 @@ import { api } from "../api.js";
 import { Button, Card, Notice, PageHeader, Pill } from "../components/ui.js";
 import { ProjectNav } from "../components/ProjectNav.js";
 import { KanalImport } from "../components/KanalImport.js";
+import { Publikum } from "../components/Publikum.js";
+import { Versorgung } from "../components/Versorgung.js";
 import { Balken, Kennzahl, Sparkline, Tagesbalken, Zeitreihe, euro, kanalFarbe, prozent, tagKurz, tagLang, zahl, type Punkt, type Serie } from "../components/charts.js";
 import { POST_ARTEN, type PostArt } from "../../shared/postarten.js";
 
@@ -98,14 +102,24 @@ export function UebersichtPage() {
         {tagLang(view.zeitraum.von)} bis {tagLang(view.zeitraum.bis)}
         {view.kanalStatus.letzterLauf && ` · Kanalzahlen zuletzt geholt am ${new Date(view.kanalStatus.letzterLauf).toLocaleString("de-DE", { dateStyle: "short", timeStyle: "short" })}`}
         {view.kanalStatus.laeuft && " · Abruf läuft gerade"}
+        {/* Der Zustand der Versorgung gehört nach oben: eine Seite, die nur
+            Zahlen zeigt, verschweigt, dass sie stehengeblieben sein könnten. */}
+        {view.versorgung.length > 0 && (() => {
+          const haengt = view.versorgung.filter((v) => v.automatisch && v.status === "spaet");
+          return <> · <a href="#versorgung" className={haengt.length ? "mp-stand-warn" : undefined}>
+            {haengt.length === 0
+              ? `alle ${view.versorgung.filter((v) => v.automatisch).length} angebundenen Kanäle aktuell`
+              : `${haengt.length} Kanal${haengt.length > 1 ? "e hängen" : " hängt"}: ${haengt.map((v) => v.label).join(", ")}`}
+          </a></>;
+        })()}
       </p>
 
       {/* 1. Was ist passiert */}
       <div className="mp-kennzahlen">
-        {(["aufrufe", "interaktionen", "klicks", "follower", "konten", "zahlende"] as const).map((kid) => {
+        {(["aufrufe", "interaktionen", "klicks", "bioaufrufe", "konten", "zahlende"] as const).map((kid) => {
           const kz = k(kid);
           if (!kz) return null;
-          const feld: KurvenId | null = kid === "zahlende" ? null : (kid as KurvenId);
+          const feld: KurvenId | null = kid in KURVEN ? (kid as KurvenId) : null;
           return (
             <Kennzahl key={kid} label={kz.label} wert={kz.wert} davor={kz.davor}
               einheit={kz.einheit === "euro" ? "euro" : "zahl"}
@@ -117,7 +131,10 @@ export function UebersichtPage() {
         })}
       </div>
 
-      {/* 2. Wie es sich entwickelt hat */}
+      {/* 2. Wer uns folgt */}
+      <Publikum projectId={id} kanaele={view.kanaele} tage={view.zeitraum.tage} />
+
+      {/* 3. Wie es sich entwickelt hat */}
       <Card>
         <div className="mp-card-head">
           <h2>{kurveDef.label} im Verlauf <span className="mp-muted mp-small">{kurveDef.hinweis}</span></h2>
@@ -159,7 +176,7 @@ export function UebersichtPage() {
         )}
       </Card>
 
-      {/* 3. Wo es abbricht */}
+      {/* 4. Wo es abbricht */}
       <div className="mp-two-col">
         <Card>
           <h2>Vom Aufruf zum Kunden <span className="mp-muted mp-small">im gewählten Zeitraum</span></h2>
@@ -178,7 +195,7 @@ export function UebersichtPage() {
         </Card>
       </div>
 
-      {/* 4. Welcher Kanal trägt */}
+      {/* 5. Welcher Kanal trägt */}
       <Card>
         <div className="mp-card-head"><h2>Kanäle</h2><Link className="mp-small" to={`/projects/${id}/channels`}>Kanäle einrichten</Link></div>
         <div className="mp-kanal-grid">
@@ -215,7 +232,10 @@ export function UebersichtPage() {
         )}
       </Card>
 
-      {/* 5. Kommt es im Produkt an */}
+      {/* 6. Kommen die Zahlen von selbst? */}
+      <div id="versorgung"><Versorgung zeilen={view.versorgung} /></div>
+
+      {/* 7. Kommt es im Produkt an */}
       <Card>
         <div className="mp-card-head">
           <h2>Produkt <span className="mp-muted mp-small">{view.produkt.hinweis}</span></h2>
@@ -249,7 +269,7 @@ export function UebersichtPage() {
         )}
       </Card>
 
-      {/* 5b. Welche Sorte, welche Stunde */}
+      {/* 7b. Welche Sorte, welche Stunde */}
       {(view.nachSorte.length > 0 || view.nachStunde.length > 0) && (
         <Card>
           <div className="mp-card-head">
@@ -289,7 +309,7 @@ export function UebersichtPage() {
         </Card>
       )}
 
-      {/* 6. Welcher Beitrag */}
+      {/* 8. Welcher Beitrag */}
       <Card>
         <div className="mp-card-head">
           <h2>Beiträge im Zeitraum <span className="mp-muted mp-small">Zahlen der Plattform, Gesamtstand je Beitrag</span></h2>

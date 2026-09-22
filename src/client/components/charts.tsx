@@ -20,9 +20,16 @@
  */
 import { useId, useState, type ReactNode } from "react";
 
-export const SERIEN_FARBE = ["var(--mp-serie-1)", "var(--mp-serie-2)", "var(--mp-serie-3)", "var(--mp-serie-4)"] as const;
+export const SERIEN_FARBE = ["var(--mp-serie-1)", "var(--mp-serie-2)", "var(--mp-serie-3)", "var(--mp-serie-4)", "var(--mp-serie-5)", "var(--mp-serie-6)"] as const;
 /** Kanal → Farbslot. Fest verdrahtet, damit ein Kanal seine Farbe nie wechselt. */
-export const KANAL_SLOT: Record<string, number> = { instagram: 0, facebook: 1, threads: 2, tiktok: 3 };
+/**
+ * Feste Farbe je Kanal — nie nach Rang vergeben.
+ *
+ * Wer nach Rang färbt, malt bei jedem Filterwechsel dieselbe Plattform neu an.
+ * YouTube und Pinterest standen bis zum 22.09.2026 beide auf Grau, waren also
+ * im Diagramm nicht auseinanderzuhalten.
+ */
+export const KANAL_SLOT: Record<string, number> = { instagram: 0, facebook: 1, threads: 2, tiktok: 3, youtube: 4, pinterest: 5 };
 export const kanalFarbe = (platform: string): string => SERIEN_FARBE[KANAL_SLOT[platform] ?? -1] ?? "var(--mp-serie-rest)";
 
 export const zahl = (x: number | null | undefined, stellen = 0): string =>
@@ -96,8 +103,43 @@ export function Zeitreihe({ serien, tage, hoehe = 220, flaeche = false, marker =
   const fmt = (v: number | null) => (einheit === "euro" ? euro(v) : zahl(v));
   const markerTage = new Set(marker.map((m) => m.tag));
 
+  /**
+   * Das Ende jeder Linie samt entzerrter Beschriftungshöhe.
+   *
+   * `roh` ist der echte Punkt (dort sitzt der Kreis), `y` die Zeile für den
+   * Namen: von oben nach unten durchgegangen und jeweils mindestens `ABSTAND`
+   * unter die vorige geschoben. Ohne das liegen zwei Namen übereinander,
+   * sobald zwei Linien ähnlich enden.
+   */
+  const ABSTAND = 13;
+  const enden = serien.flatMap((s) => {
+    const letzte = [...s.punkte].reverse().find((p) => typeof p.wert === "number");
+    if (!letzte) return [];
+    return [{ id: s.id, label: s.label, i: s.punkte.lastIndexOf(letzte), roh: y(letzte.wert!) }];
+  }).sort((a, b) => a.roh - b.roh)
+    .map((e, k, alle) => {
+      let ziel = e.roh - 8;
+      for (let j = 0; j < k; j++) {
+        const vorige = alle[j] as typeof e & { y?: number };
+        if (vorige.y !== undefined && ziel - vorige.y < ABSTAND) ziel = vorige.y + ABSTAND;
+      }
+      return Object.assign(e, { y: Math.min(Math.max(ziel, oben + 10), oben + ih - 2) });
+    });
+
   // Achsenbeschriftung ausdünnen: höchstens acht Tage, sonst klebt alles aneinander.
   const schritt = Math.max(1, Math.ceil(tage.length / 8));
+  /**
+   * Welche Tage beschriftet werden.
+   *
+   * Der letzte Tag gehört immer dazu — aber nicht, wenn er dem vorletzten
+   * Raster­punkt zu nahe kommt: bei 30 Tagen standen „21.09." und „22.09."
+   * ineinander und ergaben „21.022.09.".
+   */
+  const achsenTage = tage.map((_, i) => i).filter((i, _k, alle) => {
+    if (i === alle.length - 1) return true;
+    if (i % schritt !== 0) return false;
+    return alle.length - 1 - i >= schritt * 0.6;
+  });
 
   return (
     <div className="mp-chart">
@@ -116,8 +158,9 @@ export function Zeitreihe({ serien, tage, hoehe = 220, flaeche = false, marker =
             <text x={links - 8} y={y(m) + 4} className="mp-chart-tick" textAnchor="end">{einheit === "euro" ? euro(m) : zahl(m)}</text>
           </g>
         ))}
-        {tage.map((t, i) => (i % schritt === 0 || i === tage.length - 1) && (
-          <text key={t} x={x(i)} y={hoehe - 8} className="mp-chart-tick" textAnchor="middle">{tagKurz(t)}</text>
+        {achsenTage.map((i) => (
+          <text key={tage[i]} x={x(i)} y={hoehe - 8} className="mp-chart-tick"
+            textAnchor={i === 0 ? "start" : i === tage.length - 1 ? "end" : "middle"}>{tagKurz(tage[i]!)}</text>
         ))}
 
         {serien.map((s) => (
@@ -131,17 +174,20 @@ export function Zeitreihe({ serien, tage, hoehe = 220, flaeche = false, marker =
                 ? <circle key={k} cx={x(abs[0]!.i)} cy={y(abs[0]!.wert)} r="3.5" fill={s.farbe} />
                 : <path key={k} d={`M ${abs.map((p) => `${x(p.i)} ${y(p.wert)}`).join(" L ")}`} fill="none" stroke={s.farbe} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
             ))}
-            {/* Direktlabel am Ende der Linie: die eine Beschriftung, die immer trägt. */}
+            {/* Der Punkt am Ende der Linie; die Beschriftung dazu steht weiter
+                unten, weil sie gegen die der anderen Serien geschoben wird. */}
             {(() => {
-              const letzte = [...s.punkte].reverse().find((p) => typeof p.wert === "number");
-              if (!letzte) return null;
-              const i = s.punkte.lastIndexOf(letzte);
-              return <>
-                <circle cx={x(i)} cy={y(letzte.wert!)} r="4" fill={s.farbe} stroke="var(--mp-surface)" strokeWidth="2" />
-                {serien.length > 1 && <text x={x(i) - 8} y={y(letzte.wert!) - 8} className="mp-chart-endlabel" textAnchor="end">{s.label}</text>}
-              </>;
+              const ende = enden.find((e) => e.id === s.id);
+              return ende ? <circle cx={x(ende.i)} cy={ende.roh} r="4" fill={s.farbe} stroke="var(--mp-surface)" strokeWidth="2" /> : null;
             })()}
           </g>
+        ))}
+
+        {/* Die Direktlabels, gegeneinander entzerrt: enden zwei Linien auf
+            derselben Höhe, lagen ihre Namen übereinander („TikTok" über
+            „Instagram", 22.09.2026 gesehen). */}
+        {serien.length > 1 && enden.map((e) => (
+          <text key={e.id} x={x(e.i) - 8} y={e.y} className="mp-chart-endlabel" textAnchor="end" fill={undefined}>{e.label}</text>
         ))}
 
         {/* Tage mit Veröffentlichung: eine Markerzeile auf der Grundlinie, keine zweite Achse. */}
@@ -178,20 +224,24 @@ export function Zeitreihe({ serien, tage, hoehe = 220, flaeche = false, marker =
 }
 
 /** Winziger Verlauf ohne Achsen — gehört in eine Kachel, nie allein auf die Seite. */
-export function Sparkline({ punkte, farbe = "var(--mp-serie-1)", hoehe = 34, breite = 120 }: { punkte: Punkt[]; farbe?: string; hoehe?: number; breite?: number }) {
+export function Sparkline({ punkte, farbe = "var(--mp-serie-1)", hoehe = 34, breite = 120, basis = "null" }: { punkte: Punkt[]; farbe?: string; hoehe?: number; breite?: number; basis?: "null" | "spanne" }) {
   const werte = punkte.map((p) => p.wert).filter((v): v is number => typeof v === "number");
   if (werte.length < 2) return <div className="mp-spark mp-spark--leer" aria-hidden="true" />;
-  const max = Math.max(...werte), min = Math.min(...werte, 0);
+  // Tageswerte gehören auf die Nulllinie, Bestände auf ihre eigene Spanne: ein
+  // Kanal mit konstant einem Abonnenten füllte sonst die ganze Kachel und sah
+  // aus wie der größte von allen.
+  const max = Math.max(...werte), min = basis === "spanne" ? Math.min(...werte) : Math.min(...werte, 0);
+  const konstant = max === min;
   const spanne = max - min || 1;
   const x = (i: number) => (i / (punkte.length - 1)) * breite;
-  const y = (v: number) => hoehe - 2 - ((v - min) / spanne) * (hoehe - 4);
+  const y = (v: number) => (konstant ? hoehe / 2 : hoehe - 2 - ((v - min) / spanne) * (hoehe - 4));
   const teile = abschnitte(punkte);
   const letzter = teile[teile.length - 1]?.at(-1);
   return (
     <svg viewBox={`0 0 ${breite} ${hoehe}`} className="mp-spark" aria-hidden="true" preserveAspectRatio="none">
       {teile.map((abs, k) => (
         <g key={k}>
-          <path d={`M ${x(abs[0]!.i)} ${hoehe} ${abs.map((p) => `L ${x(p.i)} ${y(p.wert)}`).join(" ")} L ${x(abs.at(-1)!.i)} ${hoehe} Z`} fill={farbe} opacity="var(--mp-flaeche)" />
+          {!konstant && <path d={`M ${x(abs[0]!.i)} ${hoehe} ${abs.map((p) => `L ${x(p.i)} ${y(p.wert)}`).join(" ")} L ${x(abs.at(-1)!.i)} ${hoehe} Z`} fill={farbe} opacity="var(--mp-flaeche)" />}
           <path d={`M ${abs.map((p) => `${x(p.i)} ${y(p.wert)}`).join(" L ")}`} fill="none" stroke={farbe} strokeWidth="1.75" strokeLinejoin="round" strokeLinecap="round" />
         </g>
       ))}

@@ -1593,7 +1593,22 @@ export const CockpitKanal = z.object({
   standBis: z.string().nullable().default(null),
   profilUrl: z.string().nullable().default(null),
   follower: z.number().nullable().default(null),
+  /** Stand am Tag vor dem Zeitraum — fortgeschrieben, nicht nur im Vorzeitraum gesucht. */
   followerDavor: z.number().nullable().default(null),
+  /** Zuwachs gegenüber `followerStartTag`. */
+  neueFollower: z.number().nullable().default(null),
+  /**
+   * Ab welchem Tag der Zuwachs gilt.
+   *
+   * Normalerweise der Tag vor dem Zeitraum. Wurde dieser Kanal erst innerhalb
+   * des Zeitraums zum ersten Mal gemessen, ist es dieser erste Messtag — dann
+   * ist der Zuwachs kleiner als die Wahrheit, aber nicht erfunden. `exakt`
+   * sagt, welcher der beiden Fälle vorliegt.
+   */
+  followerStartTag: z.string().nullable().default(null),
+  followerExakt: z.boolean().default(true),
+  /** Erster Tag überhaupt, an dem die Followerzahl dieses Kanals gemessen wurde. */
+  followerSeit: z.string().nullable().default(null),
   aufrufe: z.number().nullable().default(null),
   reichweite: z.number().nullable().default(null),
   interaktionen: z.number().nullable().default(null),
@@ -1678,6 +1693,35 @@ export const CockpitKennzahl = z.object({
   hinweis: z.string().default(""),
 });
 
+/**
+ * Kommen die Zahlen dieses Kanals von selbst — und wie frisch sind sie?
+ *
+ * Die Frage stand bis zum 22.09.2026 nirgends auf der Seite, und genau deshalb
+ * fiel drei Tage lang nicht auf, dass TikTok gar nicht mehr gemessen wurde.
+ */
+export const CockpitVersorgung = z.object({
+  platform: z.string(),
+  label: z.string(),
+  /** Auf welchem Weg der Pilot an die Zahlen kommt. */
+  weg: z.enum(["api", "studio", "export", "keine"]),
+  /** Holt er sie ohne Zutun? */
+  automatisch: z.boolean(),
+  /** In welchem Takt, im Klartext. */
+  takt: z.string().default(""),
+  letzterAbruf: Iso.nullable().default(null),
+  /** Bis zu welchem Tag Zahlen vorliegen. */
+  datenBis: z.string().nullable().default(null),
+  /** Tage Rückstand auf gestern; 0 heißt aktuell. */
+  rueckstand: z.number().int().nullable().default(null),
+  status: z.enum(["ok", "spaet", "fehlt"]),
+  /** Welche Größen dieser Kanal tatsächlich liefert — gemessen, nicht behauptet. */
+  liefert: z.array(z.string()).default([]),
+  fehlt: z.array(z.string()).default([]),
+  /** Zahlen je Beitrag: wie viele der Beiträge im Zeitraum welche haben. */
+  beitraegeMitZahlen: z.number().int().default(0),
+  beitraegeGesamt: z.number().int().default(0),
+});
+
 export const CockpitView = z.object({
   zeitraum: z.object({ von: z.string(), bis: z.string(), tage: z.number().int() }),
   kennzahlen: z.array(CockpitKennzahl),
@@ -1703,6 +1747,8 @@ export const CockpitView = z.object({
   /** Schnitt je Sorte und je Uhrzeit, je Kanal — welche Sorte und welche Stunde trägt. */
   nachSorte: z.array(CockpitSchnitt).default([]),
   nachStunde: z.array(CockpitSchnitt).default([]),
+  /** Woher die Zahlen kommen und ob sie von selbst kommen. */
+  versorgung: z.array(CockpitVersorgung).default([]),
 });
 
 export type StueckKurz = z.infer<typeof StueckKurz>;
@@ -1714,3 +1760,4 @@ export type CockpitKanal = z.infer<typeof CockpitKanal>;
 export type CockpitBeitrag = z.infer<typeof CockpitBeitrag>;
 export type CockpitSchnitt = z.infer<typeof CockpitSchnitt>;
 export type CockpitKennzahl = z.infer<typeof CockpitKennzahl>;
+export type CockpitVersorgung = z.infer<typeof CockpitVersorgung>;
