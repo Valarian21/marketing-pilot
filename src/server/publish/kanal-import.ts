@@ -264,10 +264,26 @@ export function deuteExport(zeilen: string[][], heute: string): ExportDeutung {
   return { tage, erkannt, unbekannt, hinweise };
 }
 
-/** Datei anhand der Endung als XLSX oder CSV lesen und deuten. */
+/**
+ * Datei als XLSX, CSV oder ZIP lesen und deuten.
+ *
+ * TikTok liefert die CSV-Ausgabe **als ZIP** mit einer einzigen `Overview.csv`
+ * darin (22.09.2026 gemessen). Eine XLSX ist ebenfalls ein ZIP — sie erkennt
+ * man an `xl/workbook.xml`. Alles andere wird ausgepackt und der erste
+ * Tabelleneintrag gelesen; damit versteht auch der Handeinwurf die Datei, die
+ * im Browser ankommt, ohne dass jemand sie vorher entpacken muss.
+ */
 export function liesExport(datei: Buffer, name: string, heute: string): ExportDeutung {
-  const istXlsx = /\.xlsx$/i.test(name) || (datei.length > 4 && datei.readUInt32LE(0) === 0x04034b50);
-  const zeilen = istXlsx ? liesXlsx(datei) : liesCsv(datei.toString("utf8"));
+  const istZip = datei.length > 4 && datei.readUInt32LE(0) === 0x04034b50;
+  if (istZip && !/\.xlsx$/i.test(name)) {
+    const eintraege = zipEintraege(datei);
+    if (!eintraege.has("xl/workbook.xml")) {
+      const treffer = [...eintraege.entries()].find(([k]) => /\.(csv|xlsx)$/i.test(k) && !k.startsWith("__MACOSX"));
+      if (!treffer) throw new Error(`Das ZIP enthält weder CSV noch XLSX (${[...eintraege.keys()].slice(0, 5).join(", ")}).`);
+      return liesExport(treffer[1], treffer[0], heute);
+    }
+  }
+  const zeilen = /\.xlsx$/i.test(name) || istZip ? liesXlsx(datei) : liesCsv(datei.toString("utf8"));
   return deuteExport(zeilen, heute);
 }
 

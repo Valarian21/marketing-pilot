@@ -296,7 +296,7 @@ export async function youtubeKanal({ f, heute, profilUrl, vorher }: Abruf): Prom
 }
 
 /** `@handle` → `UC…`; eine fertige Kanal-ID wird durchgereicht. */
-async function youtubeKanalId(f: typeof fetch, url: string): Promise<string> {
+export async function youtubeKanalId(f: typeof fetch, url: string): Promise<string> {
   const roh = url.trim();
   if (!roh) throw new Error("YouTube: keine Kanal-Adresse hinterlegt (Kanäle-Seite).");
   const direkt = /(?:channel\/)?(UC[\w-]{20,})/.exec(roh);

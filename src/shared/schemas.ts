@@ -1171,6 +1171,19 @@ export const TiktokView = z.object({
   uebersprungen: z.array(TiktokPlanZeile).default([]),
 });
 
+/** Was ein Zahlenlauf im TikTok-Studio zurückbringt. */
+export const TiktokZahlen = z.object({
+  abgerufenAm: z.string(),
+  konto: z.string().nullable().default(null),
+  follower: z.number().nullable().default(null),
+  tage: z.number().int(),
+  von: z.string().nullable().default(null),
+  bis: z.string().nullable().default(null),
+  erkannt: z.record(z.string(), z.string()).default({}),
+  unbekannt: z.array(z.string()).default([]),
+  hinweise: z.array(z.string()).default([]),
+});
+
 export const VerteilenRequest = z.object({
   platform: z.string(),
   /** Erster Tag (YYYY-MM-DD, Berliner Zeit). */
@@ -1495,6 +1508,7 @@ export type HandarbeitEintrag = z.infer<typeof HandarbeitEintrag>;
 export type HandarbeitKanal = z.infer<typeof HandarbeitKanal>;
 export type HandarbeitView = z.infer<typeof HandarbeitView>;
 export type TiktokView = z.infer<typeof TiktokView>;
+export type TiktokZahlen = z.infer<typeof TiktokZahlen>;
 export type TiktokLauf = z.infer<typeof TiktokLauf>;
 export type TiktokPlanZeile = z.infer<typeof TiktokPlanZeile>;
 export type VerteilenRequest = z.infer<typeof VerteilenRequest>;

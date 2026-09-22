@@ -26,14 +26,21 @@ import type { Page } from "playwright";
 import * as t from "../db/schema.js";
 import type { Db } from "../db/index.js";
 import type { Env } from "../env.js";
+import { loadProfiles } from "../channels.js";
+import { deuteZahl, liesExport, speichereExport } from "./kanal-import.js";
+import { schreibeKanalTag } from "./kanal-metriken.js";
 import {
-  aktuelleSitzung, berlin, logOrdner as logOrdnerAllgemein, schuss as schussAllgemein, sitzungOeffnen, sitzungSchliessen,
-  type Lauf, type PlanStatus, type PlanZeile,
+  aktuelleSitzung, berlin, logOrdner as logOrdnerAllgemein, schritt as schrittAllgemein, schuss as schussAllgemein,
+  sitzungOeffnen, sitzungSchliessen,
+  type Lauf, type PlanStatus, type PlanZeile, type Schritt,
 } from "./studio-browser.js";
 
 export type { Lauf, PlanStatus, PlanZeile } from "./studio-browser.js";
 
 const DIENST = "tiktok" as const;
+
+/** Fernsteuerung des Anmelde-Browsers — wie bei YouTube und Pinterest. */
+export const schritt = (env: Env, auftrag: Schritt) => schrittAllgemein(env, DIENST, auftrag);
 /** TikTok plant nicht weiter als zehn Tage voraus. */
 const MAX_TAGE_VORAUS = 10;
 
@@ -406,4 +413,151 @@ export function laufVermerken(db: Db, projectId: string): number {
     n += 1;
   }
   return n;
+}
+
+// --- Zahlen aus dem Studio ---------------------------------------------------
+//
+// TikTok gibt ohne Content-Posting-Audit keine Zahlen über eine API heraus.
+// Bis zum 22.09.2026 hieß das: jemand lädt im Studio von Hand einen Export
+// herunter und spielt ihn im Piloten ein — zuletzt am 18.09., danach niemand
+// mehr, und in der Übersicht klaffte eine Lücke von drei Tagen.
+//
+// Dieser Lauf macht denselben Weg allein: er öffnet die Analyse-Seite mit dem
+// gewünschten Zeitraum (der steht in der Adresse, die Auswahlliste braucht es
+// nicht), klickt „Daten herunterladen", fängt die Datei ab und schickt sie
+// durch **denselben** Leser wie der Handeinwurf (`kanal-import.ts`). Damit
+// gibt es nur eine Stelle, die Exportspalten deutet, und der automatische Weg
+// kann sich nicht anders verhalten als der von Hand.
+//
+// Der Kontoname kommt von der Studio-Startseite: dort stehen Handle und
+// Followerzahl. Der Handle ist zugleich die Probe, ob der angemeldete Kanal
+// überhaupt zu diesem Projekt gehört — sonst landen fremde Zahlen unter dem
+// eigenen Namen, wie es bei YouTube am 21.09. passiert ist.
+
+const STUDIO_START = "https://www.tiktok.com/tiktokstudio";
+const ANALYSE_URL = "https://www.tiktok.com/tiktokstudio/analytics";
+
+export type TiktokZahlen = {
+  abgerufenAm: string;
+  konto: string | null;
+  follower: number | null;
+  tage: number;
+  von: string | null;
+  bis: string | null;
+  erkannt: Record<string, string>;
+  unbekannt: string[];
+  hinweise: string[];
+};
+
+/** `https://www.tiktok.com/@binderplan.app` → `binderplan.app`. */
+const handleAus = (text: string): string | null =>
+  /@([A-Za-z0-9._]+)/.exec(text.trim())?.[1]?.toLowerCase() ?? null;
+
+/**
+ * Handle und Followerzahl von der Studio-Startseite.
+ *
+ * Der Handle steht in den Profillinks der Seite (`/@name`); genommen wird der
+ * häufigste, weil die Seite auch auf fremde Konten verlinken kann (Kommentare,
+ * Inspiration). Die Followerzahl steht als „Follower*innen 25" im Text.
+ */
+async function kontoAus(seite: Page, env: Env): Promise<{ handle: string | null; follower: number | null }> {
+  await seite.goto(STUDIO_START, { waitUntil: "domcontentloaded" }).catch(() => {});
+  await seite.waitForTimeout(7000);
+  await schuss(seite, env, "zahlen-start");
+  const hrefs = await seite.locator('a[href^="/@"]').evaluateAll((as) => as.map((a) => a.getAttribute("href") ?? "")).catch(() => [] as string[]);
+  const zaehler = new Map<string, number>();
+  for (const h of hrefs) {
+    const name = handleAus(h);
+    if (name) zaehler.set(name, (zaehler.get(name) ?? 0) + 1);
+  }
+  const handle = [...zaehler.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+  const text = (await seite.locator("body").innerText().catch(() => "")).replace(/\u00a0/g, " ");
+  const roh = /Follower\*?innen\s*\n?\s*([\d.,]+)/i.exec(text)?.[1] ?? /Followers\s*\n?\s*([\d.,]+)/i.exec(text)?.[1] ?? null;
+  const follower = roh ? deuteZahl(roh) ?? null : null;
+  return { handle, follower };
+}
+
+/**
+ * Den Übersicht-Export herunterladen und als Datei zurückgeben.
+ *
+ * Der Zeitraum steht in der Adresse (`dateRange={"type":"fixed","pastDay":60}`),
+ * damit die Auswahlliste nicht angeklickt werden muss. Im Dialog wird CSV
+ * gewählt: eine Textdatei lässt sich im Fehlerfall lesen, eine XLSX nicht.
+ * Klappt der Klick auf CSV nicht, bleibt XLSX stehen — beides versteht
+ * `liesExport`, der Lauf scheitert daran also nicht.
+ */
+async function exportHolen(seite: Page, env: Env, tageZurueck: number): Promise<{ name: string; datei: Buffer }> {
+  const bereich = encodeURIComponent(JSON.stringify({ type: "fixed", pastDay: tageZurueck }));
+  await seite.goto(`${ANALYSE_URL}?dateRange=${bereich}`, { waitUntil: "domcontentloaded" }).catch(() => {});
+  await seite.waitForTimeout(9000);
+  await schuss(seite, env, "zahlen-analyse");
+
+  const knopf = seite.getByText("Daten herunterladen", { exact: false }).first();
+  await knopf.click({ timeout: 15_000 });
+  await seite.waitForTimeout(2500);
+  await seite.getByText("CSV", { exact: true }).first().click({ timeout: 6000 }).catch(() => { /* XLSX geht auch */ });
+  await seite.waitForTimeout(800);
+  await schuss(seite, env, "zahlen-dialog");
+
+  // Der Bestätigungsknopf heißt „Herunterladen" — der Auslöser darüber
+  // „Daten herunterladen". `getByText` fände beide, deshalb der genaue Text.
+  const [download] = await Promise.all([
+    seite.waitForEvent("download", { timeout: 90_000 }),
+    seite.getByText("Herunterladen", { exact: true }).last().click({ timeout: 15_000 }),
+  ]);
+  const name = download.suggestedFilename();
+  const ziel = path.join(logOrdner(env), `export-${Date.now()}-${name.replace(/[^\w.-]+/g, "_")}`);
+  await download.saveAs(ziel);
+  const datei = fs.readFileSync(ziel);
+  return { name, datei };
+}
+
+/**
+ * Der Lauf: Konto prüfen, Export ziehen, Tageszeilen schreiben.
+ *
+ * `tageZurueck` ist bewusst großzügig (60): der Export kostet einen Klick,
+ * egal wie viele Tage drinstehen, und ein Lauf, der ein paar Tage ausfällt,
+ * holt die Lücke beim nächsten Mal von selbst nach.
+ */
+export async function zahlenHolen(db: Db, env: Env, projectId: string, tageZurueck = 60): Promise<TiktokZahlen> {
+  const s = aktuelleSitzung(DIENST);
+  if (!s?.ctx) throw new Error("Keine Sitzung — bitte zuerst anmelden.");
+  if (!(await angemeldet())) throw new Error("Im Browser ist niemand bei TikTok angemeldet.");
+  if (s.lauf?.laeuft) throw new Error("Es läuft gerade ein Planungslauf.");
+  const seite = s.ctx.pages()[0] ?? (await s.ctx.newPage());
+
+  const konto = await kontoAus(seite, env);
+  const erwartet = handleAus(loadProfiles(db, projectId).find((p) => p.platform === "tiktok")?.url ?? "");
+  if (!erwartet) throw new Error("Für dieses Projekt ist auf der Kanäle-Seite kein TikTok-Konto hinterlegt.");
+  if (konto.handle && konto.handle !== erwartet) {
+    throw new Error(`Im Browser ist @${konto.handle} angemeldet, dieses Projekt führt @${erwartet}.`);
+  }
+
+  const { name, datei } = await exportHolen(seite, env, tageZurueck);
+  const now = new Date();
+  const heute = berlin(now.toISOString()).datum;
+  const deutung = liesExport(datei, name, heute);
+  if (deutung.tage.length) speichereExport(db, projectId, "tiktok", deutung.tage, now);
+  // Follower sind ein Bestand, kein Tageswert — der Export nennt sie nicht,
+  // die Startseite schon. Sie gehören an den jüngsten Tag, den es gibt.
+  if (konto.follower !== null) {
+    schreibeKanalTag(db, projectId, "tiktok", deutung.tage.at(-1)?.tag ?? heute, { follower: konto.follower }, now, "hand");
+  }
+
+  const ergebnis: TiktokZahlen = {
+    abgerufenAm: now.toISOString(), konto: konto.handle, follower: konto.follower,
+    tage: deutung.tage.length, von: deutung.tage[0]?.tag ?? null, bis: deutung.tage.at(-1)?.tag ?? null,
+    erkannt: deutung.erkannt, unbekannt: deutung.unbekannt, hinweise: deutung.hinweise,
+  };
+  const key = `tiktok-studio:${projectId}`;
+  db.insert(t.mpSettings).values({ key, value: JSON.stringify(ergebnis), updatedAt: new Date().toISOString() })
+    .onConflictDoUpdate({ target: t.mpSettings.key, set: { value: JSON.stringify(ergebnis), updatedAt: new Date().toISOString() } }).run();
+  return ergebnis;
+}
+
+/** Der letzte Stand aus dem Studio, falls es einen gibt. */
+export function tiktokZahlen(db: Db, projectId: string): TiktokZahlen | null {
+  const row = db.select({ value: t.mpSettings.value }).from(t.mpSettings).where(eq(t.mpSettings.key, `tiktok-studio:${projectId}`)).get();
+  if (!row) return null;
+  try { return JSON.parse(row.value) as TiktokZahlen; } catch { return null; }
 }

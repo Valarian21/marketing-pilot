@@ -27,7 +27,8 @@ import type { Page } from "playwright";
 import * as t from "../db/schema.js";
 import { newId, nowIso, parseJson, toJson, type Db } from "../db/index.js";
 import type { Env } from "../env.js";
-import { schreibeKanalTag } from "./kanal-metriken.js";
+import { loadProfiles } from "../channels.js";
+import { schreibeKanalTag, youtubeKanalId } from "./kanal-metriken.js";
 import { schreibeVerlauf } from "./metrics.js";
 import {
   aktuelleSitzung, berlin, logOrdner, schritt as schrittAllgemein, schuss as schussAllgemein, sitzungOeffnen, sitzungSchliessen,
@@ -618,12 +619,29 @@ function zahlAus(text: string | null | undefined): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+/**
+ * Die Kanal-Id aus der Studio-Adresse.
+ *
+ * `studio.youtube.com` leitet erst nach dem Laden auf `/channel/UC…` um, und
+ * wie lange das dauert, haengt am Zustand der Sitzung: nach zwoelf Stunden
+ * Leerlauf brauchte die Weiterleitung am 22.09.2026 laenger als die vier
+ * Sekunden, die hier frueher fest gewartet wurden — der Tageslauf brach mit
+ * „Kanal-Id nicht in der Studio-Adresse" ab, obwohl die Anmeldung stand.
+ * Deshalb wird jetzt auf die Adresse gewartet, und wenn sie ausbleibt, dient
+ * die Seite selbst als zweite Quelle (der Kanalwechsler nennt die Id im HTML).
+ */
 async function kanalIdAus(seite: Page): Promise<string> {
-  await seite.goto(STUDIO_URL, { waitUntil: "domcontentloaded" }).catch(() => {});
-  await seite.waitForTimeout(4000);
-  const m = /\/channel\/(UC[\w-]+)/.exec(seite.url());
-  if (!m) throw new Error(`Kanal-Id nicht in der Studio-Adresse (${seite.url()})`);
-  return m[1]!;
+  const ausUrl = () => /\/channel\/(UC[\w-]+)/.exec(seite.url())?.[1] ?? null;
+  if (!ausUrl()) {
+    await seite.goto(STUDIO_URL, { waitUntil: "domcontentloaded" }).catch(() => {});
+    await seite.waitForURL(/\/channel\/UC[\w-]+/, { timeout: 45_000 }).catch(() => {});
+  }
+  const ausAdresse = ausUrl();
+  if (ausAdresse) return ausAdresse;
+  const html = await seite.content().catch(() => "");
+  const imHtml = /"(?:channelId|externalChannelId)":"(UC[\w-]+)"/.exec(html)?.[1];
+  if (imHtml) return imHtml;
+  throw new Error(`Kanal-Id nicht in der Studio-Adresse (${seite.url()})`);
 }
 
 /** Kanal-Dashboard: Abonnenten, Aufrufe und Wiedergabezeit der letzten 28 Tage. */
@@ -708,6 +726,7 @@ export async function zahlenHolen(db: Db, env: Env, projectId: string): Promise<
   if (s.lauf?.laeuft) throw new Error("Es läuft gerade ein Planungslauf.");
   const seite = s.ctx.pages()[0] ?? (await s.ctx.newPage());
   const kanalId = await kanalIdAus(seite);
+  await passtZumProjekt(db, projectId, kanalId);
   const kanal = await kanalZahlen(seite, env, kanalId);
   const videos = await videoListe(seite, env, kanalId);
   const now = new Date();
@@ -741,6 +760,25 @@ export async function zahlenHolen(db: Db, env: Env, projectId: string): Promise<
   db.insert(t.mpSettings).values({ key, value: toJson(ergebnis), updatedAt: nowIso() })
     .onConflictDoUpdate({ target: t.mpSettings.key, set: { value: toJson(ergebnis), updatedAt: nowIso() } }).run();
   return ergebnis;
+}
+
+/**
+ * Gehört der angemeldete Kanal überhaupt zu diesem Projekt?
+ *
+ * Der Tageslauf schrieb am 21.09.2026 die Zahlen des Binderplan-Kanals unter
+ * „Lehreule" fort: er lief über alle aktiven Projekte, und im Browser ist nun
+ * einmal genau ein Konto angemeldet. Zahlen unter dem falschen Namen sind
+ * schlimmer als gar keine — deshalb bricht der Lauf hier ab, statt zu raten.
+ */
+async function passtZumProjekt(db: Db, projectId: string, kanalId: string): Promise<void> {
+  const url = (loadProfiles(db, projectId).find((p) => p.platform === "youtube")?.url ?? "").trim();
+  if (!url) throw new Error("Für dieses Projekt ist auf der Kanäle-Seite kein YouTube-Kanal hinterlegt.");
+  // Schlägt das Auflösen fehl (YouTube antwortet nicht), läuft der Abruf weiter:
+  // ein hinterlegter Kanal ist die eigentliche Zusage, die Prüfung nur die Kür.
+  const erwartet = await youtubeKanalId(fetch, url).catch(() => null);
+  if (erwartet && erwartet !== kanalId) {
+    throw new Error(`Im Browser ist der Kanal ${kanalId} angemeldet, dieses Projekt führt ${erwartet} (${url}).`);
+  }
 }
 
 /** Der letzte Stand aus dem Studio, falls es einen gibt. */

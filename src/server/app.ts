@@ -25,7 +25,10 @@ import { seriesRoutes } from "./routes/series.js";
 import { publishRoutes } from "./routes/publish.js";
 import { tiktokRoutes } from "./routes/tiktok.js";
 import { youtubeRoutes } from "./routes/youtube.js";
-import { laufVermerken as youtubeVermerken, planenStarten as youtubePlanen, sitzungStatus as youtubeSitzung, zahlenHolen as youtubeZahlen } from "./publish/youtube-studio.js";
+import { loadProfiles } from "./channels.js";
+import { sitzungStarten as tiktokAnmelden, sitzungStatus as tiktokSitzung, zahlenHolen as tiktokZahlenHolen } from "./publish/tiktok-studio.js";
+import { aktuelleSitzung } from "./publish/studio-browser.js";
+import { laufVermerken as youtubeVermerken, planenStarten as youtubePlanen, sitzungStarten as youtubeAnmelden, sitzungStatus as youtubeSitzung, zahlenHolen as youtubeZahlen } from "./publish/youtube-studio.js";
 import { berlinParts } from "./agents/series/time.js";
 import { pinterestRoutes } from "./routes/pinterest.js";
 import { loopRoutes, EVENTS_PUBLIC_PATH } from "./routes/loop.js";
@@ -194,24 +197,98 @@ export async function buildApp(env: Env, opts: { host?: HostAdapter; dbFile?: st
     return reply.code(404).send({ detail: "Nicht gefunden." });
   });
 
+  /** Ist dieser Tageslauf dran? Zwanzig Stunden Abstand, damit er täglich wandert. */
+  const faellig = (key: string): boolean => {
+    const letzte = db.select().from(t.mpSettings).where(eq(t.mpSettings.key, key)).get();
+    return !letzte || Date.now() - Date.parse(letzte.value) >= 20 * 3_600_000;
+  };
+
+  /** Diesen Tageslauf als erledigt stempeln. */
+  const vermerke = (key: string): void => {
+    const jetzt = new Date().toISOString();
+    db.insert(t.mpSettings).values({ key, value: jetzt, updatedAt: jetzt })
+      .onConflictDoUpdate({ target: t.mpSettings.key, set: { value: jetzt, updatedAt: jetzt } }).run();
+  };
+
   /**
-   * Zahlen aus dem YouTube-Studio, einmal am Tag — aber nur, solange im
-   * Anmelde-Browser jemand angemeldet ist. Läuft hier und nicht im Scheduler
-   * des Workers, weil die Sitzung im Speicher **dieses** Prozesses lebt.
+   * Eine Aufgabe mit angemeldetem Anmelde-Browser ausführen.
+   *
+   * Es gibt im Piloten **eine** Sitzung: `sitzungOeffnen` schließt die vorige,
+   * YouTube und TikTok können nie gleichzeitig offen sein. Wartete ein
+   * Tageslauf darauf, dass seine Sitzung zufällig offen ist, hinge er daran,
+   * welchen Browser zuletzt ein Mensch offen gelassen hat — und nach einem
+   * Neustart des Dienstes an gar keinem. Genau so fehlten die TikTok-Zahlen
+   * vom 19.–21.09.2026. Die Anmeldung überlebt im Chrome-Profil, das Öffnen
+   * braucht also niemanden; nur ein laufender Plan-Lauf darf nicht gestört
+   * werden.
+   */
+  const mitSitzung = async (
+    status: (e: typeof env) => Promise<{ angemeldet: boolean; lauf: { laeuft: boolean } | null }>,
+    anmelden: (e: typeof env) => Promise<unknown>,
+    aufgabe: () => Promise<void>,
+  ): Promise<void> => {
+    if (aktuelleSitzung()?.lauf?.laeuft) return;
+    if (!(await status(env)).angemeldet) {
+      await anmelden(env);
+      await new Promise((f) => setTimeout(f, 5_000));
+    }
+    if (!(await status(env)).angemeldet) return;
+    await aufgabe();
+  };
+
+  /**
+   * Zahlen aus dem YouTube-Studio, einmal am Tag. Läuft hier und nicht im
+   * Scheduler des Workers, weil die Sitzung im Speicher **dieses** Prozesses
+   * lebt.
    */
   const zahlenTakt = async () => {
     try {
-      if (!(await youtubeSitzung(env)).angemeldet) return;
-      for (const p of db.select().from(t.mpProjects).all().filter((x) => x.status === "active")) {
-        const key = `sched:youtube.zahlen:${p.id}`;
-        const letzte = db.select().from(t.mpSettings).where(eq(t.mpSettings.key, key)).get();
-        if (letzte && Date.now() - Date.parse(letzte.value) < 20 * 3_600_000) continue;
-        const z = await youtubeZahlen(db, env, p.id);
-        db.insert(t.mpSettings).values({ key, value: new Date().toISOString(), updatedAt: new Date().toISOString() })
-          .onConflictDoUpdate({ target: t.mpSettings.key, set: { value: new Date().toISOString(), updatedAt: new Date().toISOString() } }).run();
-        app.log.info(`youtube.zahlen: ${z.videos.length} Videos, ${z.zugeordnet} zugeordnet`);
-      }
+      // Nicht „alle aktiven Projekte": der Browser ist an genau einem Kanal
+      // angemeldet, und `status` sagt darüber nichts. Gefragt sind die
+      // Projekte mit hinterlegtem YouTube-Kanal — welches davon wirklich zum
+      // angemeldeten Konto gehört, prüft `zahlenHolen` selbst.
+      const mitKanal = db.select().from(t.mpProjects).all()
+        .filter((x) => x.status !== "archived")
+        .filter((x) => (loadProfiles(db, x.id).find((c) => c.platform === "youtube")?.url ?? "").trim() !== "");
+      if (!mitKanal.some((p) => faellig(`sched:youtube.zahlen:${p.id}`))) return;
+      await mitSitzung(youtubeSitzung, youtubeAnmelden, async () => {
+        for (const p of mitKanal) {
+          const key = `sched:youtube.zahlen:${p.id}`;
+          if (!faellig(key)) continue;
+          // Ein fremder Kanal darf den Takt nicht anhalten: das nächste
+          // Projekt ist womöglich genau das angemeldete.
+          try {
+            const z = await youtubeZahlen(db, env, p.id);
+            vermerke(key);
+            app.log.info(`youtube.zahlen ${p.name}: ${z.videos.length} Videos, ${z.zugeordnet} zugeordnet`);
+          } catch (e) { app.log.warn(`youtube.zahlen ${p.name}: ${e instanceof Error ? e.message : String(e)}`); }
+        }
+      });
     } catch (e) { app.log.warn(`youtube.zahlen: ${e instanceof Error ? e.message : String(e)}`); }
+  };
+  /**
+   * Dasselbe für TikTok: dort gibt es keine Lese-API, die Zahlen kommen aus
+   * dem Export der Analyse-Seite. Eigener Takt, weil die TikTok-Sitzung
+   * unabhängig von der YouTube-Sitzung an oder aus sein kann.
+   */
+  const tiktokTakt = async () => {
+    try {
+      const mitKonto = db.select().from(t.mpProjects).all()
+        .filter((x) => x.status !== "archived")
+        .filter((x) => (loadProfiles(db, x.id).find((c) => c.platform === "tiktok")?.url ?? "").trim() !== "");
+      if (!mitKonto.some((p) => faellig(`sched:tiktok.zahlen:${p.id}`))) return;
+      await mitSitzung(tiktokSitzung, tiktokAnmelden, async () => {
+        for (const p of mitKonto) {
+          const key = `sched:tiktok.zahlen:${p.id}`;
+          if (!faellig(key)) continue;
+          try {
+            const z = await tiktokZahlenHolen(db, env, p.id);
+            vermerke(key);
+            app.log.info(`tiktok.zahlen ${p.name}: ${z.tage} Tage (${z.von}–${z.bis})`);
+          } catch (e) { app.log.warn(`tiktok.zahlen ${p.name}: ${e instanceof Error ? e.message : String(e)}`); }
+        }
+      });
+    } catch (e) { app.log.warn(`tiktok.zahlen: ${e instanceof Error ? e.message : String(e)}`); }
   };
   /**
    * Studio-Lauf einmal am Tag, morgens zwischen 6 und 8 Uhr Berliner Zeit —
@@ -238,7 +315,26 @@ export async function buildApp(env: Env, opts: { host?: HostAdapter; dbFile?: st
       }
     } catch (e) { app.log.warn(`youtube.studio: ${e instanceof Error ? e.message : String(e)}`); }
   };
-  setInterval(() => { void zahlenTakt(); void studioTakt(); }, 60 * 60_000).unref();
+  /**
+   * Die drei Läufe **nacheinander**: sie teilen sich eine Browsersitzung, und
+   * parallel gestartet würden sie einander den Browser unter den Füßen
+   * wegziehen. `laeuftTakt` deckelt außerdem den Fall, dass ein Lauf länger
+   * dauert als der Stundentakt.
+   */
+  let laeuftTakt = false;
+  const takt = async () => {
+    if (laeuftTakt) return;
+    laeuftTakt = true;
+    // Reihenfolge ist nicht beliebig: die beiden YouTube-Läufe brauchen
+    // dieselbe Sitzung, und der TikTok-Lauf schließt sie. Also erst YouTube
+    // zu Ende, dann TikTok.
+    try { await zahlenTakt(); await studioTakt(); await tiktokTakt(); }
+    finally { laeuftTakt = false; }
+  };
+  setInterval(() => { void takt(); }, 60 * 60_000).unref();
+  // Nach einem Neustart nicht bis zur vollen Stunde warten: sonst kostet jeder
+  // Deploy am frühen Morgen den Tageslauf. `faellig` verhindert Doppelläufe.
+  setTimeout(() => { void takt(); }, 120_000).unref();
 
   return {
     app, db, host, ctx,
