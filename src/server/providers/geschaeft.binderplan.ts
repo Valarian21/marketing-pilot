@@ -67,7 +67,11 @@ export function geschaeftsZahlen(dbPath: string, seitTag: string, bisTag: string
   const db = new Database(dbPath, { readonly: true, fileMustExist: true });
   try {
     const stand = fs.statSync(dbPath).mtime.toISOString();
-    const nutzer = db.prepare("SELECT plan, abo_status, created_at FROM users").all() as { plan: string | null; abo_status: string | null; created_at: string | null }[];
+    // Betreiber- und Testkonten zählen nicht: der Betreiber (id 4) und alles unter
+    // @binderplan.app (probe@, daniel@ — Plus ohne Bestellung). Bis zum 23.09.2026 stand
+    // die Übersicht deshalb bei 4 Zahlern und 15,96 € MRR; echt waren 2 und 7,98 €.
+    const nutzer = (db.prepare("SELECT id, email, plan, abo_status, created_at FROM users").all() as { id: number; email: string | null; plan: string | null; abo_status: string | null; created_at: string | null }[])
+      .filter((u) => u.id !== 4 && !(u.email ?? "").toLowerCase().endsWith("@binderplan.app"));
     const bestellungen = db.prepare("SELECT art, variante, betrag, status, created_at FROM bestellungen WHERE status = 'bezahlt'").all() as
       { art: string | null; variante: string | null; betrag: number | null; status: string; created_at: string | null }[];
 
